@@ -20,6 +20,9 @@
 - Treat user corrections as authoritative even when they reverse an earlier answer.
 - After every answer, immediately patch `docs/planning.md`, run focused validation on
   that file, briefly report what changed, and ask the next single question.
+- After the workspace's Prettier toolchain is scaffolded, run `pnpm format` after
+  documentation or code edits that it supports; use `pnpm format:check` when a
+  non-mutating formatting check is needed.
 - Keep behavioral outcomes under `#### Acceptance criteria` and implementation, API,
   storage, and testing choices under `#### Technical requirements`.
 - When entering an unstructured story, add both subsection headings.
@@ -64,7 +67,7 @@ Status as of 2026-07-24:
 - Search and filter unplaced items is complete: client-side, case-insensitive substring
   terms with AND semantics across fields, ephemeral state, segmented All, Cards, and Art
   control, `useDeferredValue`, and a Clear filters empty state.
-- `### Lock a binder` technical requirements are complete. They use the existing binder
+- Story 32, `Lock a binder`, has complete technical requirements. They use the existing binder
   PATCH with a required `locked` boolean; optimistic per-binder action disabling;
   last-write-wins state updates; `409 Conflict` enforcement and stale-state reloads;
   disabled details fields; hidden layout-editing controls; preserved read-only display

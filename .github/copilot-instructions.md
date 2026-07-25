@@ -30,16 +30,26 @@ file to match what was actually built.
 - Planning and requirements live in [docs/](../docs). Check
   [docs/planning.md](../docs/planning.md) before starting new work — it holds the story
   backlog and product notes.
+- The planning-derived endpoint index is [docs/api-endpoints.md](../docs/api-endpoints.md).
+  Keep it synchronized with explicitly defined routes in `docs/planning.md`; the future
+  OpenAPI specification remains the implementation source of truth.
+- The planning-derived object and property index is [docs/data-types.md](../docs/data-types.md).
+  Keep it synchronized with confirmed data-model decisions in `docs/planning.md`; do
+  not treat fields marked **TBD** as implemented contracts.
 - When continuing the story technical-requirements interview, follow
   [docs/story-requirements-workflow.md](../docs/story-requirements-workflow.md) for the
   one-question workflow, current stopping point, and unresolved decisions.
 - Project coding conventions live in
   [.github/instructions/coding-conventions.instructions.md](instructions/coding-conventions.instructions.md).
   Apply them whenever writing, reviewing, or refactoring application code.
+- Always add helpful comments to code blocks, especially to explain their purpose,
+  control flow, and non-obvious implementation decisions.
 - Prefer small, incremental changes. Add new stories to the bottom of the backlog in
   `docs/planning.md` unless the user specifies a different position.
 - Once a build/test/lint toolchain exists, document the exact commands here so future
   sessions don't need to rediscover them.
+- After the workspace is scaffolded, run `pnpm format` after repository edits that
+  Prettier supports; use `pnpm format:check` for non-mutating formatting verification.
 - Keep this file up to date as the project evolves — it is the primary onboarding doc
   for AI coding agents working in this repo.
 
