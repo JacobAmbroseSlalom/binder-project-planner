@@ -1115,6 +1115,11 @@ defined.
 #### Technical requirements
 - TBD: Define the archive format, manifest schema, validation, identifier-remapping, transactional import, and user-interface contracts.
 
+### 40. Add summary stats on Binder Layout Page
+#### Acceptance Criteria
+- TODO: numbers and colors for binder slots used, cards and art (represented in slots) in unplaced section. Easy to identify if there are more cards than slots in the binder
+#### Technical Requirements
+
 ### 34. Add custom art finances
 #### Acceptance criteria
 - TBD: Define acceptance criteria.
