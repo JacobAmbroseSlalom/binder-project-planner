@@ -113,7 +113,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 4. Create a new binder
 
-**Status:** In progress
+**Status:** Done (2026-07-31 00:15 EDT)
 
 #### Acceptance criteria
 
