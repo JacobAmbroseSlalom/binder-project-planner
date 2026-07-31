@@ -23,87 +23,87 @@ shape, name, or persistence contract in [planning.md](planning.md).
 
 ### Binder
 
-| Property | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `id` | UUID | Yes | Backend-generated binder identifier used in the database, API, routes, and full-data export. |
-| `name` | string | Yes | Trimmed, 1 to 100 characters, case-insensitively unique. |
-| `width` | positive integer | Yes | Number of slot columns per binder side; default `3`. |
-| `height` | positive integer | Yes | Number of slot rows per binder side; default `3`. |
-| `pages` | positive integer | Yes | Stored binder-page count; default `20`. Physical pages range from `1` through `2 * pages`. |
-| `previewPhysicalPage` | positive integer | Yes | One-based physical focal page for the home-page preview; default `2`. |
-| `locked` | boolean | Yes | Defaults to `false`; blocks restricted details and layout mutations. |
-| `notes` | Markdown string or `null` | Yes | Up to 1,000,000 characters. Exactly empty input normalizes to `null`; nonempty input preserves whitespace. |
-| `widthPerSlot` | decimal centimeters | Yes | Greater than zero; default `7`. |
-| `widthBase` | decimal centimeters | Yes | Default `0`; may be negative only when the one-slot computed width remains positive. |
-| `heightPerSlot` | decimal centimeters | Yes | Greater than zero; default `10`. |
-| `heightBase` | decimal centimeters | Yes | Default `-0.5`; may be negative only when the one-slot computed height remains positive. |
-| `borderColor` | `#RRGGBB` string | Yes | Six-digit uppercase hexadecimal color; default `#FFCB05`. |
-| `borderRadius` | decimal percentage | Yes | `0` through `100`; default `38`. |
-| `borderWidth` | decimal percentage | Yes | `0` through `100`; default `11`. The percentage basis remains **TBD**. |
-| `createdAt` | UTC timestamp | Yes | Backend-managed. |
-| `updatedAt` | UTC timestamp | Yes | Backend-managed; changes when lock state changes. |
+| Property              | Type                      | Required | Notes                                                                                                      |
+| --------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
+| `id`                  | UUID                      | Yes      | Backend-generated binder identifier used in the database, API, routes, and full-data export.               |
+| `name`                | string                    | Yes      | Trimmed, 1 to 100 characters, case-insensitively unique.                                                   |
+| `width`               | positive integer          | Yes      | Number of slot columns per binder side; default `3`.                                                       |
+| `height`              | positive integer          | Yes      | Number of slot rows per binder side; default `3`.                                                          |
+| `pages`               | positive integer          | Yes      | Stored binder-page count; default `20`. Physical pages range from `1` through `2 * pages`.                 |
+| `previewPhysicalPage` | positive integer          | Yes      | One-based physical focal page for the home-page preview; default `2`.                                      |
+| `locked`              | boolean                   | Yes      | Defaults to `false`; blocks restricted details and layout mutations.                                       |
+| `notes`               | Markdown string or `null` | Yes      | Up to 1,000,000 characters. Exactly empty input normalizes to `null`; nonempty input preserves whitespace. |
+| `widthPerSlot`        | decimal centimeters       | Yes      | Greater than zero; default `7`.                                                                            |
+| `widthBase`           | decimal centimeters       | Yes      | Default `0`; may be negative only when the one-slot computed width remains positive.                       |
+| `heightPerSlot`       | decimal centimeters       | Yes      | Greater than zero; default `10`.                                                                           |
+| `heightBase`          | decimal centimeters       | Yes      | Default `-0.5`; may be negative only when the one-slot computed height remains positive.                   |
+| `borderColor`         | `#RRGGBB` string          | Yes      | Six-digit uppercase hexadecimal color; default `#FFCB05`.                                                  |
+| `borderRadius`        | decimal percentage        | Yes      | `0` through `100`; default `38`.                                                                           |
+| `borderWidth`         | decimal percentage        | Yes      | `0` through `100`; default `11`. The percentage basis remains **TBD**.                                     |
+| `createdAt`           | UTC timestamp             | Yes      | Backend-managed.                                                                                           |
+| `updatedAt`           | UTC timestamp             | Yes      | Backend-managed; changes when lock state changes.                                                          |
 
 **Relationships:** A binder owns cards and multi-slot art. It references neither image
 files nor image-asset storage paths directly.
 
 ### PlacementCoordinates
 
-| Property | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `physicalPage` | positive integer or `null` | Yes | Valid range is `1` through `2 * binder.pages`. |
-| `row` | positive integer or `null` | Yes | Must be within the binder height. |
-| `column` | positive integer or `null` | Yes | Must be within the binder width. |
+| Property       | Type                       | Required | Notes                                          |
+| -------------- | -------------------------- | -------- | ---------------------------------------------- |
+| `physicalPage` | positive integer or `null` | Yes      | Valid range is `1` through `2 * binder.pages`. |
+| `row`          | positive integer or `null` | Yes      | Must be within the binder height.              |
+| `column`       | positive integer or `null` | Yes      | Must be within the binder width.               |
 
 For cards, this identifies one slot. For multi-slot art, it is the top-left anchor and
 the remaining covered slots are derived from the art's slot width and height.
 
 ### Card
 
-| Property | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `id` | UUID | Yes | Backend-generated card identifier. |
-| `binderId` | UUID | Yes | Owning binder. |
-| `name` | string | Yes | Card name. Custom-card names are trimmed and limited to 100 characters. |
-| `setName` | string or `null` | Yes | Stored separately; custom values are trimmed and limited to 100 characters. |
-| `localNumber` | string or `null` | Yes | Stored separately; custom values are trimmed and limited to 50 characters. Manual-entry UI may label this field `number`. |
-| `source` | enum | Yes | Initially `tcgdex` or `custom`. |
-| `providerCardId` | string | Conditional | Required for `tcgdex`; absent for `custom`. |
-| `providerSetId` | string | Conditional | Required for `tcgdex`; absent for `custom`. |
-| `variation` | string or `null` | Yes | Trimmed; blank normalizes to `null`; maximum 50 characters. One value replaces the previous value. |
-| `placement` | `PlacementCoordinates` | Yes | All coordinates are populated for placed cards and all are `null` for unplaced cards. |
-| `imageUrl` | URL string | API only | Derived endpoint URL for the shared image asset; changes when the underlying asset changes. |
-| `imageAsset` | `ImageAsset` reference | Backend only | Exact exposed property name is **TBD**; storage identifiers and filenames are never exposed to the frontend. |
-| `createdAt` | UTC timestamp | Yes | Used for deterministic unplaced-item ordering. |
-| `updatedAt` | UTC timestamp | Expected | New card instances receive backend-managed UTC timestamps; exact serialization key is **TBD**. |
-| `acquired` | boolean | **TBD** | Required by Story 36, but persistence and API details are not defined. |
-| price fields | **TBD** | **TBD** | Story 38 requires saved manual and provider prices, source, and retrieval timing, but the shape is not defined. |
+| Property         | Type                   | Required     | Notes                                                                                                                     |
+| ---------------- | ---------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | UUID                   | Yes          | Backend-generated card identifier.                                                                                        |
+| `binderId`       | UUID                   | Yes          | Owning binder.                                                                                                            |
+| `name`           | string                 | Yes          | Card name. Custom-card names are trimmed and limited to 100 characters.                                                   |
+| `setName`        | string or `null`       | Yes          | Stored separately; custom values are trimmed and limited to 100 characters.                                               |
+| `localNumber`    | string or `null`       | Yes          | Stored separately; custom values are trimmed and limited to 50 characters. Manual-entry UI may label this field `number`. |
+| `source`         | enum                   | Yes          | Initially `tcgdex` or `custom`.                                                                                           |
+| `providerCardId` | string                 | Conditional  | Required for `tcgdex`; absent for `custom`.                                                                               |
+| `providerSetId`  | string                 | Conditional  | Required for `tcgdex`; absent for `custom`.                                                                               |
+| `variation`      | string or `null`       | Yes          | Trimmed; blank normalizes to `null`; maximum 50 characters. One value replaces the previous value.                        |
+| `placement`      | `PlacementCoordinates` | Yes          | All coordinates are populated for placed cards and all are `null` for unplaced cards.                                     |
+| `imageUrl`       | URL string             | API only     | Derived endpoint URL for the shared image asset; changes when the underlying asset changes.                               |
+| `imageAsset`     | `ImageAsset` reference | Backend only | Exact exposed property name is **TBD**; storage identifiers and filenames are never exposed to the frontend.              |
+| `createdAt`      | UTC timestamp          | Yes          | Used for deterministic unplaced-item ordering.                                                                            |
+| `updatedAt`      | UTC timestamp          | Expected     | New card instances receive backend-managed UTC timestamps; exact serialization key is **TBD**.                            |
+| `acquired`       | boolean                | **TBD**      | Required by Story 36, but persistence and API details are not defined.                                                    |
+| price fields     | **TBD**                | **TBD**      | Story 38 requires saved manual and provider prices, source, and retrieval timing, but the shape is not defined.           |
 
 **Constraints:** At most one card may occupy a binder and placement-coordinate triple.
 Card deletion cascades dependent variation, acquisition, checklist, and pricing data.
 
 ### MultiSlotArt
 
-| Property | Type | Required | Notes |
-| --- | --- | --- | --- |
-| `id` | UUID | Yes | Backend-generated art identifier. |
-| `binderId` | UUID | Yes | Owning binder. |
-| `title` | string | Yes | Trimmed and required; maximum 100 characters. |
-| `description` | string or `null` | Yes | Optional; maximum 10,000 characters; blank normalizes to `null`. |
-| `widthSlots` | positive integer | Yes | Selected width in binder slots. |
-| `heightSlots` | positive integer | Yes | Selected height in binder slots. |
-| `placement` | `PlacementCoordinates` | Yes | Top-left anchor when placed; all coordinates are `null` when unplaced. |
-| `imageFocalX` | normalized decimal | Yes | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places. |
-| `imageFocalY` | normalized decimal | Yes | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places. |
-| `imageScaleX` | normalized decimal | Yes | Independent horizontal scale multiplier relative to centered cover. Rounded to four decimal places. |
-| `imageScaleY` | normalized decimal | Yes | Independent vertical scale multiplier relative to centered cover. Rounded to four decimal places. |
-| `imageRotationDegrees` | enum integer | Yes | One of `0`, `90`, `180`, or `270`. Rotation applies to the image only, not the frame footprint. |
-| `borderColorOverride` | `#RRGGBB` string or `null` | Yes | `null` means use the current binder border color. |
-| `borderRadiusOverride` | decimal percentage or `null` | Yes | `null` means use the current binder radius. |
-| `borderWidthOverride` | decimal percentage or `null` | Yes | `null` means use the current binder width. |
-| `imageUrl` | URL string | API only | Resolves the normalized rendering image, not a storage path. |
-| source and normalized image references | `ImageAsset` references | Backend only | The plan requires original source bytes and, when needed, an orientation-normalized derivative. Exact field names and representation are **TBD**. |
-| `createdAt` | UTC timestamp | Yes | Used for deterministic mixed unplaced-item ordering. |
-| `updatedAt` | UTC timestamp | Expected | Exact serialization key is **TBD**. |
+| Property                               | Type                         | Required     | Notes                                                                                                                                             |
+| -------------------------------------- | ---------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                   | UUID                         | Yes          | Backend-generated art identifier.                                                                                                                 |
+| `binderId`                             | UUID                         | Yes          | Owning binder.                                                                                                                                    |
+| `title`                                | string                       | Yes          | Trimmed and required; maximum 100 characters.                                                                                                     |
+| `description`                          | string or `null`             | Yes          | Optional; maximum 10,000 characters; blank normalizes to `null`.                                                                                  |
+| `widthSlots`                           | positive integer             | Yes          | Selected width in binder slots.                                                                                                                   |
+| `heightSlots`                          | positive integer             | Yes          | Selected height in binder slots.                                                                                                                  |
+| `placement`                            | `PlacementCoordinates`       | Yes          | Top-left anchor when placed; all coordinates are `null` when unplaced.                                                                            |
+| `imageFocalX`                          | normalized decimal           | Yes          | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places.                                                              |
+| `imageFocalY`                          | normalized decimal           | Yes          | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places.                                                              |
+| `imageScaleX`                          | normalized decimal           | Yes          | Independent horizontal scale multiplier relative to centered cover. Rounded to four decimal places.                                               |
+| `imageScaleY`                          | normalized decimal           | Yes          | Independent vertical scale multiplier relative to centered cover. Rounded to four decimal places.                                                 |
+| `imageRotationDegrees`                 | enum integer                 | Yes          | One of `0`, `90`, `180`, or `270`. Rotation applies to the image only, not the frame footprint.                                                   |
+| `borderColorOverride`                  | `#RRGGBB` string or `null`   | Yes          | `null` means use the current binder border color.                                                                                                 |
+| `borderRadiusOverride`                 | decimal percentage or `null` | Yes          | `null` means use the current binder radius.                                                                                                       |
+| `borderWidthOverride`                  | decimal percentage or `null` | Yes          | `null` means use the current binder width.                                                                                                        |
+| `imageUrl`                             | URL string                   | API only     | Resolves the normalized rendering image, not a storage path.                                                                                      |
+| source and normalized image references | `ImageAsset` references      | Backend only | The plan requires original source bytes and, when needed, an orientation-normalized derivative. Exact field names and representation are **TBD**. |
+| `createdAt`                            | UTC timestamp                | Yes          | Used for deterministic mixed unplaced-item ordering.                                                                                              |
+| `updatedAt`                            | UTC timestamp                | Expected     | Exact serialization key is **TBD**.                                                                                                               |
 
 **Constraints:** Placed art must fit within one binder side, cannot span physical pages,
 and cannot overlap a card or other art. The transformed image must cover the complete
@@ -115,17 +115,17 @@ to `0` and resets other manual transforms to centered cover.
 `ImageAsset` is a shared immutable backend record and local file used by custom cards,
 TCGdex cards, and multi-slot art. Its exact schema is not yet settled.
 
-| Required attribute | Type | Notes |
-| --- | --- | --- |
-| asset identifier | UUID or internal identifier | Exact field name is **TBD**; not exposed to the frontend. |
-| storage reference and generated filename | string | Used only by the backend for filesystem operations. |
-| detected content type | MIME type | JPEG, PNG, or WebP; detected from bytes rather than response headers or filenames. |
-| detected file extension | string | Derived from validated bytes. |
-| SHA-256 digest | string | Used to deduplicate custom uploads and art uploads. |
-| provider source and provider card ID | conditional values | Used to deduplicate concurrent TCGdex image downloads. |
-| sanitized original filename | string or `null` | Stored for custom uploads as metadata only. |
-| original source file | local file reference | Exact uploaded or downloaded bytes remain available. |
-| orientation-normalized rendering derivative | local file reference or related record | Created when JPEG EXIF orientation requires it; exact representation is **TBD**. |
+| Required attribute                          | Type                                   | Notes                                                                              |
+| ------------------------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------- |
+| asset identifier                            | UUID or internal identifier            | Exact field name is **TBD**; not exposed to the frontend.                          |
+| storage reference and generated filename    | string                                 | Used only by the backend for filesystem operations.                                |
+| detected content type                       | MIME type                              | JPEG, PNG, or WebP; detected from bytes rather than response headers or filenames. |
+| detected file extension                     | string                                 | Derived from validated bytes.                                                      |
+| SHA-256 digest                              | string                                 | Used to deduplicate custom uploads and art uploads.                                |
+| provider source and provider card ID        | conditional values                     | Used to deduplicate concurrent TCGdex image downloads.                             |
+| sanitized original filename                 | string or `null`                       | Stored for custom uploads as metadata only.                                        |
+| original source file                        | local file reference                   | Exact uploaded or downloaded bytes remain available.                               |
+| orientation-normalized rendering derivative | local file reference or related record | Created when JPEG EXIF orientation requires it; exact representation is **TBD**.   |
 
 ## Derived API Representations
 
@@ -134,26 +134,26 @@ TCGdex cards, and multi-slot art. Its exact schema is not yet settled.
 Returned by `GET /binders` and binder duplication. It contains a lightweight subset of
 the binder graph.
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| `id`, `name`, `width`, `height`, `pages`, `locked`, `createdAt`, `updatedAt` | Binder fields | Base summary fields. |
-| preview spread | `PreviewSpread` | Selected preview page or spread with only display data required for the miniature layout. |
-| `totalSlots` | integer | Canonical slot count. |
-| `occupiedSlots` | integer | Cards plus art-covered slots. |
-| `emptySlots` | integer | Total minus occupied slots. |
-| `acquiredCards` | integer | Number of acquired card records. Acquisition model remains **TBD**. |
-| `totalCards` | integer | All binder-owned card records, placed and unplaced. |
+| Property                                                                     | Type            | Notes                                                                                     |
+| ---------------------------------------------------------------------------- | --------------- | ----------------------------------------------------------------------------------------- |
+| `id`, `name`, `width`, `height`, `pages`, `locked`, `createdAt`, `updatedAt` | Binder fields   | Base summary fields.                                                                      |
+| preview spread                                                               | `PreviewSpread` | Selected preview page or spread with only display data required for the miniature layout. |
+| `totalSlots`                                                                 | integer         | Canonical slot count.                                                                     |
+| `occupiedSlots`                                                              | integer         | Cards plus art-covered slots.                                                             |
+| `emptySlots`                                                                 | integer         | Total minus occupied slots.                                                               |
+| `acquiredCards`                                                              | integer         | Number of acquired card records. Acquisition model remains **TBD**.                       |
+| `totalCards`                                                                 | integer         | All binder-owned card records, placed and unplaced.                                       |
 
 The client derives rounded slot-completion and card-acquisition percentages. Card
 acquisition percentage is `null` and displays as `N/A` when `totalCards` is zero.
 
 ### PreviewSpread
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| spread identity | physical-page value or values | Exact nested shape is **TBD**. |
-| placed-card geometry | collection | Includes only placement geometry, card display metadata, and image URLs. |
-| placed-art geometry | collection | Includes only placement geometry, art display metadata, and image URLs. |
+| Property             | Type                          | Notes                                                                    |
+| -------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| spread identity      | physical-page value or values | Exact nested shape is **TBD**.                                           |
+| placed-card geometry | collection                    | Includes only placement geometry, card display metadata, and image URLs. |
+| placed-art geometry  | collection                    | Includes only placement geometry, art display metadata, and image URLs.  |
 
 It excludes image bytes and unrelated binder records. Variation labels, Michi indicators,
 acquisition state, pending-operation feedback, and editing controls are not rendered.
@@ -162,12 +162,12 @@ acquisition state, pending-operation feedback, and editing controls are not rend
 
 ### CreateBinderRequest
 
-| Property | Type | Required |
-| --- | --- | --- |
-| `name` | string | Yes |
-| `width` | positive integer | Yes |
-| `height` | positive integer | Yes |
-| `pages` | positive integer | Yes |
+| Property | Type             | Required |
+| -------- | ---------------- | -------- |
+| `name`   | string           | Yes      |
+| `width`  | positive integer | Yes      |
+| `height` | positive integer | Yes      |
+| `pages`  | positive integer | Yes      |
 
 `POST /binders` returns `201 Created`, a `Location` header, and the complete `Binder`.
 
@@ -176,34 +176,34 @@ acquisition state, pending-operation feedback, and editing controls are not rend
 This is a partial request. It may contain any valid dirty binder field plus the
 resize-confirmation flag when needed.
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| `name`, `width`, `height`, `pages` | corresponding Binder fields | Standard detail updates. |
-| `previewPhysicalPage`, `locked`, `notes` | corresponding Binder fields | Metadata updates. |
-| `widthPerSlot`, `widthBase`, `heightPerSlot`, `heightBase` | corresponding Binder fields | Dimension updates. |
-| `borderColor`, `borderRadius`, `borderWidth` | corresponding Binder fields | Binder art-style updates. |
-| `moveAffectedItemsToUnplaced` | boolean | Only present after confirmed affected-item relocation. |
+| Property                                                   | Type                        | Notes                                                  |
+| ---------------------------------------------------------- | --------------------------- | ------------------------------------------------------ |
+| `name`, `width`, `height`, `pages`                         | corresponding Binder fields | Standard detail updates.                               |
+| `previewPhysicalPage`, `locked`, `notes`                   | corresponding Binder fields | Metadata updates.                                      |
+| `widthPerSlot`, `widthBase`, `heightPerSlot`, `heightBase` | corresponding Binder fields | Dimension updates.                                     |
+| `borderColor`, `borderRadius`, `borderWidth`               | corresponding Binder fields | Binder art-style updates.                              |
+| `moveAffectedItemsToUnplaced`                              | boolean                     | Only present after confirmed affected-item relocation. |
 
 ### ResizePreviewRequest and ResizePreviewResult
 
-| Object | Properties |
-| --- | --- |
-| `ResizePreviewRequest` | `width`, `height`, `pages` proposed values. |
-| `ResizePreviewResult` | `affectedCardIds`, `affectedArtIds`, `affectedCardCount`, `affectedArtCount`. Exact field names are **TBD**; the plan requires the IDs and separate counts. |
+| Object                 | Properties                                                                                                                                                  |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ResizePreviewRequest` | `width`, `height`, `pages` proposed values.                                                                                                                 |
+| `ResizePreviewResult`  | `affectedCardIds`, `affectedArtIds`, `affectedCardCount`, `affectedArtCount`. Exact field names are **TBD**; the plan requires the IDs and separate counts. |
 
 ### TcgDexCatalogCard
 
 The normalized response object from `GET /card-catalog/search` and JSON source for TCGdex
 card creation.
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| `name` | string | Card display name. |
-| `setName` | string or `null` | Provider set name. |
-| `localNumber` | string or `null` | Provider local card number. |
-| `providerCardId` | string | TCGdex card ID. |
-| `providerSetId` | string | TCGdex set ID. |
-| image location | URL string | Used by the backend to obtain the image from an approved origin. Exact response property name is **TBD**. |
+| Property         | Type             | Notes                                                                                                     |
+| ---------------- | ---------------- | --------------------------------------------------------------------------------------------------------- |
+| `name`           | string           | Card display name.                                                                                        |
+| `setName`        | string or `null` | Provider set name.                                                                                        |
+| `localNumber`    | string or `null` | Provider local card number.                                                                               |
+| `providerCardId` | string           | TCGdex card ID.                                                                                           |
+| `providerSetId`  | string           | TCGdex set ID.                                                                                            |
+| image location   | URL string       | Used by the backend to obtain the image from an approved origin. Exact response property name is **TBD**. |
 
 The backend preserves the provider's result ordering and returns all matches without
 application-level pagination or truncation.
@@ -212,19 +212,19 @@ application-level pagination or truncation.
 
 `POST /binders/{binderId}/cards` supports two variants.
 
-| Variant | Properties |
-| --- | --- |
-| TCGdex JSON | Complete `TcgDexCatalogCard`, `variation` or `null`, and a `PlacementCoordinates` target. The backend sets `source` to `tcgdex`. |
+| Variant                    | Properties                                                                                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| TCGdex JSON                | Complete `TcgDexCatalogCard`, `variation` or `null`, and a `PlacementCoordinates` target. The backend sets `source` to `tcgdex`.                                              |
 | Custom multipart form data | `name`, optional `setName`, optional `localNumber`, optional `variation`, optional placement coordinates, and one required image file. The backend sets `source` to `custom`. |
 
 Both variants return `201 Created`, a card `Location` header, and the persisted `Card`.
 
 ### CardPositionUpdate and UpdateCardRequest
 
-| Object | Properties |
-| --- | --- |
-| `CardPositionUpdate` | Card ID; final nullable `physicalPage`, `row`, and `column`; expected nullable `physicalPage`, `row`, and `column`. The exact JSON nesting is **TBD**. |
-| `UpdateCardRequest` | One position update for a move, two updates for a swap, or nullable `variation` for a variation edit. The path card ID must identify the dragged card in a movement request. |
+| Object               | Properties                                                                                                                                                                   |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CardPositionUpdate` | Card ID; final nullable `physicalPage`, `row`, and `column`; expected nullable `physicalPage`, `row`, and `column`. The exact JSON nesting is **TBD**.                       |
+| `UpdateCardRequest`  | One position update for a move, two updates for a swap, or nullable `variation` for a variation edit. The path card ID must identify the dragged card in a movement request. |
 
 Movement checks all expected coordinates and applies every final coordinate in one
 transaction. A successful move returns all changed cards; a variation update returns the
@@ -232,10 +232,10 @@ updated card.
 
 ### BulkCreateCardsRequest and BulkCardOutcome
 
-| Object | Properties |
-| --- | --- |
-| `BulkCreateCardsRequest` | Complete array of `TcgDexCatalogCard` values, optional shared `variation`, and client-generated UUID idempotency key. |
-| `BulkCardOutcome` | One result per submitted card, in submitted order; successful results include the created `Card`, and failed results include that card's Problem Details data. Exact field names are **TBD**. |
+| Object                   | Properties                                                                                                                                                                                    |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BulkCreateCardsRequest` | Complete array of `TcgDexCatalogCard` values, optional shared `variation`, and client-generated UUID idempotency key.                                                                         |
+| `BulkCardOutcome`        | One result per submitted card, in submitted order; successful results include the created `Card`, and failed results include that card's Problem Details data. Exact field names are **TBD**. |
 
 Bulk creation always targets unplaced coordinates. It returns `201 Created` when every
 card succeeds and `207 Multi-Status` for any card-level failure.
@@ -244,48 +244,48 @@ card succeeds and `207 Multi-Status` for any card-level failure.
 
 Both requests use multipart form data.
 
-| Object | Properties |
-| --- | --- |
-| `CreateArtRequest` | `title`, optional `description`, `widthSlots`, `heightSlots`, optional `PlacementCoordinates`, `ArtImageTransform`, nullable style overrides, and required image file. |
+| Object             | Properties                                                                                                                                                                                                                                                                                                  |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CreateArtRequest` | `title`, optional `description`, `widthSlots`, `heightSlots`, optional `PlacementCoordinates`, `ArtImageTransform`, nullable style overrides, and required image file.                                                                                                                                      |
 | `UpdateArtRequest` | Updated metadata, placement expectation and final placement for movement, optional replacement image file, `ArtImageTransform`, nullable style overrides, and confirmed placement clearing when the edited footprint becomes invalid. Exact property names for movement and placement clearing are **TBD**. |
 
 ### ArtImageTransform
 
-| Property | Type |
-| --- | --- |
-| `imageFocalX` | normalized decimal |
-| `imageFocalY` | normalized decimal |
-| `imageScaleX` | normalized decimal |
-| `imageScaleY` | normalized decimal |
+| Property               | Type                       |
+| ---------------------- | -------------------------- |
+| `imageFocalX`          | normalized decimal         |
+| `imageFocalY`          | normalized decimal         |
+| `imageScaleX`          | normalized decimal         |
+| `imageScaleY`          | normalized decimal         |
 | `imageRotationDegrees` | `0`, `90`, `180`, or `270` |
 
 ### ArtStyleOverrides
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| `borderColorOverride` | `#RRGGBB` or `null` | `null` inherits the binder setting. |
+| Property               | Type                 | Notes                               |
+| ---------------------- | -------------------- | ----------------------------------- |
+| `borderColorOverride`  | `#RRGGBB` or `null`  | `null` inherits the binder setting. |
 | `borderRadiusOverride` | percentage or `null` | `null` inherits the binder setting. |
-| `borderWidthOverride` | percentage or `null` | `null` inherits the binder setting. |
+| `borderWidthOverride`  | percentage or `null` | `null` inherits the binder setting. |
 
 ### PdfExportOptions
 
-| Property | Type | Notes |
-| --- | --- | --- |
+| Property            | Type    | Notes                                                                                                           |
+| ------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `includeVariations` | boolean | Optional for binder-layout PDF export; defaults to `false`. It is set from the current layout variation toggle. |
 
 ### HealthResponse
 
-| Property | Type | Notes |
-| --- | --- | --- |
+| Property      | Type    | Notes                                                                                                 |
+| ------------- | ------- | ----------------------------------------------------------------------------------------------------- |
 | health status | **TBD** | `GET /health` requires an OpenAPI-documented JSON response, but its field shape is not yet specified. |
 
 ### ProblemDetails
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| `type` | string | Stable problem type retained for diagnostics. |
-| `status` | integer | HTTP response status retained for diagnostics. |
-| `detail` | string | User-facing failure detail used by failed toasts. |
+| Property              | Type    | Notes                                                              |
+| --------------------- | ------- | ------------------------------------------------------------------ |
+| `type`                | string  | Stable problem type retained for diagnostics.                      |
+| `status`              | integer | HTTP response status retained for diagnostics.                     |
+| `detail`              | string  | User-facing failure detail used by failed toasts.                  |
 | other RFC 9457 fields | **TBD** | The complete OpenAPI Problem Details schema remains to be defined. |
 
 ## Supporting Persisted Records
@@ -295,92 +295,92 @@ Both requests use multipart form data.
 Used for bulk card creation and card, art, and binder duplication. Lock state updates use
 idempotent desired-state retry instead and do not require a UUID idempotency key.
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| idempotency key | UUID | Client-generated; exact property name is **TBD**. |
+| Property        | Type                           | Notes                                                                                             |
+| --------------- | ------------------------------ | ------------------------------------------------------------------------------------------------- |
+| idempotency key | UUID                           | Client-generated; exact property name is **TBD**.                                                 |
 | operation scope | identifiers and operation type | Scopes replay to the appropriate binder, card, or art operation. Exact representation is **TBD**. |
-| stored outcome | response payload and status | Replayed for a repeated key without duplicating data. Exact storage shape is **TBD**. |
-| expiry | UTC timestamp | Retained for `MUTATION_IDEMPOTENCY_RETENTION_MS`, default 24 hours. |
+| stored outcome  | response payload and status    | Replayed for a repeated key without duplicating data. Exact storage shape is **TBD**.             |
+| expiry          | UTC timestamp                  | Retained for `MUTATION_IDEMPOTENCY_RETENTION_MS`, default 24 hours.                               |
 
 ### PendingFileCleanup
 
 Created when post-commit removal of an unreferenced image file fails.
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| orphaned file path | local path | Exact storage field name is **TBD**. |
-| cleanup error | diagnostic value | Exact storage field name and structure are **TBD**. |
-| retry state | **TBD** | The backend retries pending cleanup work, but scheduling and record fields are not defined. |
+| Property           | Type             | Notes                                                                                       |
+| ------------------ | ---------------- | ------------------------------------------------------------------------------------------- |
+| orphaned file path | local path       | Exact storage field name is **TBD**.                                                        |
+| cleanup error      | diagnostic value | Exact storage field name and structure are **TBD**.                                         |
+| retry state        | **TBD**          | The backend retries pending cleanup work, but scheduling and record fields are not defined. |
 
 ## Client-Only State
 
 ### BinderRouteContext
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| `binder` | `Binder` | Shared details response. |
-| `cards` | `Card[]` | Shared cards response. |
-| `art` | `MultiSlotArt[]` | Shared art response. |
-| loading and error state | UI state | Published only after all three loads succeed. Exact property names are **TBD**. |
-| local optimistic updates | UI state | Retained while nested tabs switch. Exact representation is **TBD**. |
-| last layout focal page | positive integer | Route-local state used to restore the layout `page` query after visiting another tab. |
+| Property                 | Type             | Notes                                                                                 |
+| ------------------------ | ---------------- | ------------------------------------------------------------------------------------- |
+| `binder`                 | `Binder`         | Shared details response.                                                              |
+| `cards`                  | `Card[]`         | Shared cards response.                                                                |
+| `art`                    | `MultiSlotArt[]` | Shared art response.                                                                  |
+| loading and error state  | UI state         | Published only after all three loads succeed. Exact property names are **TBD**.       |
+| local optimistic updates | UI state         | Retained while nested tabs switch. Exact representation is **TBD**.                   |
+| last layout focal page   | positive integer | Route-local state used to restore the layout `page` query after visiting another tab. |
 
 ### LayoutRouteState
 
-| Query property | Type | Notes |
-| --- | --- | --- |
-| `page` | positive integer | Focal physical page; defaults to `1` when absent or invalid. |
-| `michi` | literal `true` or omitted | Enables Michi indicators only when exactly `true`. |
-| `variations` | literal `true` or omitted | Enables variation labels only when exactly `true`. |
-| `notes` | literal `false` or omitted | Hides notes only when exactly `false`; notes are otherwise visible for unlocked binders. |
-| acquisition visibility | **TBD** | Story 36 requires a layout toggle but does not define its URL or state shape. |
+| Query property         | Type                       | Notes                                                                                    |
+| ---------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
+| `page`                 | positive integer           | Focal physical page; defaults to `1` when absent or invalid.                             |
+| `michi`                | literal `true` or omitted  | Enables Michi indicators only when exactly `true`.                                       |
+| `variations`           | literal `true` or omitted  | Enables variation labels only when exactly `true`.                                       |
+| `notes`                | literal `false` or omitted | Hides notes only when exactly `false`; notes are otherwise visible for unlocked binders. |
+| acquisition visibility | **TBD**                    | Story 36 requires a layout toggle but does not define its URL or state shape.            |
 
 ### HomePagePreference
 
-| Property | Type | Notes |
-| --- | --- | --- |
+| Property                   | Type    | Notes                                                                                             |
+| -------------------------- | ------- | ------------------------------------------------------------------------------------------------- |
 | `completionMetricsVisible` | boolean | Stored in browser local storage, not the backend; initially visible before a preference is saved. |
 
 ### UnplacedItemFilterState
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| `searchQuery` | string | Trimmed terms filter cards and art client-side. |
-| `itemTypeFilter` | enum | `all`, `cards`, or `art`. |
+| Property         | Type   | Notes                                           |
+| ---------------- | ------ | ----------------------------------------------- |
+| `searchQuery`    | string | Trimmed terms filter cards and art client-side. |
+| `itemTypeFilter` | enum   | `all`, `cards`, or `art`.                       |
 
 This state is local to the mounted layout tab. It resets after leaving or refreshing the
 layout and is not persisted to the URL, browser storage, binder context, or backend.
 
 ### LayoutMovementHistory
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| undo stack | movement entry array | Contains successful card moves, swaps, and art moves. |
-| redo stack | movement entry array | Contains previously undone movements. |
-| movement entry | **TBD** record | Must retain affected item IDs, prior positions, final positions, and the focal dragged card for swaps. |
+| Property       | Type                 | Notes                                                                                                  |
+| -------------- | -------------------- | ------------------------------------------------------------------------------------------------------ |
+| undo stack     | movement entry array | Contains successful card moves, swaps, and art moves.                                                  |
+| redo stack     | movement entry array | Contains previously undone movements.                                                                  |
+| movement entry | **TBD** record       | Must retain affected item IDs, prior positions, final positions, and the focal dragged card for swaps. |
 
 It is binder-scoped React state, capped at `LAYOUT_MOVEMENT_HISTORY_LIMIT` (default 50),
 and resets on binder-route unmount, page refresh, or a full binder reload.
 
 ### ToastOperation
 
-| Property | Type | Notes |
-| --- | --- | --- |
-| operation identifier | unique value | Every concurrent mutation has its own identifier. Exact shape is **TBD**. |
-| state | enum | `saving`, `saved`, or `failed`. |
-| error detail | string or `null` | Uses Problem Details `detail` for failures. |
-| dismissal behavior | derived UI behavior | Saved state dismisses after 3 seconds; failed state requires explicit dismissal. |
+| Property             | Type                | Notes                                                                            |
+| -------------------- | ------------------- | -------------------------------------------------------------------------------- |
+| operation identifier | unique value        | Every concurrent mutation has its own identifier. Exact shape is **TBD**.        |
+| state                | enum                | `saving`, `saved`, or `failed`.                                                  |
+| error detail         | string or `null`    | Uses Problem Details `detail` for failures.                                      |
+| dismissal behavior   | derived UI behavior | Saved state dismisses after 3 seconds; failed state requires explicit dismissal. |
 
 ## Planned Types Still to Define
 
-| Area | Required future types or fields |
-| --- | --- |
-| Full-data export and import | Archive manifest, schema-version record, archive entry inventory, identifier and storage-path remapping, import preview, and transaction outcome. |
-| Card acquisition | Persisted acquisition field or record, update request, and locked-binder exception contract. |
-| Card checklist | Checklist route state, sorting options, filters, display entry, progress data, and PDF export request. |
-| Card finances | Pricing-provider match, price quote, saved price, price source, retrieval time, refresh preview, and financial totals. |
-| Custom art finances | All types and properties. |
-| Art production time statistics | All types and properties. |
+| Area                           | Required future types or fields                                                                                                                   |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Full-data export and import    | Archive manifest, schema-version record, archive entry inventory, identifier and storage-path remapping, import preview, and transaction outcome. |
+| Card acquisition               | Persisted acquisition field or record, update request, and locked-binder exception contract.                                                      |
+| Card checklist                 | Checklist route state, sorting options, filters, display entry, progress data, and PDF export request.                                            |
+| Card finances                  | Pricing-provider match, price quote, saved price, price source, retrieval time, refresh preview, and financial totals.                            |
+| Custom art finances            | All types and properties.                                                                                                                         |
+| Art production time statistics | All types and properties.                                                                                                                         |
 
 ## Relationship Summary
 

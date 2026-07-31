@@ -1,6 +1,6 @@
 ---
-description: "Use when writing, reviewing, or refactoring application code. Defines project-wide coding conventions, including centralized default values."
-applyTo: "**"
+description: 'Use when writing, reviewing, or refactoring application code. Defines project-wide coding conventions, including centralized default values.'
+applyTo: '**'
 ---
 
 # Coding Conventions

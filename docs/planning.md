@@ -4,11 +4,13 @@ This doc is the starting point for planning and tracking development. Update it 
 product direction and backlog evolve.
 
 ## Product vision
+
 An app that helps collectors plan how to organize their trading/collectible cards into
 binders — e.g. deciding page layouts, assigning cards to pages/slots, and tracking what's
 been placed vs. still needs a home.
 
 ## Tech stack (planned)
+
 - Frontend: React (Next.js)
 - Frontend virtualization: TanStack Virtual
 - Frontend icons: Lucide React
@@ -18,31 +20,36 @@ been placed vs. still needs a home.
 - Backend image processing: Sharp
 - Backend PDF generation: PDFKit
 - Language: TypeScript
-- Database: **TBD** — SQLite is a strong option for the local single-user deployment.
+- Database: SQLite with Drizzle ORM.
 - Authentication: None for the initial local single-user version.
 - Hosting: Local machine for the initial version.
 
 ## Story backlog
+
 Stories are listed below with their acceptance criteria (ACs). Technical decisions are
 recorded in a separate "Technical requirements" subsection within each story as they are
 defined.
 
 ### 1. Project setup
+
 #### Acceptance criteria
+
 - A frontend app (React with Next.js and TypeScript) is scaffolded and runs locally.
 - A backend app (Node.js with Express and TypeScript) is scaffolded and runs locally.
 - An initial database is created using the database technology selected for the project.
 - The backend is configured to connect to the initial database successfully.
 - A single root pnpm development command starts the frontend and backend in watch mode and reports both local URLs.
 - The frontend can successfully make a request to the backend (e.g. a basic health-check endpoint).
+
 #### Technical requirements
+
 - The repository contains separate frontend and backend applications.
 - The repository uses pnpm workspaces to manage frontend, backend, and shared tooling packages.
 - Project setup pins the active Node.js LTS and current stable framework and tooling versions used at implementation time.
 - The first usable version runs locally on a single user's machine.
 - The initial local single-user version does not require authentication.
 - Local development runs the frontend and backend natively through pnpm commands without requiring Docker.
-- The database technology remains TBD, with SQLite documented as a strong option for the local single-user deployment.
+- SQLite is used for the initial local database, with Drizzle ORM providing the typed schema and migrations.
 - Application-managed images are stored in a local application data directory rather than as database blobs.
 - The backend generates image filenames and stores each image's metadata and storage reference in the database.
 - The frontend communicates with the backend through a REST JSON API.
@@ -58,12 +65,15 @@ defined.
 - A GitHub Actions workflow runs dependency installation, generated OpenAPI contract verification, linting, formatting checks, type checking, Jest tests, application builds, and Playwright tests for each pull request.
 
 ### 2. Create styling documentation
+
 - Styling documents are created for the frontend.
 - The documents record the agreed visual and UI standards for the app.
 - The documents are organized so developers can reference and update them as the app evolves.
 
 ### 3. Add reusable save-status feedback
+
 #### Acceptance criteria
+
 - A reusable toast component appears at the bottom of the page to communicate backend operation status.
 - Concurrent backend mutations display independently updated toasts.
 - A saving toast appears when an operation begins and remains visible until the operation succeeds or fails.
@@ -74,7 +84,9 @@ defined.
 - Failed toasts remain visible until the user dismisses them with an X.
 - When a failed operation changed the visible interface before backend confirmation, the interface returns to its previous state.
 - Stories that save, update, move, duplicate, delete, lock, or unlock data use this shared toast component.
+
 #### Technical requirements
+
 - The frontend toast library remains TBD, with Sonner documented as an option to evaluate during implementation.
 - Save-status announcements use the selected toast library's default accessibility behavior.
 - Mutation status and optimistic rollback are managed with React state and the OpenAPI-generated REST client rather than a server-state library.
@@ -84,7 +96,9 @@ defined.
 - Failed toasts use the Problem Details `detail` value and retain the response status and problem type for diagnostics.
 
 ### 4. Create a new binder
+
 #### Acceptance criteria
+
 - The home page has a button to create a new binder.
 - Selecting the button navigates to the new binder page.
 - The new binder page has fields for name, width, height, and pages.
@@ -99,7 +113,9 @@ defined.
 - Start New saves the binder through the backend to a database.
 - After the binder is saved, the user returns to the home page.
 - Binder creation uses the shared save-status toast and remains on the completed form if saving fails.
+
 #### Technical requirements
+
 - The reusable binder-details form uses React Hook Form for client-side form state.
 - The form uses React Hook Form's submission state to prevent repeated create requests while one is in progress.
 - The form uses Zod schemas for client-side runtime validation and TypeScript type inference.
@@ -116,14 +132,18 @@ defined.
 - Express uses maintained OpenAPI validation middleware to reject requests that do not match the documented schema before route logic runs.
 
 ### 5. List binders
+
 #### Acceptance criteria
+
 - The home page displays a list of binders.
 - Binders are ordered with the most recently updated binder first.
 - The binder list is retrieved from the backend.
 - The home page uses the shared loading component while the binder list is being retrieved.
 - The empty binder-list state is not displayed until loading completes successfully with no binders.
 - If the binder list fails to load, the loading component is removed and the provided error is displayed using the shared failed toast.
+
 #### Technical requirements
+
 - The home page retrieves binders client-side using the OpenAPI-generated REST client.
 - Binder-list data, loading state, and request errors are managed with React state rather than a server-state library.
 - The initial binder-list endpoint returns all binders without pagination.
@@ -134,7 +154,9 @@ defined.
 - Later home-page preview and completion-metric stories extend the binder summary with only the additional data required by those features.
 
 ### 6. Add reusable loading feedback
+
 #### Acceptance criteria
+
 - A reusable loading component communicates when the app is waiting for data from the backend.
 - The loading component uses a consistent inline spinner and context-specific loading text wherever it appears.
 - The loading component remains visible until the request succeeds or fails.
@@ -142,7 +164,9 @@ defined.
 - If the request fails, the loading component is removed and the provided error is displayed using the shared failed toast.
 - Loading feedback prevents empty, incomplete, or stale content from being presented as the completed result.
 - Future stories that retrieve data from the backend use this shared loading component.
+
 #### Technical requirements
+
 - The shared loading component renders an inline spinner and accepts an accessible status label describing the operation in progress.
 - Loading announcements use the selected UI component library's default accessibility behavior.
 - The loading indicator appears only when a request remains pending for 200 milliseconds.
@@ -153,7 +177,9 @@ defined.
 - Request state tracks the current operation so stale responses cannot replace data from a newer request.
 
 ### 7. Create the view/edit binder page
+
 #### Acceptance criteria
+
 - A view/edit binder page is created.
 - Tabs appear at the top of the page.
 - The tabs are labeled "Edit Details", "Edit Layout", and "View Financials".
@@ -168,7 +194,9 @@ defined.
 - If the binder fails to load, the loading component is removed and the provided error is displayed using the shared failed toast.
 - A failed binder load provides a retry action that reloads the details, cards, and multi-slot art.
 - If the requested binder does not exist, the user is redirected to the home page and the provided error is displayed using the shared failed toast.
+
 #### Technical requirements
+
 - Binder tabs use nested Next.js routes so the selected tab is linkable and remains selected after a browser refresh.
 - The tab routes are `/binders/[binderId]/details`, `/binders/[binderId]/layout`, `/binders/[binderId]/financials`, and, when implemented, `/binders/[binderId]/checklist`.
 - The binder UUID is the `binderId` route parameter.
@@ -193,7 +221,9 @@ defined.
 - If another blur occurs while a save is in progress, the latest remaining dirty fields are queued into one follow-up save after the current request finishes.
 
 ### 8. Visualize a basic binder layout
+
 #### Acceptance criteria
+
 - The "Edit Layout" tab displays a visual representation of the binder.
 - Each binder side displays a grid based on the binder's width and height.
 - A 3-by-3 binder side displays 9 slots.
@@ -209,7 +239,9 @@ defined.
 - The on-screen dimensions may scale responsively and do not need to equal the physical size.
 - The initial binder layout editor supports desktop viewports at least 1024 CSS pixels wide.
 - Returning to Edit Layout after selecting another binder tab restores the physical page or spread that was visible before leaving the layout.
+
 #### Technical requirements
+
 - Binder sides and slots render as semantic HTML elements arranged with CSS Grid rather than canvas or SVG.
 - Each binder-side grid uses the binder width for its CSS Grid column count and the binder height for its row count.
 - Slot sizing uses the CSS `aspect-ratio` property to preserve the configured width-to-height ratio responsively.
@@ -229,7 +261,9 @@ defined.
 - Only the active spread is mounted in the DOM; inactive spreads are not rendered or retained as hidden elements.
 
 ### 9. Jump directly to a binder page
+
 #### Acceptance criteria
+
 - The current physical page number or page-number range appears above the binder visualization.
 - A page number input or selector appears alongside the previous and next arrows.
 - Physical page numbers account for both sides represented by each stored binder page.
@@ -242,7 +276,9 @@ defined.
 - Entering page 5 displays physical pages 4 and 5 together.
 - The page input only accepts physical page numbers that exist in the binder.
 - Using the arrows updates the page input and current-page label, and entering a page updates the displayed binder spread.
+
 #### Technical requirements
+
 - Direct page navigation uses an HTML number input.
 - The input commits navigation when the user presses Enter or the input loses focus, not on each keystroke.
 - Submitting an empty, non-integer, or out-of-range value leaves the current spread unchanged and displays the validation failure through the shared failed toast.
@@ -250,7 +286,9 @@ defined.
 - Next-arrow navigation selects the left physical page of the next spread, and previous-arrow navigation selects the right physical page of the previous spread; the single first or last physical page is used at the binder boundaries.
 
 ### 10. Show Michi slot indicators
+
 #### Acceptance criteria
+
 - The "Edit Layout" tab has a toggle for showing Michi slot indicators.
 - The toggle defaults to off.
 - When the toggle is on, each intermediate layout view displays the left and right binder
@@ -262,15 +300,16 @@ defined.
 - Columns are numbered from left to right across the complete binder spread.
 - On each binder side, columns are paired from the outside edge toward the binder spine.
 - For an odd binder width, the column nearest the spine on each side is not paired.
-- A 3-wide binder displays indicators between columns 1 and 2 and between columns 5 and
-  6.
+- A 3-wide binder displays indicators between columns 1 and 2 and between columns 5 and 6.
 - A 5-wide binder displays indicators between columns 1 and 2, 3 and 4, 7 and 8, and 9
   and 10.
 - For an even binder width, every column is paired.
 - A 4-wide binder displays indicators between columns 1 and 2, 3 and 4, 5 and 6, and 7
   and 8.
 - Turning the toggle off hides all Michi indicators.
+
 #### Technical requirements
+
 - Michi-indicator visibility is represented by a query parameter on the layout route so it persists across refreshes and copied URLs.
 - The presence of `michi=true` enables the indicators; the `michi` parameter is omitted when they are disabled.
 - Any other `michi` value is treated as disabled and removed from the URL using history replacement.
@@ -280,7 +319,9 @@ defined.
 - Indicator elements are noninteractive, excluded from the tab order, and hidden from the accessibility tree.
 
 ### 11. Select a card for a binder slot
+
 #### Acceptance criteria
+
 - Each unoccupied binder slot displays a + icon centered in the slot.
 - Selecting a binder slot opens a card-selection modal for that slot.
 - The modal includes a search bar that searches for cards using the TCGdex cards API (`https://tcgdex.dev/rest/cards`).
@@ -297,7 +338,9 @@ defined.
 - The saved record includes the TCGdex card ID, set ID, and local card number.
 - The saved record includes a source identifying TCGdex as the card-data provider.
 - Card assignment uses the shared save-status toast and restores the slot to its previous state if saving fails.
+
 #### Technical requirements
+
 - The frontend searches TCGdex through the local Express REST API rather than calling the provider directly.
 - The backend TCGdex integration maps provider responses and failures into the app's OpenAPI-documented contracts.
 - TCGdex search runs automatically after a debounce interval when the trimmed query meets the configured minimum length.
@@ -351,7 +394,9 @@ defined.
 - The backend preserves TCGdex result ordering when normalizing, caching, and returning search results; the frontend does not re-sort them.
 
 ### 12. Add a custom card manually
+
 #### Acceptance criteria
+
 - The card-selection modal has an option to add a custom card without selecting a TCGdex search result.
 - The manual-entry option remains available when a TCGdex search returns no matches or fails.
 - Selecting the manual-entry option displays fields for the card's name, set, number, and image.
@@ -365,7 +410,9 @@ defined.
 - The saved record identifies the card as manually entered and does not assign TCGdex identity fields.
 - Custom cards support the same later variation, acquisition, checklist, movement, duplication, and manual-pricing behavior as TCGdex cards.
 - Adding a custom card uses the shared save-status toast and retains the entered fields for correction if saving fails.
+
 #### Technical requirements
+
 - Manual entry replaces the search content within the existing card-selection modal and provides a Back action that returns to the search view; it does not open a nested modal.
 - Switching to manual entry preserves the current query and latest completed search results for the Back action; closing the modal still discards both views' state.
 - The manual-entry form uses React Hook Form with a Zod schema.
@@ -388,13 +435,17 @@ defined.
 - Custom image assets retain a sanitized original upload filename as metadata, but the backend-generated storage filename is used for all filesystem operations.
 
 ### 13. Remove a card from a binder slot
+
 #### Acceptance criteria
+
 - Hovering over a card displays card actions to the right of the card.
 - The first action is an X button.
 - Selecting the X removes the card from its binder slot on the page.
 - Selecting the X deletes the binder-owned card record from the database through the backend.
 - Card removal uses the shared save-status toast and restores the card to its slot if deletion fails.
+
 #### Technical requirements
+
 - The X action permanently deletes the binder-owned card record rather than clearing its coordinates or moving it to the unplaced-card section.
 - Selecting X sends the delete request immediately without a confirmation dialog or undo delay.
 - The client optimistically removes the card from the binder context, retains its previous list position and placement for rollback, and permits no further actions on that pending card.
@@ -409,7 +460,9 @@ defined.
 - The frontend uses `lucide-react` for the X action and other familiar interface icons.
 
 ### 14. Move a card to a different binder slot
+
 #### Acceptance criteria
+
 - A card can be dragged from its current binder slot and dropped into a different slot.
 - After the card is dropped into an empty slot, the binder layout displays it in the destination slot and clears its original slot.
 - The card's new physical page, row, and column are saved to the database through the backend.
@@ -418,7 +471,9 @@ defined.
 - If either position in a swap fails to save, neither saved position changes and both cards return to their original slots.
 - If the destination slot is occupied by multi-slot art, the card returns to its original slot and its saved position does not change.
 - Card movement and swapping use the shared save-status toast and restore all affected cards to their original slots if saving fails.
+
 #### Technical requirements
+
 - The frontend uses `@dnd-kit/core` for card dragging, application-defined slot collision detection, and the drag overlay.
 - The dnd-kit pointer sensor uses a movement-distance activation constraint from `CARD_DRAG_ACTIVATION_DISTANCE_PX`, which defaults to `8` in the canonical shared `defaults.ts`.
 - The initial movement workflow enables dnd-kit's pointer sensor only; keyboard and touch card movement are deferred.
@@ -444,7 +499,9 @@ defined.
 - Drag targets are limited to slots on the currently mounted spread; page controls and layout edges do not navigate while a drag is active.
 
 ### 15. Manage unplaced cards
+
 #### Acceptance criteria
+
 - An unplaced cards section appears on the right side of the "Edit Layout" tab.
 - A card can be moved from a binder slot into the unplaced cards section.
 - Moving a card into the unplaced cards section clears its binder slot and saves the card as unplaced in the database through the backend.
@@ -456,7 +513,9 @@ defined.
 - Hovering over an unplaced card displays the existing card actions to its right, with the X as the first action.
 - Selecting the X removes the unplaced card from the section and deletes it from the database through the backend.
 - Adding, moving, and deleting unplaced cards use the shared save-status toast and restore their previous locations if an operation fails.
+
 #### Technical requirements
+
 - Unplaced cards are ordered by creation timestamp descending and then card UUID ascending as a deterministic tie-breaker.
 - The binder cards API returns this order, and optimistic client updates preserve it.
 - The unplaced section is an independently scrolling virtualized list implemented with `@tanstack/react-virtual`; only visible list items and its overscan are mounted.
@@ -472,7 +531,9 @@ defined.
 - When no unplaced cards exist, the panel renders its normal add button without a separate empty-state message.
 
 ### 16. Add card variations
+
 #### Acceptance criteria
+
 - The add-card modal has a field for adding a variation to the selected card.
 - The variation field allows the user to select "Reverse Holo", "Non-Holo", "1st Edition", or "Expansion Stamp".
 - The variation field also allows the user to enter a custom value that is not in the suggested list.
@@ -485,7 +546,9 @@ defined.
 - Turning the toggle on displays each card's variation on the binder layout.
 - Turning the toggle off hides card variations on the binder layout.
 - Adding or editing a variation uses the shared save-status toast and preserves the entered value for correction if saving fails.
+
 #### Technical requirements
+
 - Each card stores one nullable variation string; assigning another value replaces the existing variation.
 - Variation entry uses an editable combobox that filters suggested values and accepts unmatched custom text in the same input.
 - The immutable `CARD_VARIATION_SUGGESTIONS` tuple is exported from the canonical shared `defaults.ts` with `Reverse Holo`, `Non-Holo`, `1st Edition`, and `Expansion Stamp`.
@@ -506,7 +569,9 @@ defined.
 - When variation labels are enabled, every slot reserves the same label-row height, including empty slots and cards without a variation, so grid rows remain aligned.
 
 ### 17. Add more cards
+
 #### Acceptance criteria
+
 - The card-selection modal has Cancel, Add More, and Add Card buttons at the bottom.
 - The modal does not have a quantity field; each add action creates exactly one card instance.
 - Add Card adds the selected card and closes the modal.
@@ -518,7 +583,9 @@ defined.
 - Each added card retains the selected card's TCGdex identity fields and variation.
 - Adding more cards uses the shared save-status toast, and cards that fail to save are not displayed in the slot or unplaced cards section.
 - Card searches during an Add More session continue to use the shared loading component and failed toast.
+
 #### Technical requirements
+
 - Add More submits one card through the existing `POST /binders/{binderId}/cards` contract and disables Add More and Add Card while that request is pending.
 - The modal retains the selected card, variation, query, and results until the request succeeds.
 - After success, the modal clears the query, results, selected card, and variation and returns focus to the search input for the next card.
@@ -534,7 +601,9 @@ defined.
 - Add Card and Add More are enabled only when a TCGdex result is selected or the custom-card form is valid, and both are disabled while a create-card request is pending.
 
 ### 18. Bulk add cards
+
 #### Acceptance criteria
+
 - The card-selection modal has a Bulk Add option for adding every card that matches the current TCGdex search.
 - A bulk-add search can be used to find groups such as every card in a set or every card for a particular Pokemon.
 - Bulk Add includes the complete set of matching search results rather than only the results currently visible in the modal.
@@ -549,7 +618,9 @@ defined.
 - Each bulk-added card retains its own TCGdex identity fields, image, and source.
 - Bulk addition uses the shared save-status toast, and cards that fail to save are not displayed in the unplaced cards section.
 - Bulk-add searches use the shared loading component and failed toast.
+
 #### Technical requirements
+
 - Bulk addition supports partial success: each matching card is persisted independently rather than in one all-or-nothing database transaction.
 - Successful cards are added to the binder context and unplaced section, while failed cards are omitted.
 - The bulk response contains an outcome for every submitted card so the client can reconcile successful and failed creations.
@@ -582,13 +653,17 @@ defined.
 - The backend removes expired idempotency records opportunistically during startup and bulk-request handling rather than requiring a background scheduler.
 
 ### 19. Duplicate a card
+
 #### Acceptance criteria
+
 - Hovering over a card displays a duplicate-card action with the existing card actions.
 - Selecting the duplicate-card action creates a new, independent card entry in the database through the backend.
 - The duplicated card is added to the unplaced cards section.
 - The original card remains in its current location and is unchanged.
 - Card duplication uses the shared save-status toast and does not display a duplicate if creation fails.
+
 #### Technical requirements
+
 - Duplication copies all card-owned data, including source and provider fields, custom metadata, variation, acquisition state, and saved pricing data.
 - The duplicate receives a new backend-generated card UUID and UTC timestamps, belongs to the same binder, and has all-null placement coordinates.
 - The duplicate references the original card's existing image asset rather than creating or copying an image file.
@@ -602,7 +677,9 @@ defined.
 - The backend persists each duplication outcome for the shared mutation idempotency-retention period and returns the same created card for a repeated key without duplicating it again.
 
 ### 20. Add a binder preview
+
 #### Acceptance criteria
+
 - Each binder in the home page list displays a preview of one of its pages.
 - The preview shows how the selected binder page and its cards appear in the binder layout.
 - The reusable binder-details form on the new binder page and the "Edit Details" tab has a field for selecting which physical page is used by the preview.
@@ -610,7 +687,9 @@ defined.
 - The selected preview page is saved with the binder through the backend.
 - The home page list uses the binder's saved preview page when displaying the preview.
 - Saving the preview page uses the shared save-status toast and restores the previous selection if saving fails.
+
 #### Technical requirements
+
 - Home-page previews render live as noninteractive React layouts rather than generated or stored bitmap images.
 - The preview reuses the binder-side, slot, card, and multi-slot-art rendering primitives from the full layout while omitting editing controls, drag-and-drop registration, and card actions.
 - Binder-summary data includes only the selected preview spread's placement and image information required by the miniature layout rather than the complete binder graph.
@@ -627,7 +706,9 @@ defined.
 - A failed card or multi-slot-art image preserves its occupied preview geometry and renders a neutral missing-image placeholder; one failed image does not replace the complete preview.
 
 ### 21. Manage binders from the home page
+
 #### Acceptance criteria
+
 - Hovering over a binder in the home page list displays delete, copy, and edit actions.
 - The delete action is represented by an X.
 - Selecting edit opens that binder's view/edit page with the "Edit Details" tab selected.
@@ -638,7 +719,9 @@ defined.
 - Selecting cancel closes the modal without deleting the binder.
 - Selecting confirm delete deletes the binder from the database through the backend and removes it from the home page list.
 - Binder copy and deletion use the shared save-status toast, and a binder remains in the list if deletion fails.
+
 #### Technical requirements
+
 - Binder copying creates new binder, card, multi-slot-art, and dependent database records while those new records reference the source records' existing immutable image assets and files.
 - `POST /binders/{binderId}/duplicate` reads and deep-copies the authoritative binder graph without accepting copied binder data from the client.
 - A successful copy returns `201 Created`, a `Location` header for the new binder, and its complete home-page binder summary.
@@ -663,7 +746,9 @@ defined.
 - The home-page action menu omits Delete for binders known by the client to be locked; backend conflict enforcement protects stale clients and direct requests.
 
 ### 22. Show binder completion metrics
+
 #### Acceptance criteria
+
 - The top of the home page binder list has a toggle for showing or hiding binder completion metrics.
 - When the toggle is on, completion metrics appear below each binder in the list.
 - Each binder displays its number of occupied slots and empty slots.
@@ -675,7 +760,9 @@ defined.
 - When the toggle is off, the completion metrics are hidden.
 - Completion metrics update when cards or multi-slot art are added, removed, moved, or when card acquisition changes.
 - Loading binder completion metrics uses the shared loading component, and a failure removes the loading state and displays the provided error using the shared failed toast.
+
 #### Technical requirements
+
 - The binder-list endpoint includes completion metrics in every binder-summary response; the client does not make a separate metrics request.
 - The metrics toggle controls presentation only, and switching it does not refetch the binder list.
 - The backend calculates canonical completion aggregates from persisted binder dimensions, placements, multi-slot art, and card-acquisition data rather than returning the full binder graph for client-side calculation.
@@ -687,7 +774,9 @@ defined.
 - Each binder summary returns `totalSlots`, `occupiedSlots`, `emptySlots`, `acquiredCards`, and `totalCards`; the client derives slot-completion and card-acquisition percentages from those counts.
 
 ### 23. Add binder notes
+
 #### Acceptance criteria
+
 - The binder view/edit page has a toggle for showing or hiding a notes section.
 - The notes section appears on the left side of the screen when it is visible.
 - The notes toggle defaults to on for an unlocked binder.
@@ -699,7 +788,9 @@ defined.
 - When the notes text box loses focus after its contents change, the updated notes are saved to the database through the backend.
 - Notes loading uses the shared loading component and displays the provided error using the shared failed toast if loading fails.
 - Notes saving uses the shared save-status toast and preserves the entered text for correction if saving fails.
+
 #### Technical requirements
+
 - Notes are included in the existing binder-details response and shared binder context rather than loaded through a separate request.
 - Notes are saved through the existing partial binder update endpoint.
 - Binder notes are persisted as Markdown source text rather than rendered HTML.
@@ -715,7 +806,9 @@ defined.
 - If an active notes save fails while a newer value is queued, the client reports that failure and still submits the latest queued value; a successful follow-up response becomes the saved binder state.
 
 ### 24. Configure card and multi-slot art dimensions
+
 #### Acceptance criteria
+
 - The reusable binder-details form on the new binder page and the "Edit Details" tab has editable fields for the width per slot and width base values.
 - Width per slot defaults to 7 cm and width base defaults to 0 cm.
 - Displayed width is calculated as `(number of slots x width per slot) + width base`.
@@ -731,7 +824,9 @@ defined.
 - The dimension and multi-slot art values are saved with the binder through the backend.
 - TBD: Verify all supplied default values during implementation before finalizing them.
 - Saving dimension and multi-slot art settings uses the shared save-status toast and preserves the entered values for correction if saving fails.
+
 #### Technical requirements
+
 - Dimension values accept centimeters to two decimal places, and border radius and width accept percentages to two decimal places.
 - REST contracts expose decimal values in their documented human-readable units; the database stores centimeters as integer hundredths of a centimeter and percentages as integer hundredths of a percentage point to avoid floating-point drift.
 - Width-per-slot and height-per-slot values must be greater than zero; base values may be negative only when the corresponding one-slot formula produces a result greater than zero.
@@ -742,7 +837,9 @@ defined.
 - The configured one-slot width and height define the binder's on-screen slot and card aspect ratio and are also the basis for multi-slot-art and print dimensions; the default formulas retain the initial `7:9.5` one-slot ratio.
 
 ### 25. Add multi-slot art
+
 #### Acceptance criteria
+
 - The unplaced cards section has an add-art button that opens a modal for creating multi-slot art.
 - The modal allows the user to upload an image from the computer's files.
 - The modal also accepts an image pasted from the clipboard with Cmd+V.
@@ -772,7 +869,9 @@ defined.
 - After it is added, the multi-slot art appears in the unplaced cards section with an aspect ratio derived from its configured physical dimensions and scaled to fit the panel width.
 - Placement and other interactions for multi-slot art on the binder layout will be defined in the next story.
 - Image upload and multi-slot art creation use the shared save-status toast, and the modal retains its image and entered settings if either operation fails.
+
 #### Technical requirements
+
 - `POST /binders/{binderId}/art` uses one multipart request containing the image and normalized art metadata.
 - Individual multi-slot-art records use `/art/{artId}` resource paths, with backend-generated UUIDs as `artId` values.
 - Image installation, image-asset persistence, and art-record creation succeed as one logical operation; failure removes temporary files and any newly created unreferenced image file or metadata.
@@ -813,7 +912,9 @@ defined.
 - Failure removes the optimistic item, reopens the editor with the image, metadata, dimensions, rotation, transforms, and style choices preserved, and retains the object URL until that restored preview no longer needs it.
 
 ### 26. Move and manage multi-slot art
+
 #### Acceptance criteria
+
 - Hovering over multi-slot art displays edit, delete, and duplicate actions comparable to the existing card actions.
 - Selecting edit opens the same modal used to add multi-slot art, populated with the art's saved title, description, image, dimensions, positioning, scaling, rotation, aspect-ratio adjustments, and style overrides.
 - Saving an edit updates the multi-slot art in the database through the backend.
@@ -831,7 +932,9 @@ defined.
 - Multi-slot art can be moved from the binder layout back into the unplaced cards section.
 - Moving art back to the unplaced cards section clears all slots it occupied and saves it as unplaced through the backend.
 - Editing, deleting, duplicating, and moving multi-slot art use the shared save-status toast and restore the art's previous state or location if an operation fails.
+
 #### Technical requirements
+
 - Placed art stores one-based physical page, row, and column coordinates for its top-left slot; all covered coordinates are derived from that anchor and the art's saved slot width and height.
 - Unplaced art has all three placement coordinates set to `null`, and a database check constraint requires the coordinate triple to be either entirely present or entirely null.
 - Art must fit within one physical binder side and cannot span physical pages; the backend validates every derived covered coordinate against the binder's current width and height.
@@ -872,7 +975,9 @@ defined.
 - Art image responses use long-lived immutable caching, and the persisted art representation supplies a different image URL whenever its underlying rendering asset changes.
 
 ### 27. Handle binder size and page-count changes
+
 #### Acceptance criteria
+
 - Increasing the binder's width, height, or page count preserves all existing card and multi-slot art placements.
 - Before reducing the binder's width, height, or page count, the app identifies every card and piece of multi-slot art whose placement would no longer exist or fit.
 - Multi-slot art is affected if any slot in its occupied area falls outside the reduced binder layout.
@@ -883,7 +988,9 @@ defined.
 - The binder detail changes and all affected item relocations are saved together through the backend.
 - If any part of the update fails, the binder details and item positions remain unchanged.
 - Binder size and page-count changes use the shared save-status toast.
+
 #### Technical requirements
+
 - Before a potentially reducing update, the client sends the proposed width, height, and stored page count to read-only `POST /binders/{binderId}/resize-preview`.
 - The client calls resize preview only when width, height, or stored page count decreases; physical centimeter formulas and border settings do not affect slot coverage and use the normal details-save path.
 - The dry run validates the proposed dimensions against current persisted placements and returns the affected card and art UUIDs plus separate counts without changing data.
@@ -898,7 +1005,9 @@ defined.
 - If the new page count invalidates `previewPhysicalPage`, the same transaction resets it to `DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE` (`2`) and returns that value in the updated binder details.
 
 ### 28. Undo and redo layout movements
+
 #### Acceptance criteria
+
 - The "Edit Layout" tab has undo and redo buttons.
 - Each successful drag-and-drop movement of a card or multi-slot art is added to the layout movement history.
 - A card swap is added to movement history as one action containing both cards' original and swapped positions.
@@ -912,7 +1021,9 @@ defined.
 - A rejected drag-and-drop attempt is not added to the movement history.
 - Adding, editing, deleting, or duplicating cards and multi-slot art cannot be undone or redone with these controls.
 - Undo and redo use the shared save-status toast and retain the current history position if saving fails.
+
 #### Technical requirements
+
 - Movement history is stored only in binder-scoped frontend React state and is not persisted by the backend or browser storage.
 - History resets when the binder route context unmounts, the page refreshes, or binder data is fully reloaded.
 - `LAYOUT_MOVEMENT_HISTORY_LIMIT` defaults to `50` in the canonical shared `defaults.ts`.
@@ -931,7 +1042,9 @@ defined.
 - The buttons use Lucide icons, stable hit areas, accessible labels, and hover tooltips and reflect disabled history or pending-movement states.
 
 ### 29. Export a binder as a PDF
+
 #### Acceptance criteria
+
 - The binder has a print-to-PDF button that generates a PDF of its layout.
 - The print-to-PDF button remains available when the binder is locked.
 - Each displayed binder page is rendered as one PDF page in binder-page order.
@@ -943,7 +1056,9 @@ defined.
 - The generated PDF includes card variation labels when the layout's variation toggle is on and omits them when the toggle is off.
 - When variation labels are included, each card with a saved variation displays that variation in the PDF.
 - Generating the PDF uses the shared save-status toast, downloads the file when generation succeeds, and displays the provided error if generation fails.
+
 #### Technical requirements
+
 - The backend generates binder layout PDFs from authoritative persisted binder, card, art, transform, style, and local image data rather than from the browser DOM or binder context.
 - The backend reads one transactionally consistent snapshot of the persisted binder graph when generation starts; changes committed afterward do not appear in that PDF and are not blocked by the export.
 - The backend uses `pdfkit` for streamed PDF creation, vector clipping, and transformed local-image placement.
@@ -967,7 +1082,9 @@ defined.
 - A successful response starts the browser download and replaces the generating toast with the shared saved toast; a failure replaces it with the shared persistent failed toast using the returned Problem Details `detail`.
 
 ### 30. Export multi-slot art for printing
+
 #### Acceptance criteria
+
 - The binder has a print-art PDF button that generates a PDF containing all of its placed multi-slot art and no cards.
 - Unplaced multi-slot art is not included in the PDF.
 - When the binder has no placed multi-slot art, the print-art PDF button is disabled and its tooltip explains that placed art is required.
@@ -991,7 +1108,9 @@ defined.
 - Art may be reordered independently of its binder-page placement to improve packing efficiency.
 - CRITICAL TBD: Reconcile the targets of fitting two default 2-by-2, four default 2-by-1, or eight default 1-by-1 pieces on one page with exact physical sizing, page size, margins, and required whitespace before implementation; each target exceeds the `11`-inch page width even with zero margins or spacing.
 - When the art does not fit on one page, the remaining art is efficiently arranged on additional landscape pages.
+
 #### Technical requirements
+
 - The backend generates multi-slot-art print PDFs using PDFKit and authoritative persisted binder, art, transform, style, and local image data.
 - PDFKit draws the resolved art border inward from the configured frame boundary, so border width does not increase the printed footprint used for packing or tiling.
 - The backend reads one transactionally consistent snapshot of the persisted binder and placed-art graph when generation starts; changes committed afterward do not appear in that PDF and are not blocked by the export.
@@ -1021,7 +1140,9 @@ defined.
 - A successful response starts the browser download and replaces the generating toast with the shared saved toast; a failure replaces it with the shared persistent failed toast using the returned Problem Details `detail`.
 
 ### 31. Search and filter unplaced items
+
 #### Acceptance criteria
+
 - The unplaced cards section has a search field for narrowing the displayed items.
 - Cards can be found by card name, set, number, or variation.
 - Multi-slot art can be found by title or description.
@@ -1031,6 +1152,7 @@ defined.
 - When no unplaced items match, the section displays an empty-results state.
 
 #### Technical requirements
+
 - Search and item-type filtering run client-side against the unplaced cards and art already loaded in the binder-scoped React context; changing either control sends no backend request.
 - The client filters the complete unplaced collection before passing matching items to the existing TanStack Virtual list, so virtualization affects rendering rather than search coverage.
 - The trimmed search query uses case-insensitive substring matching against card name, set, number, and variation fields and art title and description fields.
@@ -1045,7 +1167,9 @@ defined.
 - Filtering and the empty-results state do not remove or disable the unplaced panel's existing add-card and add-art controls.
 
 ### 32. Lock a binder
+
 #### Acceptance criteria
+
 - Hovering over a binder in the home page list displays a lock or unlock action with the existing binder actions.
 - Selecting the lock action locks the binder and saves its locked state through the backend.
 - The action reflects whether the binder is currently locked or unlocked.
@@ -1063,7 +1187,9 @@ defined.
 - The backend accepts card acquisition and price updates for a locked binder.
 - Unlocking the binder restores its editing controls and allows details and layout changes again.
 - Locking and unlocking use the shared save-status toast and restore the previous lock state if the operation fails.
+
 #### Technical requirements
+
 - Lock and unlock use the existing partial binder update endpoint with a `locked` boolean field rather than dedicated command endpoints.
 - Selecting Lock or Unlock sends the update immediately without a confirmation dialog; the opposite action remains available after a successful state change.
 - Home-page Lock and Unlock actions are icon-only buttons using Lucide `Lock` and `LockOpen` icons, stable hit areas, accessible labels, and hover tooltips.
@@ -1090,7 +1216,9 @@ defined.
 - A successful response replaces the optimistic summary with the complete backend representation. A failure restores the prior summary and re-enables its actions while the shared failed toast reports the Problem Details `detail`.
 
 ### 33. Export and import all application data
+
 #### Acceptance criteria
+
 - The application has actions for exporting and importing all application data.
 - Exporting creates a single portable archive that can be moved to another application instance or data-storage location.
 - The export archive includes all contents of the application database.
@@ -1112,28 +1240,43 @@ defined.
 - If any part of the import fails, no imported records or image files are added and all existing data remains unchanged.
 - Locked binders and their complete data are included in exports and can be added through import without changing existing binders.
 - Export and import use the shared loading component while processing and the shared save-status toast when the operation succeeds or fails.
+
 #### Technical requirements
+
 - TBD: Define the archive format, manifest schema, validation, identifier-remapping, transactional import, and user-interface contracts.
 
 ### 40. Add summary stats on Binder Layout Page
+
 #### Acceptance Criteria
+
 - TODO: numbers and colors for binder slots used, cards and art (represented in slots) in unplaced section. Easy to identify if there are more cards than slots in the binder
+
 #### Technical Requirements
 
 ### 34. Add custom art finances
+
 #### Acceptance criteria
+
 - TBD: Define acceptance criteria.
+
 #### Technical requirements
+
 - TBD: Define technical requirements.
 
 ### 35. Add art production time statistics
+
 #### Acceptance criteria
+
 - TBD: Define acceptance criteria.
+
 #### Technical requirements
+
 - TBD: Define technical requirements.
 
 ### 36. Track card acquisition
+
 #### Acceptance criteria
+
 - Each card stores whether it has been acquired.
 - Hovering over a card displays an acquisition action with the existing card actions.
 - The acquisition action indicates whether the card is currently acquired or unacquired.
@@ -1143,11 +1286,15 @@ defined.
 - Turning the toggle on displays whether each card is acquired or unacquired.
 - Turning the toggle off hides card acquisition status from the binder layout.
 - Acquisition changes use the shared save-status toast and restore the card's previous acquisition state if saving fails.
+
 #### Technical requirements
+
 - TBD: Define the acquisition data model, API contract, locked-binder exception, optimistic-update, and display-toggle behavior.
 
 ### 37. Add a card checklist
+
 #### Acceptance criteria
+
 - The binder view/edit page has a "Card Checklist" tab.
 - The checklist lists every card in the binder, including placed and unplaced cards.
 - A progress tracker appears at the top of the checklist.
@@ -1176,11 +1323,15 @@ defined.
 - The export action is unavailable when no cards match the active search and filters.
 - Card Checklist export remains available when the binder is locked.
 - Acquisition changes use the shared save-status toast and restore the card's previous acquisition state if saving fails.
+
 #### Technical requirements
+
 - TBD: Define the checklist route, client filtering and sorting, acquisition updates, PDF-export contract, and locked-binder behavior.
 
 ### 38. Add card finances
+
 #### Acceptance criteria
+
 - A technical spike determines whether a suitable card-pricing API is available and can provide prices for the cards supported by the app.
 - The spike documents the evaluated API, card-matching approach, price data available, usage limits, and any cards for which prices cannot be retrieved.
 - Automated card pricing is implemented only if the spike confirms that a suitable API integration is possible.
@@ -1207,23 +1358,31 @@ defined.
 - Manual prices are visually distinct from API-fetched prices on the Card Checklist and the "View Financials" tab.
 - Automatically refreshing prices does not overwrite manually entered prices.
 - Fetched and manually entered price changes use the shared save-status toast and restore the previous saved price if saving fails.
+
 #### Technical requirements
+
 - TBD: Define the pricing-provider spike, price data model, manual-pricing contract, refresh workflow, and financial-aggregation behavior.
 
 ### 39. Add Binder Search and Sort functions
+
 #### Acceptance criteria
+
 - TBD: Define acceptance criteria.
+
 #### Technical requirements
+
 - TBD: Define technical requirements.
 
 Add new stories as they come up, following the same format.
 
 ## Definition of done (draft)
+
 - Story's acceptance criteria are all met.
 - No console errors/warnings introduced.
 - Basic tests added/updated if a test setup exists.
 
 ## Next steps
+
 1. Define the core data model and how its pieces relate.
 2. Decide on database and auth approach; record the decision here.
 3. Scaffold the Next.js + Node project structure.

@@ -75,7 +75,7 @@ Status as of 2026-07-24:
   status on the binder page. Lock-specific automated coverage was intentionally left
   unspecified.
 - Resume technical-requirements questions at `### Export and import all application
-  data` unless the user directs otherwise.
+data` unless the user directs otherwise.
 
 ## Consistency notes
 

@@ -38,12 +38,10 @@ Crop marks and bleed settings for custom-art printing.
 Archive binder as a softer alternative to deletion.
 The most important unresolved product behavior is changing binder dimensions or page count after content exists. That can cause data loss unless it has an explicit relocation and confirmation workflow.
 
-
 High Value
 
 Manual/custom card entry: Allow cards missing from TCGdex to be added with a name, set, number, and image. The current workflow depends entirely on API search results.
 Swap cards between occupied slots: Dropping onto an occupied slot currently rejects the move. A swap action would make reorganizing layouts much faster.
-
 
 Insert, remove, and reorder binder pages: Page-count changes are covered, but managing pages in the middle of a binder is not.
 Bulk checklist actions: Select multiple visible cards and mark them acquired or unacquired together. This would be especially helpful when updating a newly purchased batch.
@@ -55,7 +53,6 @@ Purchase history and cost basis: Store purchase price, purchase date, and seller
 Reusable binder templates: Save dimensions, page count, art settings, and other binder configuration for future binders.
 Per-page financial summaries: Show the value and remaining acquisition cost for each page or spread.
 Cross-binder collection behavior: Decide whether the same physical card used in multiple binder plans shares acquisition and financial information or remains independent.
-
 
 I also found three existing backlog details worth clarifying before implementation:
 

@@ -1,6 +1,7 @@
 # Copilot Instructions — binder-project-planner
 
 ## Project overview
+
 `binder-project-planner` is an app for assisting with card binder planning (organizing
 trading/collectible cards into binders — deciding layouts, page assignments, and
 collection tracking).
@@ -10,6 +11,7 @@ docs. When adding the first code, set up the structure described below and updat
 file to match what was actually built.
 
 ## Planned stack
+
 - **Repository:** pnpm workspace with separate frontend and backend applications
 - **Frontend:** React (Next.js) with TypeScript
 - **Frontend virtualization:** TanStack Virtual (`@tanstack/react-virtual`)
@@ -27,6 +29,7 @@ file to match what was actually built.
   [docs/planning.md](../docs/planning.md) and keep this file in sync.
 
 ## Working conventions
+
 - Planning and requirements live in [docs/](../docs). Check
   [docs/planning.md](../docs/planning.md) before starting new work — it holds the story
   backlog and product notes.
@@ -54,6 +57,7 @@ file to match what was actually built.
   for AI coding agents working in this repo.
 
 ## Notes for AI agents
+
 - Don't assume a framework or file layout beyond what's listed above until it actually
   exists in the repo — verify by looking at the workspace first.
 - When scaffolding the initial app, ask the user for any still-missing decisions, such

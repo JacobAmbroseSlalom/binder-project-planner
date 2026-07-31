@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+.data
+.next
+pnpm-lock.yaml
+packages/api-contract/src/schema.d.ts
+apps/frontend/next-env.d.ts

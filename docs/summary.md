@@ -6,3 +6,5 @@ it recommended useful libraries to utilize like dnd-kit while i was doing techni
 used ai to summarize api endpoints and data types across all stories
 
 data types
+
+had versioning issues, copilot was able to quickly resolve them and find alternatives based on my specifications.

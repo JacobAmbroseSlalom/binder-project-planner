@@ -1,0 +1,30 @@
+{
+  "name": "binder-project-planner",
+  "version": "0.1.0",
+  "private": true,
+  "engines": {
+    "node": "24.18.1",
+    "pnpm": "11.18.0"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "build": "pnpm --filter @binder-project-planner/shared build && pnpm --filter @binder-project-planner/api-contract build && pnpm --filter @binder-project-planner/backend build && pnpm --filter @binder-project-planner/frontend build",
+    "dev": "concurrently -n backend,frontend -c blue,green \"pnpm --filter @binder-project-planner/backend dev\" \"pnpm --filter @binder-project-planner/frontend dev\"",
+    "dev:backend": "pnpm --filter @binder-project-planner/backend dev",
+    "dev:frontend": "pnpm --filter @binder-project-planner/frontend dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "pnpm build && pnpm --filter @binder-project-planner/backend test && pnpm --filter @binder-project-planner/frontend test",
+    "typecheck": "pnpm --filter @binder-project-planner/shared typecheck && pnpm --filter @binder-project-planner/api-contract typecheck && pnpm --filter @binder-project-planner/backend typecheck && pnpm --filter @binder-project-planner/frontend typecheck"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.5",
+    "concurrently": "10.0.4",
+    "eslint": "9.39.5",
+    "eslint-config-next": "16.2.12",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.65.0"
+  }
+}
