@@ -18,6 +18,12 @@ import {
 // binder-details form with Cancel/Create actions; after story 7 lands,
 // this same form component will also back the view/edit page's "Edit
 // Details" tab.
+
+// Fixed (not per-submit-random) toast id so that resubmitting after a
+// failed attempt replaces that failed toast rather than stacking a new
+// "saving" toast on top of it.
+const CREATE_BINDER_TOAST_ID = 'create-binder';
+
 export default function NewBinderPage() {
   const router = useRouter();
   const { start } = useSaveStatusToast();
@@ -38,7 +44,7 @@ export default function NewBinderPage() {
   // back to false once it settles either way, satisfying story 4's
   // "re-enabled if creation fails" rule without extra state.
   const onSubmit = handleSubmit(async (values) => {
-    const toast = start();
+    const toast = start(CREATE_BINDER_TOAST_ID);
 
     try {
       await createBinder(values);

@@ -12,6 +12,13 @@ import { toProblemDetailsInfo, useToastContext } from '@/shared/feedback';
 // ("only after a successful load with zero binders") straightforward.
 type BinderListStatus = 'loading' | 'success' | 'error';
 
+// Fixed (not per-attempt-random) toast id for this operation. Reusing the
+// same id across mounts/retries means a later attempt replaces this
+// operation's own toast rather than stacking a new one on top of a
+// still-visible failed toast from an earlier attempt, while leaving
+// unrelated toasts (e.g. a create-binder failure) untouched.
+const LIST_BINDERS_TOAST_ID = 'list-binders';
+
 // The home page's binder list (story 5): fetches the binder-summary
 // collection on mount and renders its loading/empty/success/error states. A
 // minimal inline spinner stands in for the shared loading component until
@@ -21,7 +28,7 @@ type BinderListStatus = 'loading' | 'success' | 'error';
 export function BinderList() {
   const [status, setStatus] = useState<BinderListStatus>('loading');
   const [binders, setBinders] = useState<BinderSummary[]>([]);
-  const { markFailed } = useToastContext();
+  const { markFailed, dismiss } = useToastContext();
 
   useEffect(() => {
     // Guards against setting state from a stale request if this effect ever
@@ -36,6 +43,10 @@ export function BinderList() {
         if (cancelled) return;
         setBinders(summaries);
         setStatus('success');
+        // Clears a leftover failed toast from an earlier failed attempt
+        // (e.g. the user navigated away and back) now that a retry has
+        // succeeded. No-ops if no such toast exists.
+        dismiss(LIST_BINDERS_TOAST_ID);
       } catch (error) {
         if (cancelled) return;
         // No "saving" phase applies to a read, so the failed toast is raised
@@ -43,7 +54,7 @@ export function BinderList() {
         // per story 5: only the loading indicator and, on failure, the
         // failed toast are shown.
         setStatus('error');
-        markFailed(crypto.randomUUID(), toProblemDetailsInfo(error));
+        markFailed(LIST_BINDERS_TOAST_ID, toProblemDetailsInfo(error));
       }
     }
 
@@ -52,7 +63,7 @@ export function BinderList() {
     return () => {
       cancelled = true;
     };
-  }, [markFailed]);
+  }, [markFailed, dismiss]);
 
   return (
     // Full page width (no max-width container, per the styling conventions);
