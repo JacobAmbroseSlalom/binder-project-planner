@@ -1,53 +1,18 @@
-'use client';
+import Link from 'next/link';
 
-import { useEffect, useState } from 'react';
-
-import { getHealth } from '@/lib/api';
-
-// The home page's backend-connectivity state: loading while the health check is
-// in flight, then either connected (with the reported database status) or errored.
-type BackendStatus =
-  | { state: 'loading' }
-  | { state: 'connected'; database: string }
-  | { state: 'error'; message: string };
-
+// The home page (story 4: "Create a new binder"). The binder list itself is
+// added by story 5; for now this just offers the entry point to create one.
 export default function Home() {
-  const [backendStatus, setBackendStatus] = useState<BackendStatus>({ state: 'loading' });
-
-  useEffect(() => {
-    // Guards against setting state after the effect has been cleaned up, e.g. if
-    // the component unmounts before the request resolves.
-    let cancelled = false;
-
-    getHealth()
-      .then((health) => {
-        if (!cancelled) {
-          setBackendStatus({ state: 'connected', database: health.database });
-        }
-      })
-      .catch((error: unknown) => {
-        if (!cancelled) {
-          setBackendStatus({
-            state: 'error',
-            message: error instanceof Error ? error.message : 'Unknown error.',
-          });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return (
-    <main>
-      <h1>Binder Project Planner</h1>
-      <p data-testid="backend-status">
-        {backendStatus.state === 'loading' && 'Checking backend connection…'}
-        {backendStatus.state === 'connected' &&
-          `Backend connected (database: ${backendStatus.database}).`}
-        {backendStatus.state === 'error' && `Backend connection failed: ${backendStatus.message}`}
-      </p>
+    <main className="flex flex-col items-center gap-8 p-8">
+      <h1>Binders</h1>
+      {/* Story 4: "Create a new binder" - navigates to the new-binder page. */}
+      <Link
+        href="/binders/new"
+        className="inline-block rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110"
+      >
+        Create new binder
+      </Link>
     </main>
   );
 }

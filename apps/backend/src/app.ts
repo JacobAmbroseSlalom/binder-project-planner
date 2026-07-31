@@ -7,6 +7,7 @@ import { pinoHttp } from 'pino-http';
 
 import type { DatabaseConnection } from './database/client.js';
 import { openApiSpecificationPath } from './paths.js';
+import { createBindersRouter } from './routes/binders.js';
 
 interface CreateAppOptions {
   database: DatabaseConnection['database'];
@@ -44,6 +45,8 @@ export function createApp({ database, frontendOrigin }: CreateAppOptions): Expre
       });
     }
   });
+
+  app.use(createBindersRouter(database));
 
   const errorHandler: ErrorRequestHandler = (error: HttpError, _request, response, _next) => {
     const status = error.status ?? 500;

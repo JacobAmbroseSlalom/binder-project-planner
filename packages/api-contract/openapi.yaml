@@ -23,6 +23,41 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /binders:
+    post:
+      operationId: createBinder
+      summary: Create a new binder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBinderRequest'
+      responses:
+        '201':
+          description: The binder was created.
+          headers:
+            Location:
+              description: The path of the newly created binder resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Binder'
+        '400':
+          description: The request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: A binder with the same case-insensitively normalized name already exists.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 components:
   schemas:
     HealthResponse:
@@ -57,3 +92,63 @@ components:
           maximum: 599
         detail:
           type: string
+    CreateBinderRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - width
+        - height
+        - pages
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Trimmed on the backend; case-insensitive uniqueness is enforced there.
+        width:
+          type: integer
+          minimum: 1
+          description: Number of slot columns per binder side.
+        height:
+          type: integer
+          minimum: 1
+          description: Number of slot rows per binder side.
+        pages:
+          type: integer
+          minimum: 1
+          description: Stored binder-page count. Physical pages range from 1 through 2 * pages.
+    Binder:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - name
+        - width
+        - height
+        - pages
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        pages:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time

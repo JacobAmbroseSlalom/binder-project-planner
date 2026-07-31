@@ -7,9 +7,14 @@ export default {
   // internal `.cjs` files) are never rewritten.
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
+    // The workspace shared package's built output is ESM (`export * from`),
+    // which Jest's CommonJS runtime can't parse without an extra transform.
+    // Resolving straight to its TypeScript source lets the existing `@swc/jest`
+    // transform (below) handle it the same as the backend's own source files.
+    '^@binder-project-planner/shared$': '<rootDir>/../../packages/shared/src/index.ts',
   },
   testEnvironment: 'node',
-  testMatch: ['<rootDir>/src/**/*.test.ts'],
+  testMatch: ['<rootDir>/tests/**/*.test.ts'],
   transform: {
     '^.+\\.ts$': ['@swc/jest', { jsc: { target: 'es2022' } }],
   },

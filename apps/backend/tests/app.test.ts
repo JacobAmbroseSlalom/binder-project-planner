@@ -1,8 +1,8 @@
 import type { Express } from 'express';
 import request from 'supertest';
 
-import { createApp } from './app.js';
-import { createDatabase, type DatabaseConnection } from './database/client.js';
+import { createApp } from '../src/app.js';
+import { createDatabase, type DatabaseConnection } from '../src/database/client.js';
 
 describe('GET /health', () => {
   let connection: DatabaseConnection;

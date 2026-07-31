@@ -21,6 +21,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/binders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create a new binder */
+        post: operations["createBinder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -39,6 +56,28 @@ export interface components {
             detail?: string;
         } & {
             [key: string]: unknown;
+        };
+        CreateBinderRequest: {
+            /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
+            name: string;
+            /** @description Number of slot columns per binder side. */
+            width: number;
+            /** @description Number of slot rows per binder side. */
+            height: number;
+            /** @description Stored binder-page count. Physical pages range from 1 through 2 * pages. */
+            pages: number;
+        };
+        Binder: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            width: number;
+            height: number;
+            pages: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
     };
     responses: never;
@@ -69,6 +108,50 @@ export interface operations {
             };
             /** @description The database is unavailable. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    createBinder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBinderRequest"];
+            };
+        };
+        responses: {
+            /** @description The binder was created. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created binder resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Binder"];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description A binder with the same case-insensitively normalized name already exists. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

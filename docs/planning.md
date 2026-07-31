@@ -113,7 +113,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 4. Create a new binder
 
-**Status:** Not started
+**Status:** In progress
 
 #### Acceptance criteria
 
@@ -125,10 +125,10 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Height defaults to 3.
 - Pages defaults to 20.
 - Width, height, and pages accept positive integers with a minimum value of 1 and no fixed maximum.
-- Cancel and Start New buttons appear at the bottom of the page.
+- Cancel and Create buttons appear at the bottom of the page.
 - Cancel returns to the home page without creating a binder.
-- Start New is disabled while binder creation is in progress and is re-enabled if creation fails.
-- Start New saves the binder through the backend to a database.
+- Create is disabled while binder creation is in progress and is re-enabled if creation fails.
+- Create saves the binder through the backend to a database.
 - After the binder is saved, the user returns to the home page.
 - Binder creation uses the shared save-status toast and remains on the completed form if saving fails.
 

@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 
 import { ToastProvider } from '@/shared/feedback';
+import { AppHeader } from '@/shared/navigation';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -24,7 +25,11 @@ export default function RootLayout({
       <body>
         {/* Mounted once so every page can start/update save-status toasts
             through useSaveStatusToast (story 3). */}
-        <ToastProvider>{children}</ToastProvider>
+        <ToastProvider>
+          {/* Persistent header (every page) with a link back to the home page. */}
+          <AppHeader />
+          {children}
+        </ToastProvider>
       </body>
     </html>
   );
