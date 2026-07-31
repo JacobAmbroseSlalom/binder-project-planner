@@ -5,6 +5,8 @@ trading card binder layouts. It is intended to help collectors organize cards in
 pages and slots, track cards that have not yet been placed, and plan artwork that spans
 multiple pockets.
 
+This is a capstone project for learning and utilizing AI (GitHub Copilot).
+
 ## Architecture
 
 This repository is a pnpm workspace organized into applications and shared packages:
@@ -12,7 +14,7 @@ This repository is a pnpm workspace organized into applications and shared packa
 | Path                    | Purpose                                                                    |
 | ----------------------- | -------------------------------------------------------------------------- |
 | `apps/backend`          | Express REST API backed by SQLite and Drizzle ORM.                         |
-| `apps/frontend`         | Next.js (App Router) React frontend.                                       |
+| `apps/frontend`         | Next.js (App Router) React frontend styled with Tailwind CSS.              |
 | `packages/api-contract` | OpenAPI specification and generated TypeScript API types.                  |
 | `packages/shared`       | Defaults and code shared across workspace applications.                    |
 | `docs`                  | Product planning, requirements, API endpoint, and data-type documentation. |

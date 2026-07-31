@@ -12,6 +12,7 @@ been placed vs. still needs a home.
 ## Tech stack (planned)
 
 - Frontend: React (Next.js)
+- Frontend styling: Tailwind CSS
 - Frontend virtualization: TanStack Virtual
 - Frontend icons: Lucide React
 - Frontend drag and drop: dnd-kit
@@ -36,11 +37,12 @@ requirements-writing progress tracked in
 [story-requirements-workflow.md](story-requirements-workflow.md); a story can have
 complete acceptance criteria and technical requirements while still `Not started`.
 Update the marker in place as work progresses instead of moving or duplicating the
-story elsewhere.
+story elsewhere. When a story becomes `Done`, append the completion date and time in
+parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 1. Project setup
 
-**Status:** Done
+**Status:** Done (2026-07-30 21:30 EDT)
 
 #### Acceptance criteria
 
@@ -76,7 +78,7 @@ story elsewhere.
 
 ### 2. Create styling documentation
 
-**Status:** Not started
+**Status:** Done (2026-07-30 23:31 EDT)
 
 - Styling documents are created for the frontend.
 - The documents record the agreed visual and UI standards for the app.
@@ -516,7 +518,7 @@ story elsewhere.
 - Card images set native HTML dragging to disabled so browser image dragging does not compete with dnd-kit.
 - Collision detection selects a destination only when the pointer is within a binder slot's bounds.
 - Dropping over a gap, control, or other non-slot region cancels the drag without changing client or persisted card positions.
-- The drag overlay displays the card image at the rendered slot dimensions with reduced opacity, and the source slot displays an empty placeholder while dragging.
+- The drag overlay displays the card image at the rendered slot dimensions, and the source slot displays an empty placeholder while dragging.
 - The binder context does not update card positions until a valid drop completes.
 - The slot currently selected by collision detection uses one target-highlight style; the highlight does not distinguish moves, swaps, or multi-slot-art blocks.
 - Card movement and swapping use `PATCH /cards/{cardId}` rather than a command-specific endpoint.

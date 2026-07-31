@@ -8,3 +8,6 @@ used ai to summarize api endpoints and data types across all stories
 data types
 
 had versioning issues, copilot was able to quickly resolve them and find alternatives based on my specifications.
+
+Made styling specifications with copilot walking me through what would be helpful, creating a styling-guide page for visually showing options and final choices.
+Helped me learn tailwind

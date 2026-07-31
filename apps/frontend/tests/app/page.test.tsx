@@ -1,8 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react';
 
 import { getHealth } from '@/lib/api';
-
-import Home from './page';
+import Home from '@/app/page';
 
 // The API client is mocked so this test exercises the page's own state handling
 // (loading → connected/error) without making a real network request.
