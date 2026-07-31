@@ -113,7 +113,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 4. Create a new binder
 
-**Status:** Done (2026-07-31 00:15 EDT)
+**Status:** Done (2026-07-31 17:15 EDT)
 
 #### Acceptance criteria
 
@@ -151,7 +151,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 5. List binders
 
-**Status:** Not started
+**Status:** Done (2026-07-31 17:55 EDT)
 
 #### Acceptance criteria
 

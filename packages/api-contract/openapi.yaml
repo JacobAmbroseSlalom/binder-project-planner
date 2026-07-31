@@ -24,6 +24,22 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
   /binders:
+    get:
+      operationId: listBinders
+      summary: List all binders
+      description: >-
+        Returns the complete initial binder-summary collection (no
+        pagination), sorted by updatedAt descending and then by binder UUID
+        ascending for deterministic ordering.
+      responses:
+        '200':
+          description: The binder-summary collection in its documented sort order.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BinderSummary'
     post:
       operationId: createBinder
       summary: Create a new binder
@@ -121,6 +137,45 @@ components:
     Binder:
       type: object
       additionalProperties: false
+      required:
+        - id
+        - name
+        - width
+        - height
+        - pages
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        width:
+          type: integer
+          minimum: 1
+        height:
+          type: integer
+          minimum: 1
+        pages:
+          type: integer
+          minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    BinderSummary:
+      type: object
+      additionalProperties: false
+      description: >-
+        The lightweight binder representation used by the home-page binder
+        list (story 5). Later stories (20, 22) extend this schema with only
+        the additional preview and completion-metric data those features
+        require, rather than the complete card and multi-slot-art graph.
       required:
         - id
         - name

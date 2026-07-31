@@ -28,7 +28,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List all binders
+         * @description Returns the complete initial binder-summary collection (no pagination), sorted by updatedAt descending and then by binder UUID ascending for deterministic ordering.
+         */
+        get: operations["listBinders"];
         put?: never;
         /** Create a new binder */
         post: operations["createBinder"];
@@ -79,6 +83,19 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description The lightweight binder representation used by the home-page binder list (story 5). Later stories (20, 22) extend this schema with only the additional preview and completion-metric data those features require, rather than the complete card and multi-slot-art graph. */
+        BinderSummary: {
+            /** Format: uuid */
+            id: string;
+            name: string;
+            width: number;
+            height: number;
+            pages: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
     };
     responses: never;
     parameters: never;
@@ -113,6 +130,26 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listBinders: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The binder-summary collection in its documented sort order. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinderSummary"][];
                 };
             };
         };

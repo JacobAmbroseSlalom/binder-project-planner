@@ -3,6 +3,7 @@ import request from 'supertest';
 
 import { createApp } from '../src/app.js';
 import { createDatabase, type DatabaseConnection } from '../src/database/client.js';
+import { binders } from '../src/database/schema.js';
 
 describe('GET /health', () => {
   let connection: DatabaseConnection;
@@ -25,6 +26,123 @@ describe('GET /health', () => {
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({ status: 'ok', database: 'connected' });
+  });
+});
+
+describe('GET /binders', () => {
+  let connection: DatabaseConnection;
+  let app: Express;
+
+  beforeEach(() => {
+    connection = createDatabase(':memory:');
+    app = createApp({ database: connection.database, frontendOrigin: 'http://localhost:3000' });
+  });
+
+  afterEach(() => {
+    connection.close();
+  });
+
+  // Inserts a binder row directly (bypassing POST /binders) so each test can
+  // control its id and timestamps precisely, in order to assert the
+  // documented sort order (story 5's ACs) rather than relying on real-time
+  // clock ordering between requests.
+  function insertBinder(overrides: {
+    id: string;
+    name: string;
+    updatedAt: string;
+    createdAt?: string;
+  }) {
+    connection.database
+      .insert(binders)
+      .values({
+        id: overrides.id,
+        name: overrides.name,
+        normalizedName: overrides.name.toLowerCase(),
+        width: 3,
+        height: 3,
+        pages: 20,
+        createdAt: overrides.createdAt ?? overrides.updatedAt,
+        updatedAt: overrides.updatedAt,
+      })
+      .run();
+  }
+
+  it('returns an empty array when no binders exist', async () => {
+    const response = await request(app).get('/binders');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it('sorts binders by updatedAt descending', async () => {
+    insertBinder({
+      id: '11111111-1111-1111-1111-111111111111',
+      name: 'Oldest',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    insertBinder({
+      id: '22222222-2222-2222-2222-222222222222',
+      name: 'Newest',
+      updatedAt: '2026-01-03T00:00:00.000Z',
+    });
+    insertBinder({
+      id: '33333333-3333-3333-3333-333333333333',
+      name: 'Middle',
+      updatedAt: '2026-01-02T00:00:00.000Z',
+    });
+
+    const response = await request(app).get('/binders');
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((binder: { name: string }) => binder.name)).toEqual([
+      'Newest',
+      'Middle',
+      'Oldest',
+    ]);
+  });
+
+  it('breaks updatedAt ties using ascending binder UUID', async () => {
+    insertBinder({
+      id: 'ffffffff-ffff-ffff-ffff-ffffffffffff',
+      name: 'Z Binder',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+    insertBinder({
+      id: '00000000-0000-0000-0000-000000000000',
+      name: 'A Binder',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const response = await request(app).get('/binders');
+
+    expect(response.status).toBe(200);
+    expect(response.body.map((binder: { id: string }) => binder.id)).toEqual([
+      '00000000-0000-0000-0000-000000000000',
+      'ffffffff-ffff-ffff-ffff-ffffffffffff',
+    ]);
+  });
+
+  it('returns binder-summary objects without exposing normalizedName', async () => {
+    insertBinder({
+      id: '11111111-1111-1111-1111-111111111111',
+      name: 'My Binder',
+      updatedAt: '2026-01-01T00:00:00.000Z',
+    });
+
+    const response = await request(app).get('/binders');
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        name: 'My Binder',
+        width: 3,
+        height: 3,
+        pages: 20,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      },
+    ]);
   });
 });
 

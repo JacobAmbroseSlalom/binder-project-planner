@@ -29,7 +29,22 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export type Binder = components['schemas']['Binder'];
+export type BinderSummary = components['schemas']['BinderSummary'];
 export type CreateBinderRequest = components['schemas']['CreateBinderRequest'];
+
+// Fetches the complete binder-summary collection through `GET /binders`
+// (story 5). The backend already returns it in the documented sort order
+// (updatedAt descending, then binder UUID ascending), so the frontend
+// renders the response as-is without re-sorting.
+export async function listBinders(): Promise<BinderSummary[]> {
+  const { data, error } = await apiClient.GET('/binders');
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
 
 // Creates a binder through `POST /binders` (story 4). On failure, throws the
 // backend's Problem Details body as-is so callers (via

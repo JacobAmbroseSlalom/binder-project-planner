@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { BINDER_NAME_MAX_LENGTH } from '@binder-project-planner/shared';
+import { asc, desc } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
@@ -34,6 +35,27 @@ function isUniqueConstraintError(error: unknown): boolean {
 // needs to run queries.
 export function createBindersRouter(database: DatabaseConnection['database']): Router {
   const router = Router();
+
+  // Story 5: "List binders". Returns the complete binder-summary collection
+  // (no pagination), sorted by `updatedAt` descending and then by binder
+  // UUID ascending as a deterministic tie-breaker per planning.md.
+  router.get('/binders', (_request, response) => {
+    const rows = database
+      .select({
+        id: binders.id,
+        name: binders.name,
+        width: binders.width,
+        height: binders.height,
+        pages: binders.pages,
+        createdAt: binders.createdAt,
+        updatedAt: binders.updatedAt,
+      })
+      .from(binders)
+      .orderBy(desc(binders.updatedAt), asc(binders.id))
+      .all();
+
+    response.status(200).json(rows);
+  });
 
   router.post('/binders', (request, response) => {
     const body = request.body as CreateBinderRequestBody;

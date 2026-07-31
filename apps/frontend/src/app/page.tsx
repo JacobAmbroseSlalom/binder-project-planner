@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
-// The home page (story 4: "Create a new binder"). The binder list itself is
-// added by story 5; for now this just offers the entry point to create one.
+import { BinderList } from './_components/BinderList';
+
+// The home page (stories 4 and 5): offers the entry point to create a
+// binder and displays the existing binder list.
 export default function Home() {
   return (
     <main className="flex flex-col items-center gap-8 p-8">
@@ -13,6 +15,8 @@ export default function Home() {
       >
         Create new binder
       </Link>
+
+      <BinderList />
     </main>
   );
 }
