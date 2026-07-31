@@ -103,6 +103,9 @@ sections as decided.
 - **Hover** on buttons/links: slightly lighten the element (e.g. a `brightness`
   increase) rather than swapping to a different token color, so the same treatment
   works consistently regardless of the element's base color.
+- **Cursor**: `<button>` elements get an explicit `cursor-pointer` — browsers
+  render native buttons with `cursor: default`, not a pointer, unlike `<a>`
+  tags (which already default to a pointer and don't need the class).
 - **Disabled**: reduced opacity (e.g. `opacity-50`) plus `cursor-not-allowed`,
   applied consistently across buttons and inputs.
 - **Hover-revealed actions** (e.g. card/slot/binder controls per the planning

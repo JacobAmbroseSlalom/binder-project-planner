@@ -22,3 +22,17 @@ applyTo: '**'
   not defaults.
 - Tests should import production defaults when verifying default behavior. A test may use
   local fixture values when the value is test data rather than an application default.
+
+## Comments
+
+- Always leave helpful comments, as much as possible — err on the side of adding one
+  rather than skipping it.
+- Every exported function, hook, component, and type gets a comment explaining its
+  purpose (what it's for and why it exists), not just a restatement of its signature.
+- Inside function bodies, comment non-obvious control flow, edge cases, and any
+  implementation decision that isn't self-evident from the code alone (e.g. why a
+  particular ordering, guard, or workaround is needed).
+- Prefer comments that explain _why_, not _what_ — the code already shows what's
+  happening; the comment should add context a reader can't get from the code itself.
+- Keep comments accurate and up to date: when editing a commented code block, update or
+  remove its comment if the change makes the comment stale or misleading.

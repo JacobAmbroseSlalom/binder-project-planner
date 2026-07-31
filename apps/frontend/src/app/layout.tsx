@@ -2,6 +2,8 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 
+import { ToastProvider } from '@/shared/feedback';
+
 const inter = Inter({
   variable: '--font-inter',
   subsets: ['latin'],
@@ -19,7 +21,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body>{children}</body>
+      <body>
+        {/* Mounted once so every page can start/update save-status toasts
+            through useSaveStatusToast (story 3). */}
+        <ToastProvider>{children}</ToastProvider>
+      </body>
     </html>
   );
 }

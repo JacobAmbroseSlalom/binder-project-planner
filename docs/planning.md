@@ -86,7 +86,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 3. Add reusable save-status feedback
 
-**Status:** Not started
+**Status:** Done (2026-07-30 23:45 EDT)
 
 #### Acceptance criteria
 
@@ -103,11 +103,11 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 #### Technical requirements
 
-- The frontend toast library remains TBD, with Sonner documented as an option to evaluate during implementation.
-- Save-status announcements use the selected toast library's default accessibility behavior.
+- The frontend toast component is custom-built (`apps/frontend/src/shared/feedback/`) rather than a third-party toast library (e.g. Sonner), consistent with the styling system's fully-custom interactive-component rule.
+- Save-status announcements use ARIA live regions matching each status's urgency: `role="status"` for saving/saved, `role="alert"` for failed.
 - Mutation status and optimistic rollback are managed with React state and the OpenAPI-generated REST client rather than a server-state library.
 - Each concurrent backend mutation has its own operation identifier.
-- The 3-second saved-toast duration is stored in the canonical application `defaults.ts` when the application is scaffolded.
+- The 3-second saved-toast duration is stored in the canonical application `defaults.ts` as `SAVED_TOAST_DURATION_MS`.
 - Backend failures use the standard Problem Details JSON response format documented in the OpenAPI specification.
 - Failed toasts use the Problem Details `detail` value and retain the response status and problem type for diagnostics.
 
