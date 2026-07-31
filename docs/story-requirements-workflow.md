@@ -4,6 +4,11 @@
 
 - `docs/planning.md` is the canonical product backlog and technical-decisions document.
   Read the active story and nearby related stories before asking questions.
+- Each story in `docs/planning.md` carries a `**Status:**` marker (`Not started`,
+  `In progress`, or `Done`) tracking implementation progress in place. This is a
+  separate axis from the requirements-writing progress tracked below; do not move,
+  delete, or split out a story's content when it reaches `Done` — later stories keep
+  citing its confirmed contracts.
 - `.github/copilot-instructions.md` records the planned stack and onboarding guidance.
 - `.github/instructions/coding-conventions.instructions.md` requires all
   application-owned defaults to live in one shared canonical `defaults.ts` once

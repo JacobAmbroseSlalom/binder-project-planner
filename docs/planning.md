@@ -30,7 +30,17 @@ Stories are listed below with their acceptance criteria (ACs). Technical decisio
 recorded in a separate "Technical requirements" subsection within each story as they are
 defined.
 
+Each story carries a `**Status:**` marker of `Not started`, `In progress`, or `Done`,
+tracking implementation progress in place. This is independent from the
+requirements-writing progress tracked in
+[story-requirements-workflow.md](story-requirements-workflow.md); a story can have
+complete acceptance criteria and technical requirements while still `Not started`.
+Update the marker in place as work progresses instead of moving or duplicating the
+story elsewhere.
+
 ### 1. Project setup
+
+**Status:** Done
 
 #### Acceptance criteria
 
@@ -66,11 +76,15 @@ defined.
 
 ### 2. Create styling documentation
 
+**Status:** Not started
+
 - Styling documents are created for the frontend.
 - The documents record the agreed visual and UI standards for the app.
 - The documents are organized so developers can reference and update them as the app evolves.
 
 ### 3. Add reusable save-status feedback
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -96,6 +110,8 @@ defined.
 - Failed toasts use the Problem Details `detail` value and retain the response status and problem type for diagnostics.
 
 ### 4. Create a new binder
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -133,6 +149,8 @@ defined.
 
 ### 5. List binders
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The home page displays a list of binders.
@@ -154,6 +172,8 @@ defined.
 - Later home-page preview and completion-metric stories extend the binder summary with only the additional data required by those features.
 
 ### 6. Add reusable loading feedback
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -177,6 +197,8 @@ defined.
 - Request state tracks the current operation so stale responses cannot replace data from a newer request.
 
 ### 7. Create the view/edit binder page
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -222,6 +244,8 @@ defined.
 
 ### 8. Visualize a basic binder layout
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The "Edit Layout" tab displays a visual representation of the binder.
@@ -262,6 +286,8 @@ defined.
 
 ### 9. Jump directly to a binder page
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The current physical page number or page-number range appears above the binder visualization.
@@ -286,6 +312,8 @@ defined.
 - Next-arrow navigation selects the left physical page of the next spread, and previous-arrow navigation selects the right physical page of the previous spread; the single first or last physical page is used at the binder boundaries.
 
 ### 10. Show Michi slot indicators
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -319,6 +347,8 @@ defined.
 - Indicator elements are noninteractive, excluded from the tab order, and hidden from the accessibility tree.
 
 ### 11. Select a card for a binder slot
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -395,6 +425,8 @@ defined.
 
 ### 12. Add a custom card manually
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The card-selection modal has an option to add a custom card without selecting a TCGdex search result.
@@ -436,6 +468,8 @@ defined.
 
 ### 13. Remove a card from a binder slot
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - Hovering over a card displays card actions to the right of the card.
@@ -460,6 +494,8 @@ defined.
 - The frontend uses `lucide-react` for the X action and other familiar interface icons.
 
 ### 14. Move a card to a different binder slot
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -500,6 +536,8 @@ defined.
 
 ### 15. Manage unplaced cards
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - An unplaced cards section appears on the right side of the "Edit Layout" tab.
@@ -531,6 +569,8 @@ defined.
 - When no unplaced cards exist, the panel renders its normal add button without a separate empty-state message.
 
 ### 16. Add card variations
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -570,6 +610,8 @@ defined.
 
 ### 17. Add more cards
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The card-selection modal has Cancel, Add More, and Add Card buttons at the bottom.
@@ -601,6 +643,8 @@ defined.
 - Add Card and Add More are enabled only when a TCGdex result is selected or the custom-card form is valid, and both are disabled while a create-card request is pending.
 
 ### 18. Bulk add cards
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -654,6 +698,8 @@ defined.
 
 ### 19. Duplicate a card
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - Hovering over a card displays a duplicate-card action with the existing card actions.
@@ -677,6 +723,8 @@ defined.
 - The backend persists each duplication outcome for the shared mutation idempotency-retention period and returns the same created card for a repeated key without duplicating it again.
 
 ### 20. Add a binder preview
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -706,6 +754,8 @@ defined.
 - A failed card or multi-slot-art image preserves its occupied preview geometry and renders a neutral missing-image placeholder; one failed image does not replace the complete preview.
 
 ### 21. Manage binders from the home page
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -747,6 +797,8 @@ defined.
 
 ### 22. Show binder completion metrics
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The top of the home page binder list has a toggle for showing or hiding binder completion metrics.
@@ -774,6 +826,8 @@ defined.
 - Each binder summary returns `totalSlots`, `occupiedSlots`, `emptySlots`, `acquiredCards`, and `totalCards`; the client derives slot-completion and card-acquisition percentages from those counts.
 
 ### 23. Add binder notes
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -807,6 +861,8 @@ defined.
 
 ### 24. Configure card and multi-slot art dimensions
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The reusable binder-details form on the new binder page and the "Edit Details" tab has editable fields for the width per slot and width base values.
@@ -837,6 +893,8 @@ defined.
 - The configured one-slot width and height define the binder's on-screen slot and card aspect ratio and are also the basis for multi-slot-art and print dimensions; the default formulas retain the initial `7:9.5` one-slot ratio.
 
 ### 25. Add multi-slot art
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -913,6 +971,8 @@ defined.
 
 ### 26. Move and manage multi-slot art
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - Hovering over multi-slot art displays edit, delete, and duplicate actions comparable to the existing card actions.
@@ -976,6 +1036,8 @@ defined.
 
 ### 27. Handle binder size and page-count changes
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - Increasing the binder's width, height, or page count preserves all existing card and multi-slot art placements.
@@ -1005,6 +1067,8 @@ defined.
 - If the new page count invalidates `previewPhysicalPage`, the same transaction resets it to `DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE` (`2`) and returns that value in the updated binder details.
 
 ### 28. Undo and redo layout movements
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -1042,6 +1106,8 @@ defined.
 - The buttons use Lucide icons, stable hit areas, accessible labels, and hover tooltips and reflect disabled history or pending-movement states.
 
 ### 29. Export a binder as a PDF
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -1082,6 +1148,8 @@ defined.
 - A successful response starts the browser download and replaces the generating toast with the shared saved toast; a failure replaces it with the shared persistent failed toast using the returned Problem Details `detail`.
 
 ### 30. Export multi-slot art for printing
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -1141,6 +1209,8 @@ defined.
 
 ### 31. Search and filter unplaced items
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The unplaced cards section has a search field for narrowing the displayed items.
@@ -1167,6 +1237,8 @@ defined.
 - Filtering and the empty-results state do not remove or disable the unplaced panel's existing add-card and add-art controls.
 
 ### 32. Lock a binder
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -1217,6 +1289,8 @@ defined.
 
 ### 33. Export and import all application data
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - The application has actions for exporting and importing all application data.
@@ -1247,6 +1321,8 @@ defined.
 
 ### 40. Add summary stats on Binder Layout Page
 
+**Status:** Not started
+
 #### Acceptance Criteria
 
 - TODO: numbers and colors for binder slots used, cards and art (represented in slots) in unplaced section. Easy to identify if there are more cards than slots in the binder
@@ -1254,6 +1330,8 @@ defined.
 #### Technical Requirements
 
 ### 34. Add custom art finances
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -1265,6 +1343,8 @@ defined.
 
 ### 35. Add art production time statistics
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - TBD: Define acceptance criteria.
@@ -1274,6 +1354,8 @@ defined.
 - TBD: Define technical requirements.
 
 ### 36. Track card acquisition
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -1292,6 +1374,8 @@ defined.
 - TBD: Define the acquisition data model, API contract, locked-binder exception, optimistic-update, and display-toggle behavior.
 
 ### 37. Add a card checklist
+
+**Status:** Not started
 
 #### Acceptance criteria
 
@@ -1330,6 +1414,8 @@ defined.
 
 ### 38. Add card finances
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - A technical spike determines whether a suitable card-pricing API is available and can provide prices for the cards supported by the app.
@@ -1365,6 +1451,8 @@ defined.
 
 ### 39. Add Binder Search and Sort functions
 
+**Status:** Not started
+
 #### Acceptance criteria
 
 - TBD: Define acceptance criteria.
@@ -1373,13 +1461,15 @@ defined.
 
 - TBD: Define technical requirements.
 
-Add new stories as they come up, following the same format.
+Add new stories as they come up, following the same format, starting with `**Status:**
+Not started` under the heading.
 
 ## Definition of done (draft)
 
 - Story's acceptance criteria are all met.
 - No console errors/warnings introduced.
 - Basic tests added/updated if a test setup exists.
+- The story's `**Status:**` marker in the backlog above is updated to `Done`.
 
 ## Next steps
 
