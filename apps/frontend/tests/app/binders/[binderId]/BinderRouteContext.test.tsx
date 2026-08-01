@@ -2,7 +2,7 @@ import { LOADING_INDICATOR_DELAY_MS } from '@binder-project-planner/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { getBinder, listBinderArt, listBinderCards, type Binder } from '@/lib/api';
+import { getBinder, listBinderArt, listBinderCards, type Binder, type Card } from '@/lib/api';
 import {
   BinderRouteProvider,
   useBinderRouteContext,
@@ -41,6 +41,28 @@ function makeBinder(overrides: Partial<Binder> = {}): Binder {
     width: 3,
     height: 3,
     pages: 20,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+// A minimal placed, TCGdex-sourced card, matching the `Card` schema, used to
+// verify the provider forwards whatever `listBinderCards` resolves with
+// without needing every test to restate every field.
+function makeCard(overrides: Partial<Card> = {}): Card {
+  return {
+    id: 'card-1',
+    binderId: BINDER_ID,
+    name: 'Pikachu',
+    setName: 'Base Set',
+    localNumber: '25',
+    source: 'tcgdex',
+    providerCardId: 'base1-25',
+    providerSetId: 'base1',
+    variation: null,
+    placement: { physicalPage: 1, row: 0, column: 0 },
+    imageUrl: '/cards/card-1/image',
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -105,7 +127,7 @@ describe('BinderRouteProvider', () => {
 
   it('loads binder, cards, and art in parallel and publishes them together to nested tabs', async () => {
     mockedGetBinder.mockResolvedValue(makeBinder());
-    mockedListBinderCards.mockResolvedValue([{ id: 'card-1' }]);
+    mockedListBinderCards.mockResolvedValue([makeCard()]);
     mockedListBinderArt.mockResolvedValue([{ id: 'art-1' }, { id: 'art-2' }]);
 
     renderProvider();
