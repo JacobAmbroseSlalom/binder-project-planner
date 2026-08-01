@@ -79,9 +79,55 @@ export interface paths {
         };
         /**
          * List a binder's cards
-         * @description Returns every binder-owned card, placed and unplaced, without image bytes. Card creation does not exist yet (story 11), so this always returns an empty array today.
+         * @description Returns every binder-owned card, placed and unplaced, without image bytes (story 11).
          */
         get: operations["listBinderCards"];
+        put?: never;
+        /**
+         * Assign a TCGdex card to a binder slot
+         * @description Creates a binder-owned card from a normalized TCGdex catalog result and its target placement (story 11). The backend assigns the `tcgdex` source, downloads and installs the card's image, and validates placement against the binder's current dimensions.
+         */
+        post: operations["createBinderCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/card-catalog/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search the TCGdex card catalog
+         * @description Searches TCGdex through the backend (story 11) and returns normalized catalog cards in the provider's original order, without application-level pagination or truncation.
+         */
+        get: operations["searchCardCatalog"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cards/{cardId}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Stream a card's image
+         * @description Resolves the card's shared image asset and streams its local file with the detected image Content-Type and long-lived immutable caching (story 11). Storage IDs and filenames are never exposed.
+         */
+        get: operations["getCardImage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -172,6 +218,62 @@ export interface components {
             width: number;
             height: number;
             pages: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description One-based physical page, row, and column. All three are populated for a placed item and all three are null for an unplaced item (story 11's slot assignment always supplies all three). */
+        PlacementCoordinates: {
+            physicalPage: number | null;
+            row: number | null;
+            column: number | null;
+        };
+        /** @description A normalized TCGdex catalog card (story 11), returned by `GET /card-catalog/search` and submitted as-is (plus variation and placement) to create a TCGdex-sourced binder card. */
+        TcgDexCatalogCard: {
+            name: string;
+            setName: string | null;
+            localNumber: string | null;
+            providerCardId: string;
+            providerSetId: string;
+            /**
+             * Format: uri
+             * @description The provider's image location; not the frontend-facing image URL.
+             */
+            imageUrl: string;
+        };
+        /** @description Creates a TCGdex-sourced binder card (story 11). The backend does not refetch card details before saving; it assigns `source` server-side and downloads the image from `imageUrl` itself. */
+        CreateCardRequest: {
+            name: string;
+            setName: string | null;
+            localNumber: string | null;
+            providerCardId: string;
+            providerSetId: string;
+            /** Format: uri */
+            imageUrl: string;
+            variation?: string | null;
+            placement: components["schemas"]["PlacementCoordinates"];
+        };
+        /** @description The complete persisted representation of a binder-owned card. */
+        Card: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            binderId: string;
+            name: string;
+            setName: string | null;
+            localNumber: string | null;
+            /** @enum {string} */
+            source: "tcgdex" | "custom";
+            providerCardId: string | null;
+            providerSetId: string | null;
+            variation: string | null;
+            placement: components["schemas"]["PlacementCoordinates"];
+            /**
+             * Format: uri-reference
+             * @description The backend's own `/cards/{cardId}/image` endpoint URL.
+             */
+            imageUrl: string;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -391,7 +493,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown[];
+                    "application/json": components["schemas"]["Card"][];
                 };
             };
             /** @description The binderId path parameter is not a well-formed UUID. */
@@ -404,6 +506,170 @@ export interface operations {
                 };
             };
             /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    createBinderCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCardRequest"];
+            };
+        };
+        responses: {
+            /** @description The card was created and placed. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created card resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, or the request body did not match the documented schema or a valid placement within the binder's current dimensions. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The target placement is already occupied by another card. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The upstream TCGdex image download failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The upstream TCGdex image download timed out. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    searchCardCatalog: {
+        parameters: {
+            query: {
+                query: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The normalized TCGdex search results. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TcgDexCatalogCard"][];
+                };
+            };
+            /** @description The query is missing, or its trimmed length is below the configured minimum. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The upstream TCGdex search failed. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The upstream TCGdex search timed out. */
+            504: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    getCardImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card's image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "image/webp": unknown;
+                };
+            };
+            /** @description The cardId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No card, image-asset record, or local file exists. */
             404: {
                 headers: {
                     [name: string]: unknown;

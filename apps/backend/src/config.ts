@@ -7,6 +7,8 @@ import {
 } from '@binder-project-planner/shared';
 import { resolve } from 'node:path';
 
+import { getImagesDirectory } from './paths.js';
+
 function readPort(value: string | undefined): number {
   if (value === undefined) {
     return DEFAULT_BACKEND_PORT;
@@ -29,6 +31,7 @@ export const config = {
   applicationDataDirectory,
   databaseFile:
     process.env.DATABASE_FILE ?? resolve(applicationDataDirectory, DEFAULT_DATABASE_FILENAME),
+  imagesDirectory: getImagesDirectory(applicationDataDirectory),
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? DEFAULT_FRONTEND_ORIGIN,
   host: process.env.HOST ?? DEFAULT_BACKEND_HOST,
   port: readPort(process.env.PORT),

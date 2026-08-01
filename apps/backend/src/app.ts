@@ -2,23 +2,34 @@ import cors from 'cors';
 import express, { type ErrorRequestHandler, type Express } from 'express';
 import * as OpenApiValidator from 'express-openapi-validator';
 import { sql } from 'drizzle-orm';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import pino from 'pino';
 import { pinoHttp } from 'pino-http';
 
 import type { DatabaseConnection } from './database/client.js';
 import { openApiSpecificationPath } from './paths.js';
 import { createBindersRouter } from './routes/binders.js';
+import { createCardsRouter } from './routes/cards.js';
 
 interface CreateAppOptions {
   database: DatabaseConnection['database'];
   frontendOrigin: string;
+  // Where card/art image files are stored (story 11). Optional so existing
+  // callers (e.g. tests) that don't exercise image storage don't need to
+  // supply one; falls back to a throwaway directory under the OS temp dir.
+  imagesDirectory?: string;
 }
 
 interface HttpError extends Error {
   status?: number;
 }
 
-export function createApp({ database, frontendOrigin }: CreateAppOptions): Express {
+export function createApp({
+  database,
+  frontendOrigin,
+  imagesDirectory = join(tmpdir(), 'binder-project-planner-images'),
+}: CreateAppOptions): Express {
   const app = express();
 
   app.use(pinoHttp({ logger: pino({ enabled: process.env.NODE_ENV !== 'test' }) }));
@@ -47,6 +58,7 @@ export function createApp({ database, frontendOrigin }: CreateAppOptions): Expre
   });
 
   app.use(createBindersRouter(database));
+  app.use(createCardsRouter(database, imagesDirectory));
 
   const errorHandler: ErrorRequestHandler = (error: HttpError, _request, response, _next) => {
     const status = error.status ?? 500;

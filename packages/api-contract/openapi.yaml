@@ -150,8 +150,7 @@ paths:
       summary: List a binder's cards
       description: >-
         Returns every binder-owned card, placed and unplaced, without image
-        bytes. Card creation does not exist yet (story 11), so this always
-        returns an empty array today.
+        bytes (story 11).
       responses:
         '200':
           description: The binder's cards.
@@ -159,7 +158,8 @@ paths:
             application/json:
               schema:
                 type: array
-                items: {}
+                items:
+                  $ref: '#/components/schemas/Card'
         '400':
           description: The binderId path parameter is not a well-formed UUID.
           content:
@@ -168,6 +168,144 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         '404':
           description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      operationId: createBinderCard
+      summary: Assign a TCGdex card to a binder slot
+      description: >-
+        Creates a binder-owned card from a normalized TCGdex catalog result
+        and its target placement (story 11). The backend assigns the
+        `tcgdex` source, downloads and installs the card's image, and
+        validates placement against the binder's current dimensions.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCardRequest'
+      responses:
+        '201':
+          description: The card was created and placed.
+          headers:
+            Location:
+              description: The path of the newly created card resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, or the
+            request body did not match the documented schema or a valid
+            placement within the binder's current dimensions.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: The target placement is already occupied by another card.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '502':
+          description: The upstream TCGdex image download failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '504':
+          description: The upstream TCGdex image download timed out.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /card-catalog/search:
+    get:
+      operationId: searchCardCatalog
+      summary: Search the TCGdex card catalog
+      description: >-
+        Searches TCGdex through the backend (story 11) and returns
+        normalized catalog cards in the provider's original order, without
+        application-level pagination or truncation.
+      parameters:
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The normalized TCGdex search results.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TcgDexCatalogCard'
+        '400':
+          description: >-
+            The query is missing, or its trimmed length is below the
+            configured minimum.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '502':
+          description: The upstream TCGdex search failed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '504':
+          description: The upstream TCGdex search timed out.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /cards/{cardId}/image:
+    parameters:
+      - name: cardId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    get:
+      operationId: getCardImage
+      summary: Stream a card's image
+      description: >-
+        Resolves the card's shared image asset and streams its local file
+        with the detected image Content-Type and long-lived immutable
+        caching (story 11). Storage IDs and filenames are never exposed.
+      responses:
+        '200':
+          description: The card's image bytes.
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+        '400':
+          description: The cardId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No card, image-asset record, or local file exists.
           content:
             application/problem+json:
               schema:
@@ -364,6 +502,157 @@ components:
         pages:
           type: integer
           minimum: 1
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    PlacementCoordinates:
+      type: object
+      additionalProperties: false
+      description: >-
+        One-based physical page, row, and column. All three are populated
+        for a placed item and all three are null for an unplaced item
+        (story 11's slot assignment always supplies all three).
+      required:
+        - physicalPage
+        - row
+        - column
+      properties:
+        physicalPage:
+          type: integer
+          minimum: 1
+          nullable: true
+        row:
+          type: integer
+          minimum: 1
+          nullable: true
+        column:
+          type: integer
+          minimum: 1
+          nullable: true
+    TcgDexCatalogCard:
+      type: object
+      additionalProperties: false
+      description: >-
+        A normalized TCGdex catalog card (story 11), returned by
+        `GET /card-catalog/search` and submitted as-is (plus variation and
+        placement) to create a TCGdex-sourced binder card.
+      required:
+        - name
+        - setName
+        - localNumber
+        - providerCardId
+        - providerSetId
+        - imageUrl
+      properties:
+        name:
+          type: string
+        setName:
+          type: string
+          nullable: true
+        localNumber:
+          type: string
+          nullable: true
+        providerCardId:
+          type: string
+        providerSetId:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+          description: The provider's image location; not the frontend-facing image URL.
+    CreateCardRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Creates a TCGdex-sourced binder card (story 11). The backend does
+        not refetch card details before saving; it assigns `source`
+        server-side and downloads the image from `imageUrl` itself.
+      required:
+        - name
+        - setName
+        - localNumber
+        - providerCardId
+        - providerSetId
+        - imageUrl
+        - placement
+      properties:
+        name:
+          type: string
+        setName:
+          type: string
+          nullable: true
+        localNumber:
+          type: string
+          nullable: true
+        providerCardId:
+          type: string
+        providerSetId:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        variation:
+          type: string
+          maxLength: 50
+          nullable: true
+        placement:
+          $ref: '#/components/schemas/PlacementCoordinates'
+    Card:
+      type: object
+      additionalProperties: false
+      description: The complete persisted representation of a binder-owned card.
+      required:
+        - id
+        - binderId
+        - name
+        - setName
+        - localNumber
+        - source
+        - providerCardId
+        - providerSetId
+        - variation
+        - placement
+        - imageUrl
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        binderId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        setName:
+          type: string
+          nullable: true
+        localNumber:
+          type: string
+          nullable: true
+        source:
+          type: string
+          enum:
+            - tcgdex
+            - custom
+        providerCardId:
+          type: string
+          nullable: true
+        providerSetId:
+          type: string
+          nullable: true
+        variation:
+          type: string
+          nullable: true
+        placement:
+          $ref: '#/components/schemas/PlacementCoordinates'
+        imageUrl:
+          type: string
+          format: uri-reference
+          description: The backend's own `/cards/{cardId}/image` endpoint URL.
         createdAt:
           type: string
           format: date-time

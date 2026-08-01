@@ -6,6 +6,7 @@ import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
 import { binders } from '../database/schema.js';
+import { listCardsForBinder } from './cards.js';
 
 // The validated, OpenAPI-typed shape of a create-binder request body. The
 // OpenAPI validation middleware (mounted in app.ts) already rejects requests
@@ -241,10 +242,9 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
   });
 
   // Story 7 requires the shared binder context to load details, cards, and
-  // art in parallel, but card creation (story 11) and art creation (story
-  // 25) don't exist yet, so these two endpoints always return an empty
-  // array today. They still validate the binder exists so a request for a
-  // missing binder fails the same way as the other two parallel requests.
+  // art in parallel. Card creation exists as of story 11
+  // (routes/cards.ts); art creation (story 25) doesn't yet, so `/art`
+  // still always returns an empty array today.
   router.get('/binders/:binderId/cards', (request, response) => {
     const { binderId } = request.params;
     const exists = database
@@ -258,7 +258,7 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
       return;
     }
 
-    response.status(200).json([]);
+    response.status(200).json(listCardsForBinder(database, binderId));
   });
 
   router.get('/binders/:binderId/art', (request, response) => {

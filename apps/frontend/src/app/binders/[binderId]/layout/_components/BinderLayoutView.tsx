@@ -4,6 +4,7 @@ import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import type { TcgDexCatalogCard } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
 import { useBinderRouteContext } from '../../BinderRouteContext';
@@ -17,6 +18,18 @@ import {
   resolveSpread,
 } from '../layoutSpread';
 import { BinderSide } from './BinderSide';
+import { CardSelectionModal } from './CardSelectionModal';
+
+// The empty slot currently targeted by an open card-selection modal (story
+// 11): `null` while no modal is open. Physical page is captured alongside
+// row/column (rather than re-derived from the spread at selection time) so
+// the modal's target stays fixed even if the user could somehow navigate
+// spreads while it's open.
+interface SelectedSlot {
+  physicalPage: number;
+  row: number;
+  column: number;
+}
 
 // Shared styling for the previous/next icon buttons, matching the app's
 // disabled-state convention (reduced opacity + not-allowed cursor).
@@ -39,11 +52,34 @@ const PAGE_INPUT_CLASS_NAME =
 // refreshes and copied URLs retain it; see `layoutSpread.ts` for the
 // physical-page/spread math this component drives.
 export function BinderLayoutView() {
-  const { binder, layoutFocalPage, setLayoutFocalPage } = useBinderRouteContext();
+  const { binder, layoutFocalPage, setLayoutFocalPage, cards, pendingPlacementKeys, assignCard } =
+    useBinderRouteContext();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { start } = useSaveStatusToast();
+
+  // The slot (if any) currently targeted by an open card-selection modal
+  // (story 11).
+  const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+
+  // Assigns the chosen catalog card to the currently selected slot and
+  // closes the modal immediately - the route context's `assignCard` owns
+  // the optimistic-update/request lifecycle from here (see
+  // `BinderRouteContext.tsx`).
+  function handleSelectCard(card: TcgDexCatalogCard) {
+    if (!selectedSlot) return;
+    assignCard({
+      ...card,
+      variation: null,
+      placement: {
+        physicalPage: selectedSlot.physicalPage,
+        row: selectedSlot.row,
+        column: selectedSlot.column,
+      },
+    });
+    setSelectedSlot(null);
+  }
 
   const maxPhysicalPage = getMaxPhysicalPage(binder.pages);
   const rawPage = searchParams.get('page');
@@ -231,6 +267,12 @@ export function BinderLayoutView() {
                 side="left"
                 width={binder.width}
                 height={binder.height}
+                physicalPage={spread.left}
+                cards={cards}
+                pendingPlacementKeys={pendingPlacementKeys}
+                onSlotClick={(row, column) =>
+                  setSelectedSlot({ physicalPage: spread.left as number, row, column })
+                }
                 michiIndicatorsVisible={michiIndicatorsVisible}
               />
             ) : (
@@ -241,6 +283,12 @@ export function BinderLayoutView() {
                 side="right"
                 width={binder.width}
                 height={binder.height}
+                physicalPage={spread.right}
+                cards={cards}
+                pendingPlacementKeys={pendingPlacementKeys}
+                onSlotClick={(row, column) =>
+                  setSelectedSlot({ physicalPage: spread.right as number, row, column })
+                }
                 michiIndicatorsVisible={michiIndicatorsVisible}
               />
             ) : (
@@ -259,6 +307,10 @@ export function BinderLayoutView() {
           <ChevronRight className="size-6" />
         </button>
       </div>
+
+      {selectedSlot && (
+        <CardSelectionModal onClose={() => setSelectedSlot(null)} onSelectCard={handleSelectCard} />
+      )}
     </div>
   );
 }

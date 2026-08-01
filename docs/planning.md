@@ -350,7 +350,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 11. Select a card for a binder slot
 
-**Status:** Not started
+**Status:** Done (2026-08-01 19:16 EDT)
 
 #### Acceptance criteria
 
@@ -424,6 +424,8 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Card source is a string enum shared by the database and OpenAPI schema, initially supporting `tcgdex` and `custom`.
 - Provider card ID and provider set ID are required for `tcgdex` cards and absent for `custom` cards.
 - The backend preserves TCGdex result ordering when normalizing, caching, and returning search results; the frontend does not re-sort them.
+- The search query matches either the card name or the card's set name: TCGdex's `name` and `set.name` filters only combine as AND, so the backend queries both independently and merges the results, listing card-name matches first, then set-name matches not already included, deduplicated by provider card id.
+- A TCGdex catalog card without a usable provider image (e.g. the "Celebrations Classic Collection" subset, which TCGdex has no image assets for at all) is excluded from search results rather than shown without an image, since the app requires an image for every saved card.
 
 ### 12. Add a custom card manually
 

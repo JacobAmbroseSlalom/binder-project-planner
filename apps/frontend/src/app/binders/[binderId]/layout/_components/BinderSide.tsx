@@ -1,5 +1,8 @@
 import { SLOT_HEIGHT_CM, SLOT_WIDTH_CM } from '@binder-project-planner/shared';
 import { Plus } from 'lucide-react';
+import { useMemo } from 'react';
+
+import { resolveCardImageUrl, type Card } from '@/lib/api';
 
 import { getMichiGapColumns } from '../michiIndicators';
 
@@ -14,11 +17,31 @@ export function BinderSide({
   side,
   width,
   height,
+  physicalPage,
+  cards,
+  pendingPlacementKeys,
+  onSlotClick,
   michiIndicatorsVisible = false,
 }: {
   side: 'left' | 'right';
   width: number;
   height: number;
+  // The one-based physical page this side represents (story 11), used to
+  // match each slot's (row, column) grid position against the binder's
+  // cards.
+  physicalPage: number;
+  // Every card in the binder (story 11); filtered internally to this
+  // side's own `physicalPage` rather than requiring the caller to
+  // pre-filter, since `BinderLayoutView` renders up to 2 sides from the
+  // same full list.
+  cards: Card[];
+  // The set of `${physicalPage}-${row}-${column}` keys with an assignment
+  // currently in flight, so an in-flight slot can be disabled against
+  // further clicks until it settles.
+  pendingPlacementKeys: Set<string>;
+  // Opens the card-selection modal for the clicked, currently-empty slot
+  // (story 11).
+  onSlotClick: (row: number, column: number) => void;
   // Story 10's toggle: when true, a strip above the slot grid shows a
   // Michi indicator above every gap between paired columns whose slot
   // openings face each other (see `michiIndicators.ts`). Defaults to off,
@@ -32,6 +55,20 @@ export function BinderSide({
 
   const gapColumns = michiIndicatorsVisible ? getMichiGapColumns(width, side) : [];
   const hasIndicators = gapColumns.length > 0;
+
+  // Looks up a card by its (row, column) on this side's physical page in
+  // O(1) rather than scanning the full card list once per slot; rebuilt
+  // only when the underlying cards or physical page change.
+  const cardsByPosition = useMemo(() => {
+    const map = new Map<string, Card>();
+    for (const card of cards) {
+      const { placement } = card;
+      if (placement.physicalPage !== physicalPage) continue;
+      if (placement.row === null || placement.column === null) continue;
+      map.set(`${placement.row}-${placement.column}`, card);
+    }
+    return map;
+  }, [cards, physicalPage]);
 
   return (
     <div className="binder-side-fit flex h-full min-h-0 w-full min-w-0 flex-1 items-center justify-center">
@@ -88,18 +125,53 @@ export function BinderSide({
             gridTemplateRows: `repeat(${height}, auto)`,
           }}
         >
-          {/* Every slot is unoccupied for now - card assignment (story 11)
-              hasn't been implemented yet, so each slot always shows the
-              centered "+" indicating it can receive a card. */}
-          {Array.from({ length: width * height }, (_, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-center rounded-standard border border-neutral-700 bg-neutral-800"
-              style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
-            >
-              <Plus className="size-6 text-neutral-500" aria-hidden="true" />
-            </div>
-          ))}
+          {/* Each slot (story 11) shows its assigned card's image if one
+              occupies its (row, column) on this physical page, otherwise
+              the centered "+" indicating it can receive a card. Occupied
+              slots aren't clickable yet (story 12 will add
+              view/replace/remove); only empty slots open the
+              card-selection modal, and a slot with an assignment in
+              flight is disabled so it can't be clicked again mid-request. */}
+          {Array.from({ length: width * height }, (_, index) => {
+            const row = Math.floor(index / width) + 1;
+            const column = (index % width) + 1;
+            const card = cardsByPosition.get(`${row}-${column}`);
+            const isPending = pendingPlacementKeys.has(`${physicalPage}-${row}-${column}`);
+
+            if (card) {
+              return (
+                <div
+                  key={index}
+                  className="flex items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800"
+                  style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element -- the
+                      card image comes from an arbitrary backend/provider
+                      origin, so next/image's fixed-domain optimization
+                      doesn't apply here. */}
+                  <img
+                    src={resolveCardImageUrl(card.imageUrl)}
+                    alt={card.name}
+                    className="h-full w-full object-contain"
+                  />
+                </div>
+              );
+            }
+
+            return (
+              <button
+                key={index}
+                type="button"
+                disabled={isPending}
+                onClick={() => onSlotClick(row, column)}
+                aria-label={`Add a card to row ${row}, column ${column}`}
+                className="flex cursor-pointer items-center justify-center rounded-standard border border-neutral-700 bg-neutral-800 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
+              >
+                <Plus className="size-6 text-neutral-500" aria-hidden="true" />
+              </button>
+            );
+          })}
         </div>
       </div>
     </div>

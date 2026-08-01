@@ -37,3 +37,25 @@ export const LOADING_INDICATOR_MIN_DURATION_MS = 300;
 // slot/card aspect ratio used by the layout grid.
 export const SLOT_WIDTH_CM = 6.35;
 export const SLOT_HEIGHT_CM = 9;
+
+// Story 11: "Select a card for a binder slot". TCGdex search only runs once
+// the trimmed query has been stable for this long, so the frontend doesn't
+// send a request per keystroke.
+export const CARD_SEARCH_DEBOUNCE_MS = 300;
+// The trimmed query must reach this length before a TCGdex search runs at
+// all; shorter queries leave the most recent completed results visible.
+export const CARD_SEARCH_MIN_QUERY_LENGTH = 4;
+// How long the backend's in-memory TCGdex search cache retains a
+// successful normalized response for a given trimmed, case-normalized
+// query, keyed by that query.
+export const CARD_SEARCH_CACHE_TTL_MS = 300_000; // 5 minutes
+// The maximum number of distinct queries the backend's LRU search cache
+// retains at once; the least-recently-used entry is evicted first.
+export const CARD_SEARCH_CACHE_MAX_ENTRIES = 50;
+// Upstream TCGdex searches and image downloads are aborted after this long
+// and surfaced to the client as a Problem Details timeout failure.
+export const TCGDEX_REQUEST_TIMEOUT_MS = 30_000;
+// How long the backend waits before retrying one failed TCGdex search or
+// image download (network error, timeout, 429, or 5xx) when the provider
+// doesn't supply a valid `Retry-After` header.
+export const TCGDEX_RETRY_DELAY_MS = 500;

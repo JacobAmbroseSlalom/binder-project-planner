@@ -3,15 +3,33 @@
 import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
-import { getBinder, listBinderArt, listBinderCards, type Binder } from '@/lib/api';
+import {
+  createCard,
+  getBinder,
+  listBinderArt,
+  listBinderCards,
+  type Binder,
+  type Card,
+  type CreateCardRequest,
+} from '@/lib/api';
 import {
   LoadingIndicator,
   toProblemDetailsInfo,
   useDelayedLoading,
+  useSaveStatusToast,
   useToastContext,
 } from '@/shared/feedback';
 
 import { BinderTabs } from './BinderTabs';
+
+// Builds the key used to look up a card by slot, and to track a slot's
+// pending-assignment state, from its placement coordinates (story 11). All
+// 3 coordinates are always populated together for a placed card (see the
+// `PlacementCoordinates` schema), so this never needs to handle a partially
+// null placement.
+function placementKey(placement: { physicalPage: number; row: number; column: number }): string {
+  return `${placement.physicalPage}-${placement.row}-${placement.column}`;
+}
 
 // Fixed (not per-attempt-random) toast id, matching the pattern established
 // by BinderList's `LIST_BINDERS_TOAST_ID`: a later attempt (retry, or a
@@ -27,12 +45,12 @@ type BinderLoadStatus = 'loading' | 'success' | 'error';
 // The shared binder route context value (story 7): the binder details,
 // cards, and multi-slot art loaded in parallel by the route's provider, plus
 // a setter the Edit Details tab uses to sync the context after a successful
-// `PATCH` without forcing a full reload. Cards and art don't have a real
-// schema yet (stories 11 and 25 respectively; see BinderRouteProvider's
-// fetch below), so they're typed as `unknown[]` for now.
+// `PATCH` without forcing a full reload. Art doesn't have a real schema yet
+// (story 25; see BinderRouteProvider's fetch below), so it's still typed as
+// `unknown[]` for now.
 interface BinderRouteContextValue {
   binder: Binder;
-  cards: unknown[];
+  cards: Card[];
   art: unknown[];
   // Replaces the context's binder with the backend's authoritative
   // representation, e.g. after the Edit Details tab's `PATCH` succeeds.
@@ -44,6 +62,16 @@ interface BinderRouteContextValue {
   // needing to reload binder data.
   layoutFocalPage: number | null;
   setLayoutFocalPage: (page: number) => void;
+  // Assigns a TCGdex catalog card to a binder slot (story 11): inserts an
+  // optimistic `Card` immediately (so the slot shows the card without
+  // waiting on the request), then replaces it with the backend's
+  // authoritative representation on success, or removes it (restoring the
+  // empty slot) and surfaces the shared failed toast on failure.
+  assignCard: (request: CreateCardRequest) => void;
+  // The set of `placementKey`-formatted slots with an assignment currently
+  // in flight, so the layout tab can disable those slots against further
+  // clicks until the request settles.
+  pendingPlacementKeys: Set<string>;
 }
 
 const BinderRouteContext = createContext<BinderRouteContextValue | null>(null);
@@ -75,11 +103,16 @@ export function BinderRouteProvider({
 }) {
   const router = useRouter();
   const { markFailed, dismiss } = useToastContext();
+  const { start } = useSaveStatusToast();
 
   const [status, setStatus] = useState<BinderLoadStatus>('loading');
   const [binder, setBinder] = useState<Binder | null>(null);
-  const [cards, setCards] = useState<unknown[]>([]);
+  const [cards, setCards] = useState<Card[]>([]);
   const [art, setArt] = useState<unknown[]>([]);
+  // The slots (by `placementKey`) with an assignment currently in flight
+  // (story 11), so the layout tab can disable them until the request
+  // settles.
+  const [pendingPlacementKeys, setPendingPlacementKeys] = useState<Set<string>>(new Set());
   // Bumped by the retry button to re-run the load effect below without
   // needing a separate imperative "reload" function threaded through state.
   const [retryToken, setRetryToken] = useState(0);
@@ -152,13 +185,82 @@ export function BinderRouteProvider({
     setRetryToken((token) => token + 1);
   }, []);
 
+  // Assigns a TCGdex catalog card to a binder slot (story 11). The
+  // placement is guaranteed fully populated by callers (the layout tab only
+  // ever opens the card-selection modal for one concrete slot), so it's
+  // safe to derive a `placementKey` from it directly. Uses a synthetic
+  // `crypto.randomUUID()` id for the optimistic card so it can be found and
+  // replaced/removed again once the request settles, without colliding
+  // with any real backend-issued id.
+  const assignCard = useCallback(
+    (request: CreateCardRequest) => {
+      const { physicalPage, row, column } = request.placement;
+      if (physicalPage === null || row === null || column === null) return;
+      const key = placementKey({ physicalPage, row, column });
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const now = new Date().toISOString();
+      const optimisticCard: Card = {
+        id: optimisticId,
+        binderId,
+        name: request.name,
+        setName: request.setName,
+        localNumber: request.localNumber,
+        source: 'tcgdex',
+        providerCardId: request.providerCardId,
+        providerSetId: request.providerSetId,
+        variation: request.variation ?? null,
+        placement: request.placement,
+        // The provider's own image URL stands in until the backend's
+        // representation (pointing at its own `/cards/{cardId}/image`
+        // endpoint) replaces this optimistic entry.
+        imageUrl: request.imageUrl,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      setCards((previous) => [...previous, optimisticCard]);
+      setPendingPlacementKeys((previous) => new Set(previous).add(key));
+
+      const toast = start(`assign-card-${key}`);
+
+      createCard(binderId, request)
+        .then((created) => {
+          setCards((previous) =>
+            previous.map((card) => (card.id === optimisticId ? created : card)),
+          );
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setCards((previous) => previous.filter((card) => card.id !== optimisticId));
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingPlacementKeys((previous) => {
+            const next = new Set(previous);
+            next.delete(key);
+            return next;
+          });
+        });
+    },
+    [binderId, start],
+  );
+
   // Only meaningful once `status === 'success'`; computed unconditionally
   // (rather than after an early return) so hook call order stays stable
   // across renders.
   const value = useMemo<BinderRouteContextValue | null>(() => {
     if (!binder) return null;
-    return { binder, cards, art, updateBinder, layoutFocalPage, setLayoutFocalPage };
-  }, [binder, cards, art, updateBinder, layoutFocalPage]);
+    return {
+      binder,
+      cards,
+      art,
+      updateBinder,
+      layoutFocalPage,
+      setLayoutFocalPage,
+      assignCard,
+      pendingPlacementKeys,
+    };
+  }, [binder, cards, art, updateBinder, layoutFocalPage, assignCard, pendingPlacementKeys]);
 
   if (status === 'loading') {
     return showLoading ? <LoadingIndicator label="Loading binder…" size="10" /> : null;
