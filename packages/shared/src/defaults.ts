@@ -20,6 +20,12 @@ export const DEFAULT_BINDER_PAGE_COUNT = 20;
 // OpenAPI request/response contract, and the backend database field.
 export const BINDER_NAME_MAX_LENGTH = 100;
 
+// Maximum binder width/height (slot columns/rows per binder side), shared by
+// the frontend Zod schema, the OpenAPI request/response contract, and the
+// backend database check constraint. Unlike width/height, the binder page
+// count has no fixed maximum.
+export const BINDER_DIMENSION_MAX = 8;
+
 // Timing for the shared loading component (story 6: "Add reusable loading
 // feedback"). A pending request only shows the spinner after it has been
 // pending this long, avoiding a flash of loading state for fast requests.

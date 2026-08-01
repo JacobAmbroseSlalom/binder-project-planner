@@ -1,4 +1,5 @@
 import {
+  BINDER_DIMENSION_MAX,
   BINDER_NAME_MAX_LENGTH,
   DEFAULT_BINDER_HEIGHT,
   DEFAULT_BINDER_PAGE_COUNT,
@@ -9,12 +10,15 @@ import { z } from 'zod';
 // A positive-integer field shared by width, height, and pages: coerces the
 // HTML number input's string value to a number, then rejects non-integers
 // and values below 1 (planning.md story 4's "positive integers with a
-// minimum value of 1 and no fixed maximum").
-function positiveIntegerField(label: string) {
-  return z.coerce
+// minimum value of 1"). `max` is only supplied for width/height, which are
+// capped at `BINDER_DIMENSION_MAX`; pages has no fixed maximum.
+function positiveIntegerField(label: string, max?: number) {
+  const schema = z.coerce
     .number({ message: `${label} is required.` })
     .int(`${label} must be a whole number.`)
     .min(1, `${label} must be at least 1.`);
+
+  return max === undefined ? schema : schema.max(max, `${label} must be ${max} or fewer.`);
 }
 
 // Shared Zod schema for the reusable binder-details form (story 4), used by
@@ -32,8 +36,8 @@ export const binderDetailsSchema = z.object({
       BINDER_NAME_MAX_LENGTH,
       `Binder name must be ${BINDER_NAME_MAX_LENGTH} characters or fewer.`,
     ),
-  width: positiveIntegerField('Width'),
-  height: positiveIntegerField('Height'),
+  width: positiveIntegerField('Width', BINDER_DIMENSION_MAX),
+  height: positiveIntegerField('Height', BINDER_DIMENSION_MAX),
   pages: positiveIntegerField('Pages'),
 });
 

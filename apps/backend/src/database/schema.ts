@@ -28,6 +28,12 @@ export const binders = sqliteTable(
     // Belt-and-suspenders DB-level enforcement of the 100-character binder
     // name limit alongside the OpenAPI request schema and Zod form schema.
     check('binder_name_length', sql`length(${table.name}) <= 100`),
+    // Belt-and-suspenders DB-level enforcement of the width/height maximum
+    // (`BINDER_DIMENSION_MAX` in the shared defaults module) alongside the
+    // OpenAPI request schema and Zod form schema. The minimum of 1 is
+    // already guaranteed by the `integer().notNull()` columns above plus
+    // OpenAPI/Zod validation, so only the upper bound needs a DB check.
+    check('binder_dimension_max', sql`${table.width} <= 8 AND ${table.height} <= 8`),
   ],
 );
 

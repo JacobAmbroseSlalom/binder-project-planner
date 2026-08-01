@@ -27,8 +27,8 @@ shape, name, or persistence contract in [planning.md](planning.md).
 | --------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
 | `id`                  | UUID                      | Yes      | Backend-generated binder identifier used in the database, API, routes, and full-data export.               |
 | `name`                | string                    | Yes      | Trimmed, 1 to 100 characters, case-insensitively unique.                                                   |
-| `width`               | positive integer          | Yes      | Number of slot columns per binder side; default `3`.                                                       |
-| `height`              | positive integer          | Yes      | Number of slot rows per binder side; default `3`.                                                          |
+| `width`               | positive integer          | Yes      | Number of slot columns per binder side; `1` to `8`, default `3`.                                           |
+| `height`              | positive integer          | Yes      | Number of slot rows per binder side; `1` to `8`, default `3`.                                              |
 | `pages`               | positive integer          | Yes      | Stored binder-page count; default `20`. Physical pages range from `1` through `2 * pages`.                 |
 | `previewPhysicalPage` | positive integer          | Yes      | One-based physical focal page for the home-page preview; default `2`.                                      |
 | `locked`              | boolean                   | Yes      | Defaults to `false`; blocks restricted details and layout mutations.                                       |
@@ -162,12 +162,12 @@ acquisition state, pending-operation feedback, and editing controls are not rend
 
 ### CreateBinderRequest
 
-| Property | Type             | Required |
-| -------- | ---------------- | -------- |
-| `name`   | string           | Yes      |
-| `width`  | positive integer | Yes      |
-| `height` | positive integer | Yes      |
-| `pages`  | positive integer | Yes      |
+| Property | Type                         | Required |
+| -------- | ---------------------------- | -------- |
+| `name`   | string                       | Yes      |
+| `width`  | positive integer, `1` to `8` | Yes      |
+| `height` | positive integer, `1` to `8` | Yes      |
+| `pages`  | positive integer             | Yes      |
 
 `POST /binders` returns `201 Created`, a `Location` header, and the complete `Binder`.
 

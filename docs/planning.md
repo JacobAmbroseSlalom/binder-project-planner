@@ -124,7 +124,8 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Width defaults to 3.
 - Height defaults to 3.
 - Pages defaults to 20.
-- Width, height, and pages accept positive integers with a minimum value of 1 and no fixed maximum.
+- Width, height, and pages accept positive integers with a minimum value of 1.
+- Width and height have a maximum value of 8; pages has no fixed maximum.
 - Cancel and Create buttons appear at the bottom of the page.
 - Cancel returns to the home page without creating a binder.
 - Create is disabled while binder creation is in progress and is re-enabled if creation fails.
@@ -138,8 +139,9 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The form uses React Hook Form's submission state to prevent repeated create requests while one is in progress.
 - The form uses Zod schemas for client-side runtime validation and TypeScript type inference.
 - The Zod schema trims the binder name and requires the result to contain between 1 and 100 characters.
-- The Zod schema rejects non-integer width, height, or page values and values less than 1.
+- The Zod schema rejects non-integer width, height, or page values and values less than 1; width and height are additionally capped at `BINDER_DIMENSION_MAX`.
 - The default width, height, and page count are defined in the canonical application `defaults.ts` rather than duplicated in the form.
+- `BINDER_DIMENSION_MAX` (the width/height maximum) is defined in the canonical application `defaults.ts` and defaults to `8`; it is enforced by the frontend Zod schema, the OpenAPI request/response schemas, and a database check constraint.
 - Binder-name uniqueness is enforced by the backend and database using a case-insensitive normalized value rather than relying only on client validation.
 - The OpenAPI create-binder request schema and database field enforce the 100-character binder-name limit.
 - A duplicate binder name returns HTTP `409 Conflict` using Problem Details and identifies the name field as conflicting.

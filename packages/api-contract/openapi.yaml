@@ -400,10 +400,12 @@ components:
         width:
           type: integer
           minimum: 1
+          maximum: 8
           description: Number of slot columns per binder side.
         height:
           type: integer
           minimum: 1
+          maximum: 8
           description: Number of slot rows per binder side.
         pages:
           type: integer
@@ -426,10 +428,12 @@ components:
         width:
           type: integer
           minimum: 1
+          maximum: 8
           description: Number of slot columns per binder side.
         height:
           type: integer
           minimum: 1
+          maximum: 8
           description: Number of slot rows per binder side.
         pages:
           type: integer
@@ -457,9 +461,11 @@ components:
         width:
           type: integer
           minimum: 1
+          maximum: 8
         height:
           type: integer
           minimum: 1
+          maximum: 8
         pages:
           type: integer
           minimum: 1
@@ -496,9 +502,11 @@ components:
         width:
           type: integer
           minimum: 1
+          maximum: 8
         height:
           type: integer
           minimum: 1
+          maximum: 8
         pages:
           type: integer
           minimum: 1
