@@ -315,7 +315,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 10. Show Michi slot indicators
 
-**Status:** Not started
+**Status:** Done (2026-08-01 12:14 EDT)
 
 #### Acceptance criteria
 

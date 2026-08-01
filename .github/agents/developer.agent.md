@@ -16,7 +16,9 @@ is to implement and refactor application code against the specs already recorded
   — search there before adding any default, per
   `.github/instructions/coding-conventions.instructions.md`.
 - DO NOT write or maintain test files — hand off to the Tester role for new/updated
-  tests, though you may run existing tests to verify your changes.
+  tests.
+- DO NOT run the test suite (e.g. `pnpm test`, `jest`, `playwright`) — that verification
+  belongs to the Tester role. Validate your changes with typecheck/lint/build instead.
 - ONLY implement within the established stack (pnpm workspace; Next.js/React/TypeScript
   frontend; Express/TypeScript backend; SQLite/Drizzle; REST/OpenAPI-first API) — see
   `.github/copilot-instructions.md` for the full list before introducing any dependency.
@@ -31,11 +33,13 @@ is to implement and refactor application code against the specs already recorded
    `defaults.ts`. Keep runtime-calculated values near the code that calculates them.
 4. Make small, incremental changes scoped to the current story.
 5. Run `pnpm typecheck`/`pnpm lint`/`pnpm build` (or package-scoped equivalents) to
-   validate changes, and run `pnpm format` after edits.
+   validate changes, and run `pnpm format` after edits. Do not run the test suite —
+   leave that verification to the Tester role.
 6. If a new dependency or architectural decision is introduced, record it in
    `docs/planning.md` and keep `.github/copilot-instructions.md` in sync.
 
 ## Output Format
 
 Working code changes plus a brief summary of what was implemented, any commands run to
-verify it, and any follow-ups needed (e.g. tests to add, specs to clarify).
+verify it, and any follow-ups needed (e.g. tests for the Tester role to add/run, specs to
+clarify).

@@ -1,6 +1,6 @@
 'use client';
 
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -53,17 +53,31 @@ export function BinderLayoutView() {
     layoutFocalPage,
   );
 
+  // Story 10's Michi-indicator toggle: `michi=true` enables the
+  // indicators; any other value (or its absence) is disabled. An invalid
+  // non-`true` value still needs the same URL cleanup the malformed `page`
+  // value gets below, so both corrections are folded into the one effect
+  // that follows rather than risking two separate `router.replace` calls
+  // stomping on each other's stale `searchParams` snapshot.
+  const rawMichi = searchParams.get('michi');
+  const michiIndicatorsVisible = rawMichi === 'true';
+  const michiNeedsCleanup = rawMichi !== null && !michiIndicatorsVisible;
+
   // Keeps the URL in sync: replaces (never pushes, so navigating spreads
   // never grows browser history) the `page` query parameter whenever the
   // requested value needed correcting, or to restore a focal page retained
-  // from a previous visit to this tab.
+  // from a previous visit to this tab; and/or drops an invalid `michi`
+  // value. `page` is only ever (re)written when a page replacement is
+  // actually needed - an unrelated `michi` cleanup must not add `?page=1`
+  // when the parameter was legitimately absent.
   useEffect(() => {
-    if (replacementPage === undefined) return;
+    if (replacementPage === undefined && !michiNeedsCleanup) return;
 
     const params = new URLSearchParams(searchParams);
-    params.set('page', String(replacementPage));
+    if (replacementPage !== undefined) params.set('page', String(replacementPage));
+    if (michiNeedsCleanup) params.delete('michi');
     router.replace(`${pathname}?${params.toString()}`);
-  }, [replacementPage, pathname, router, searchParams]);
+  }, [replacementPage, michiNeedsCleanup, pathname, router, searchParams]);
 
   // Records the displayed physical page as the route's retained layout
   // focal page, but only once it's explicit in the URL - the very first,
@@ -116,30 +130,69 @@ export function BinderLayoutView() {
     navigateToPhysicalPage(parsed);
   }
 
+  // Flips the Michi-indicator toggle (story 10): history replacement (never
+  // a push) and copying the current `searchParams` as the base preserves
+  // every other query parameter, including `page`.
+  function toggleMichiIndicators() {
+    const params = new URLSearchParams(searchParams);
+    if (michiIndicatorsVisible) {
+      params.delete('michi');
+    } else {
+      params.set('michi', 'true');
+    }
+    router.replace(`${pathname}?${params.toString()}`);
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-10 p-8">
-      {/* The direct page-number input (story 9), on its own row above the
-          binder visualization. */}
-      <div className="flex flex-col items-center gap-1">
-        <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
-          Go to page
+      {/* The Michi-indicator toggle (story 10) and the direct page-number
+          input (story 9), side by side on their own row above the binder
+          visualization. */}
+      <div className="flex items-center justify-center gap-10">
+        {/* Story 10's toggle: custom-styled checkbox matching the app's
+            checkbox convention (styling.instructions.md's "Forms & inputs"
+            section). Defaults to off since `michiIndicatorsVisible` is only
+            true when the URL explicitly has `michi=true`. The label is
+            forced onto 2 short lines (rather than one long line) so this
+            control stays narrow next to the page input. */}
+        <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
+          <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+            <input
+              id="michi-indicators-toggle"
+              type="checkbox"
+              checked={michiIndicatorsVisible}
+              onChange={toggleMichiIndicators}
+              className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+            />
+            <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+          </span>
+          <span className="flex flex-col text-caption leading-tight text-neutral-500">
+            <span>Show Michi</span>
+            <span>slot indicators</span>
+          </span>
         </label>
-        <input
-          id="layout-page-input"
-          type="number"
-          min={1}
-          max={maxPhysicalPage}
-          step={1}
-          value={pageInputValue}
-          onChange={(event) => setPageInputValue(event.target.value)}
-          onBlur={commitPageInput}
-          onKeyDown={(event) => {
-            // Commits on Enter by blurring, which routes through the same
-            // `commitPageInput` handler instead of duplicating its logic.
-            if (event.key === 'Enter') event.currentTarget.blur();
-          }}
-          className={PAGE_INPUT_CLASS_NAME}
-        />
+
+        <div className="flex flex-col items-center gap-1">
+          <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
+            Go to page
+          </label>
+          <input
+            id="layout-page-input"
+            type="number"
+            min={1}
+            max={maxPhysicalPage}
+            step={1}
+            value={pageInputValue}
+            onChange={(event) => setPageInputValue(event.target.value)}
+            onBlur={commitPageInput}
+            onKeyDown={(event) => {
+              // Commits on Enter by blurring, which routes through the same
+              // `commitPageInput` handler instead of duplicating its logic.
+              if (event.key === 'Enter') event.currentTarget.blur();
+            }}
+            className={PAGE_INPUT_CLASS_NAME}
+          />
+        </div>
       </div>
 
       <div className="flex h-full min-h-0 flex-1 items-center justify-center gap-4">
@@ -174,12 +227,22 @@ export function BinderLayoutView() {
               lone binder side stretching to fill the whole row. */}
           <div className="flex h-full min-h-0 w-full flex-1 items-stretch justify-center gap-1">
             {spread.left !== null ? (
-              <BinderSide side="left" width={binder.width} height={binder.height} />
+              <BinderSide
+                side="left"
+                width={binder.width}
+                height={binder.height}
+                michiIndicatorsVisible={michiIndicatorsVisible}
+              />
             ) : (
               <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
             )}
             {spread.right !== null ? (
-              <BinderSide side="right" width={binder.width} height={binder.height} />
+              <BinderSide
+                side="right"
+                width={binder.width}
+                height={binder.height}
+                michiIndicatorsVisible={michiIndicatorsVisible}
+              />
             ) : (
               <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
             )}
