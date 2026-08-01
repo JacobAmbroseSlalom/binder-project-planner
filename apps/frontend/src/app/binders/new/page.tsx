@@ -15,9 +15,8 @@ import {
 } from '@/shared/forms';
 
 // The "Create a new binder" page (story 4). Renders the reusable
-// binder-details form with Cancel/Create actions; after story 7 lands,
-// this same form component will also back the view/edit page's "Edit
-// Details" tab.
+// binder-details form with Cancel/Create actions; the same form component
+// also backs the view/edit page's "Edit Details" tab (story 7).
 
 // Fixed (not per-submit-random) toast id so that resubmitting after a
 // failed attempt replaces that failed toast rather than stacking a new
@@ -47,11 +46,11 @@ export default function NewBinderPage() {
     const toast = start(CREATE_BINDER_TOAST_ID);
 
     try {
-      await createBinder(values);
+      const created = await createBinder(values);
       toast.markSaved();
-      // The binder view/edit page doesn't exist yet (story 7); per story 4's
-      // acceptance criteria, creation returns the user to the home page.
-      router.push('/');
+      // Per story 7's acceptance criteria, a newly created binder opens its
+      // view/edit page with the "Edit Layout" tab selected.
+      router.push(`/binders/${created.id}/layout`);
     } catch (error) {
       // Stay on the completed form so the user can retry (story 4).
       toast.markFailed(error);

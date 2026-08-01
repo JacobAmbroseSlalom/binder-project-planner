@@ -274,3 +274,233 @@ describe('POST /binders', () => {
     expect(response.status).toBe(400);
   });
 });
+
+// Shared by every story 7 route test below: a binderId that is well-formed
+// but doesn't correspond to any row.
+const MISSING_BINDER_ID = '99999999-9999-9999-9999-999999999999';
+const MALFORMED_BINDER_ID = 'not-a-uuid';
+
+describe('GET /binders/:binderId', () => {
+  let connection: DatabaseConnection;
+  let app: Express;
+  const validBody = { name: 'My Binder', width: 3, height: 3, pages: 20 };
+
+  beforeEach(() => {
+    connection = createDatabase(':memory:');
+    app = createApp({ database: connection.database, frontendOrigin: 'http://localhost:3000' });
+  });
+
+  afterEach(() => {
+    connection.close();
+  });
+
+  it("returns 200 with the binder's details", async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app).get(`/binders/${created.body.id}`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(created.body);
+  });
+
+  it('returns 404 Not Found for a well-formed but nonexistent binder id', async () => {
+    const response = await request(app).get(`/binders/${MISSING_BINDER_ID}`);
+
+    expect(response.status).toBe(404);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+  });
+
+  it('returns 400 Bad Request for a malformed (non-UUID) binder id', async () => {
+    const response = await request(app).get(`/binders/${MALFORMED_BINDER_ID}`);
+
+    expect(response.status).toBe(400);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+  });
+});
+
+describe('PATCH /binders/:binderId', () => {
+  let connection: DatabaseConnection;
+  let app: Express;
+  const validBody = { name: 'My Binder', width: 3, height: 3, pages: 20 };
+
+  beforeEach(() => {
+    connection = createDatabase(':memory:');
+    app = createApp({ database: connection.database, frontendOrigin: 'http://localhost:3000' });
+  });
+
+  afterEach(() => {
+    connection.close();
+  });
+
+  it('applies a partial update and returns 200 with the complete persisted binder', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app).patch(`/binders/${created.body.id}`).send({ width: 4 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({
+      id: created.body.id,
+      name: 'My Binder',
+      width: 4,
+      height: 3,
+      pages: 20,
+    });
+    // updatedAt must advance so clients can rely on it for cache/sort
+    // freshness; createdAt is immutable.
+    expect(response.body.createdAt).toBe(created.body.createdAt);
+    expect(response.body).not.toHaveProperty('normalizedName');
+  });
+
+  it('applies multiple dirty fields in one request', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app)
+      .patch(`/binders/${created.body.id}`)
+      .send({ name: 'Renamed Binder', pages: 30 });
+
+    expect(response.status).toBe(200);
+    expect(response.body).toMatchObject({ name: 'Renamed Binder', pages: 30, width: 3, height: 3 });
+  });
+
+  it('trims a supplied name and re-validates the trimmed length', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app)
+      .patch(`/binders/${created.body.id}`)
+      .send({ name: '  Renamed  ' });
+
+    expect(response.status).toBe(200);
+    expect(response.body.name).toBe('Renamed');
+  });
+
+  it('rejects a name that is empty after trimming with 400 Bad Request', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app).patch(`/binders/${created.body.id}`).send({ name: '   ' });
+
+    expect(response.status).toBe(400);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+  });
+
+  it('returns 409 Conflict when the new name collides with another binder', async () => {
+    await request(app).post('/binders').send(validBody);
+    const other = await request(app)
+      .post('/binders')
+      .send({ ...validBody, name: 'Other Binder' });
+
+    const response = await request(app)
+      .patch(`/binders/${other.body.id}`)
+      .send({ name: 'MY BINDER' });
+
+    expect(response.status).toBe(409);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+    expect(response.body.conflictingField).toBe('name');
+  });
+
+  it('returns 404 Not Found for a well-formed but nonexistent binder id', async () => {
+    const response = await request(app).patch(`/binders/${MISSING_BINDER_ID}`).send({ width: 4 });
+
+    expect(response.status).toBe(404);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+  });
+
+  it('returns 400 Bad Request for a malformed (non-UUID) binder id', async () => {
+    const response = await request(app).patch(`/binders/${MALFORMED_BINDER_ID}`).send({ width: 4 });
+
+    expect(response.status).toBe(400);
+  });
+
+  it('returns 400 Bad Request for an empty update body', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    // UpdateBinderRequest's `minProperties: 1` is enforced by the OpenAPI
+    // validation middleware before this route's own logic runs.
+    const response = await request(app).patch(`/binders/${created.body.id}`).send({});
+
+    expect(response.status).toBe(400);
+  });
+
+  it('rejects an undocumented additional property with 400 Bad Request', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app)
+      .patch(`/binders/${created.body.id}`)
+      .send({ extra: 'not allowed' });
+
+    expect(response.status).toBe(400);
+  });
+});
+
+describe('GET /binders/:binderId/cards', () => {
+  let connection: DatabaseConnection;
+  let app: Express;
+  const validBody = { name: 'My Binder', width: 3, height: 3, pages: 20 };
+
+  beforeEach(() => {
+    connection = createDatabase(':memory:');
+    app = createApp({ database: connection.database, frontendOrigin: 'http://localhost:3000' });
+  });
+
+  afterEach(() => {
+    connection.close();
+  });
+
+  it('returns 200 with an empty array (card creation does not exist yet)', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app).get(`/binders/${created.body.id}/cards`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it('returns 404 Not Found for a well-formed but nonexistent binder id', async () => {
+    const response = await request(app).get(`/binders/${MISSING_BINDER_ID}/cards`);
+
+    expect(response.status).toBe(404);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+  });
+
+  it('returns 400 Bad Request for a malformed (non-UUID) binder id', async () => {
+    const response = await request(app).get(`/binders/${MALFORMED_BINDER_ID}/cards`);
+
+    expect(response.status).toBe(400);
+  });
+});
+
+describe('GET /binders/:binderId/art', () => {
+  let connection: DatabaseConnection;
+  let app: Express;
+  const validBody = { name: 'My Binder', width: 3, height: 3, pages: 20 };
+
+  beforeEach(() => {
+    connection = createDatabase(':memory:');
+    app = createApp({ database: connection.database, frontendOrigin: 'http://localhost:3000' });
+  });
+
+  afterEach(() => {
+    connection.close();
+  });
+
+  it('returns 200 with an empty array (art creation does not exist yet)', async () => {
+    const created = await request(app).post('/binders').send(validBody);
+
+    const response = await request(app).get(`/binders/${created.body.id}/art`);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual([]);
+  });
+
+  it('returns 404 Not Found for a well-formed but nonexistent binder id', async () => {
+    const response = await request(app).get(`/binders/${MISSING_BINDER_ID}/art`);
+
+    expect(response.status).toBe(404);
+    expect(response.headers['content-type']).toContain('application/problem+json');
+  });
+
+  it('returns 400 Bad Request for a malformed (non-UUID) binder id', async () => {
+    const response = await request(app).get(`/binders/${MALFORMED_BINDER_ID}/art`);
+
+    expect(response.status).toBe(400);
+  });
+});

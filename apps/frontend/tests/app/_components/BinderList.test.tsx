@@ -108,6 +108,20 @@ describe('BinderList', () => {
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
+  it('links each binder to its view/edit page with the Edit Layout tab selected (story 7)', async () => {
+    mockedListBinders.mockResolvedValue([
+      makeBinderSummary({ id: '11111111-1111-1111-1111-111111111111', name: 'My Binder' }),
+    ]);
+
+    renderBinderList();
+
+    await waitFor(() => expect(screen.getByText('My Binder')).toBeInTheDocument());
+    expect(screen.getByRole('link', { name: /My Binder/ })).toHaveAttribute(
+      'href',
+      '/binders/11111111-1111-1111-1111-111111111111/layout',
+    );
+  });
+
   it('removes the loading indicator and shows the failed toast when the list fails to load', async () => {
     mockedListBinders.mockRejectedValue({ detail: 'The binder list could not be loaded.' });
 

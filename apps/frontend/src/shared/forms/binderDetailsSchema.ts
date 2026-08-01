@@ -18,7 +18,7 @@ function positiveIntegerField(label: string) {
 }
 
 // Shared Zod schema for the reusable binder-details form (story 4), used by
-// both the new-binder page and, later, the Edit Details tab. Runtime
+// both the new-binder page and the Edit Details tab (story 7). Runtime
 // validation and the inferred TypeScript type both come from this one
 // definition so client-side rules never drift from each other.
 export const binderDetailsSchema = z.object({

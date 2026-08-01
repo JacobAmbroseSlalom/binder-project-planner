@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
 import { listBinders, type BinderSummary } from '@/lib/api';
@@ -87,16 +88,23 @@ export function BinderList() {
         <ul className="flex flex-wrap justify-center gap-12">
           {binders.map((binder) => (
             <li key={binder.id} className="flex flex-col items-center gap-2">
-              {/* Rectangle placeholder standing in for the binder's actual
-                  preview (story 20) until that story renders the real
-                  miniature page layout. Landscape orientation. */}
-              <div className="flex h-40 w-[16.8rem] flex-col items-center justify-center gap-1 rounded-standard bg-surface p-4 text-center shadow-panel">
-                <p className="text-caption text-neutral-500">
-                  {binder.width} &times; {binder.height}
-                </p>
-                <p className="text-caption text-neutral-500">{binder.pages} pages</p>
-              </div>
-              <p className="font-bold">{binder.name}</p>
+              {/* Story 7: opens the binder's view/edit page with the "Edit
+                  Layout" tab selected. */}
+              <Link
+                href={`/binders/${binder.id}/layout`}
+                className="flex flex-col items-center gap-2 hover:brightness-110"
+              >
+                {/* Rectangle placeholder standing in for the binder's actual
+                    preview (story 20) until that story renders the real
+                    miniature page layout. Landscape orientation. */}
+                <div className="flex h-40 w-[16.8rem] flex-col items-center justify-center gap-1 rounded-standard bg-surface p-4 text-center shadow-panel">
+                  <p className="text-caption text-neutral-500">
+                    {binder.width} &times; {binder.height}
+                  </p>
+                  <p className="text-caption text-neutral-500">{binder.pages} pages</p>
+                </div>
+                <p className="font-bold">{binder.name}</p>
+              </Link>
             </li>
           ))}
         </ul>

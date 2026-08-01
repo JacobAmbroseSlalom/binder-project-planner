@@ -57,7 +57,7 @@ describe('NewBinderPage', () => {
     expect(mockedCreateBinder).not.toHaveBeenCalled();
   });
 
-  it('creates the binder with the trimmed, parsed form values and returns home on success', async () => {
+  it('creates the binder with the trimmed, parsed form values and opens its view/edit page on the Edit Layout tab', async () => {
     mockedCreateBinder.mockResolvedValue({
       id: '11111111-1111-1111-1111-111111111111',
       name: 'My Binder',
@@ -82,7 +82,11 @@ describe('NewBinderPage', () => {
         pages: 20,
       }),
     );
-    await waitFor(() => expect(push).toHaveBeenCalledWith('/'));
+    // Story 7: a newly created binder opens its view/edit page with the
+    // Edit Layout tab selected, rather than returning to the home page.
+    await waitFor(() =>
+      expect(push).toHaveBeenCalledWith('/binders/11111111-1111-1111-1111-111111111111/layout'),
+    );
     expect(screen.getByText('Saved')).toBeInTheDocument();
   });
 
@@ -106,7 +110,7 @@ describe('NewBinderPage', () => {
     // form (no navigation) so they can retry, per story 4's acceptance
     // criteria.
     await waitFor(() => expect(screen.getByRole('button', { name: 'Create' })).toBeEnabled());
-    expect(push).not.toHaveBeenCalledWith('/');
+    expect(push).not.toHaveBeenCalled();
     expect(screen.getByText('A binder named "My Binder" already exists.')).toBeInTheDocument();
   });
 });

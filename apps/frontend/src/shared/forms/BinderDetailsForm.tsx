@@ -56,9 +56,9 @@ function Field({
 }
 
 // The reusable binder-details form fields (story 4: "Create a new binder").
-// Used by the new-binder page today and, per planning.md story 7, will also
-// back the view/edit binder page's "Edit Details" tab so both places share
-// one set of fields, validation, and defaults.
+// Used by the new-binder page and the view/edit binder page's "Edit
+// Details" tab (story 7) so both places share one set of fields,
+// validation, and defaults.
 export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
   const {
     register,
@@ -85,7 +85,7 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
             step={1}
             disabled={disabled}
             className={errors.width ? errorInputClassName : inputClassName}
-            {...register('width')}
+            {...register('width', { valueAsNumber: true })}
           />
         </Field>
         <Field label="Height (slots)" htmlFor="binder-height" error={errors.height?.message}>
@@ -96,7 +96,7 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
             step={1}
             disabled={disabled}
             className={errors.height ? errorInputClassName : inputClassName}
-            {...register('height')}
+            {...register('height', { valueAsNumber: true })}
           />
         </Field>
         <Field label="Pages (front and back)" htmlFor="binder-pages" error={errors.pages?.message}>
@@ -107,7 +107,7 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
             step={1}
             disabled={disabled}
             className={errors.pages ? errorInputClassName : inputClassName}
-            {...register('pages')}
+            {...register('pages', { valueAsNumber: true })}
           />
         </Field>
       </div>

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { BINDER_NAME_MAX_LENGTH } from '@binder-project-planner/shared';
-import { asc, desc } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
@@ -15,6 +15,53 @@ interface CreateBinderRequestBody {
   width: number;
   height: number;
   pages: number;
+}
+
+// The validated, OpenAPI-typed shape of an update-binder request body
+// (story 7). Every field is optional since it's a partial update; the
+// OpenAPI schema already guarantees at least one field is present and that
+// no undocumented field slipped through.
+interface UpdateBinderRequestBody {
+  name?: string;
+  width?: number;
+  height?: number;
+  pages?: number;
+}
+
+// The raw database row shape (includes the internal `normalizedName`
+// uniqueness column, which is never exposed to clients).
+interface BinderRow {
+  id: string;
+  name: string;
+  normalizedName: string;
+  width: number;
+  height: number;
+  pages: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// Strips internal-only columns (`normalizedName`) before a binder row is
+// serialized as an OpenAPI `Binder`, shared by every route that returns one.
+function serializeBinder(row: BinderRow) {
+  return {
+    id: row.id,
+    name: row.name,
+    width: row.width,
+    height: row.height,
+    pages: row.pages,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function notFoundProblem(binderId: string) {
+  return {
+    type: 'about:blank',
+    title: 'Not Found',
+    status: 404,
+    detail: `No binder exists with id "${binderId}".`,
+  };
 }
 
 // better-sqlite3 throws a `SqliteError` with a `.code` of
@@ -112,15 +159,122 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
 
     // Only the documented Binder fields are returned; `normalizedName` is an
     // internal uniqueness-enforcement detail and is never exposed to clients.
-    response.status(201).location(`/binders/${binder.id}`).json({
-      id: binder.id,
-      name: binder.name,
-      width: binder.width,
-      height: binder.height,
-      pages: binder.pages,
-      createdAt: binder.createdAt,
-      updatedAt: binder.updatedAt,
-    });
+    response.status(201).location(`/binders/${binder.id}`).json(serializeBinder(binder));
+  });
+
+  // Story 7: "Create the view/edit binder page". Backs the shared binder
+  // context and Edit Details tab.
+  router.get('/binders/:binderId', (request, response) => {
+    const { binderId } = request.params;
+    const row = database.select().from(binders).where(eq(binders.id, binderId)).get();
+
+    if (!row) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    response.status(200).json(serializeBinder(row));
+  });
+
+  router.patch('/binders/:binderId', (request, response) => {
+    const { binderId } = request.params;
+    const body = request.body as UpdateBinderRequestBody;
+
+    const existing = database.select().from(binders).where(eq(binders.id, binderId)).get();
+    if (!existing) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    // Only `name` needs post-trim re-validation and re-normalization here;
+    // width/height/pages are already fully validated by the OpenAPI schema.
+    const updates: Partial<BinderRow> = {};
+    if (body.name !== undefined) {
+      const trimmedName = body.name.trim();
+      if (trimmedName.length === 0 || trimmedName.length > BINDER_NAME_MAX_LENGTH) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json({
+            type: 'about:blank',
+            title: 'Bad Request',
+            status: 400,
+            detail: `Binder name must be between 1 and ${BINDER_NAME_MAX_LENGTH} characters after trimming.`,
+          });
+        return;
+      }
+      updates.name = trimmedName;
+      updates.normalizedName = trimmedName.toLowerCase();
+    }
+    if (body.width !== undefined) updates.width = body.width;
+    if (body.height !== undefined) updates.height = body.height;
+    if (body.pages !== undefined) updates.pages = body.pages;
+    updates.updatedAt = new Date().toISOString();
+
+    let updated: BinderRow;
+    try {
+      updated = database
+        .update(binders)
+        .set(updates)
+        .where(eq(binders.id, binderId))
+        .returning()
+        .get();
+    } catch (error) {
+      if (isUniqueConstraintError(error)) {
+        response
+          .status(409)
+          .type('application/problem+json')
+          .json({
+            type: 'about:blank',
+            title: 'Conflict',
+            status: 409,
+            detail: `A binder named "${body.name}" already exists.`,
+            conflictingField: 'name',
+          });
+        return;
+      }
+
+      throw error;
+    }
+
+    response.status(200).json(serializeBinder(updated));
+  });
+
+  // Story 7 requires the shared binder context to load details, cards, and
+  // art in parallel, but card creation (story 11) and art creation (story
+  // 25) don't exist yet, so these two endpoints always return an empty
+  // array today. They still validate the binder exists so a request for a
+  // missing binder fails the same way as the other two parallel requests.
+  router.get('/binders/:binderId/cards', (request, response) => {
+    const { binderId } = request.params;
+    const exists = database
+      .select({ id: binders.id })
+      .from(binders)
+      .where(eq(binders.id, binderId))
+      .get();
+
+    if (!exists) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    response.status(200).json([]);
+  });
+
+  router.get('/binders/:binderId/art', (request, response) => {
+    const { binderId } = request.params;
+    const exists = database
+      .select({ id: binders.id })
+      .from(binders)
+      .where(eq(binders.id, binderId))
+      .get();
+
+    if (!exists) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    response.status(200).json([]);
   });
 
   return router;

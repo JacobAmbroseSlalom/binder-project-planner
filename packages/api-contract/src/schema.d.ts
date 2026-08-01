@@ -42,6 +42,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/binders/{binderId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get one binder's details
+         * @description Returns binder details for the shared binder context (story 7) and the Edit Details tab.
+         */
+        get: operations["getBinder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a binder's details
+         * @description Applies a partial update to the documented dirty fields (story 7 covers name/width/height/pages; later stories add notes, preview page, dimension, and lock-state fields).
+         */
+        patch: operations["updateBinder"];
+        trace?: never;
+    };
+    "/binders/{binderId}/cards": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a binder's cards
+         * @description Returns every binder-owned card, placed and unplaced, without image bytes. Card creation does not exist yet (story 11), so this always returns an empty array today.
+         */
+        get: operations["listBinderCards"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/binders/{binderId}/art": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * List a binder's multi-slot art
+         * @description Returns every binder-owned multi-slot-art record, placed and unplaced, without image bytes. Art creation does not exist yet (story 25), so this always returns an empty array today.
+         */
+        get: operations["listBinderArt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -71,6 +141,17 @@ export interface components {
             /** @description Stored binder-page count. Physical pages range from 1 through 2 * pages. */
             pages: number;
         };
+        /** @description A partial update; only supplied fields are changed. Story 7 covers name/width/height/pages; later stories (20-24) add notes, preview page, dimension, and lock-state fields to this same request schema. */
+        UpdateBinderRequest: {
+            /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
+            name?: string;
+            /** @description Number of slot columns per binder side. */
+            width?: number;
+            /** @description Number of slot rows per binder side. */
+            height?: number;
+            /** @description Stored binder-page count. Physical pages range from 1 through 2 * pages. */
+            pages?: number;
+        };
         Binder: {
             /** Format: uuid */
             id: string;
@@ -98,7 +179,9 @@ export interface components {
         };
     };
     responses: never;
-    parameters: never;
+    parameters: {
+        binderId: string;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -189,6 +272,179 @@ export interface operations {
             };
             /** @description A binder with the same case-insensitively normalized name already exists. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    getBinder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The binder details. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Binder"];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateBinder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBinderRequest"];
+            };
+        };
+        responses: {
+            /** @description The complete persisted binder after applying the update. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Binder"];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description A binder with the same case-insensitively normalized name already exists. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listBinderCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The binder's cards. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown[];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listBinderArt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The binder's multi-slot art. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown[];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -200,7 +200,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 7. Create the view/edit binder page
 
-**Status:** Not started
+**Status:** Done (2026-08-01 01:35 EDT)
 
 #### Acceptance criteria
 

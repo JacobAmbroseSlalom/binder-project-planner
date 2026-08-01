@@ -74,7 +74,144 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    get:
+      operationId: getBinder
+      summary: Get one binder's details
+      description: >-
+        Returns binder details for the shared binder context (story 7) and
+        the Edit Details tab.
+      responses:
+        '200':
+          description: The binder details.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Binder'
+        '400':
+          description: The binderId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    patch:
+      operationId: updateBinder
+      summary: Update a binder's details
+      description: >-
+        Applies a partial update to the documented dirty fields (story 7
+        covers name/width/height/pages; later stories add notes, preview
+        page, dimension, and lock-state fields).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBinderRequest'
+      responses:
+        '200':
+          description: The complete persisted binder after applying the update.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Binder'
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, or the
+            request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: A binder with the same case-insensitively normalized name already exists.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}/cards:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    get:
+      operationId: listBinderCards
+      summary: List a binder's cards
+      description: >-
+        Returns every binder-owned card, placed and unplaced, without image
+        bytes. Card creation does not exist yet (story 11), so this always
+        returns an empty array today.
+      responses:
+        '200':
+          description: The binder's cards.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {}
+        '400':
+          description: The binderId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}/art:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    get:
+      operationId: listBinderArt
+      summary: List a binder's multi-slot art
+      description: >-
+        Returns every binder-owned multi-slot-art record, placed and
+        unplaced, without image bytes. Art creation does not exist yet
+        (story 25), so this always returns an empty array today.
+      responses:
+        '200':
+          description: The binder's multi-slot art.
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {}
+        '400':
+          description: The binderId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 components:
+  parameters:
+    binderId:
+      name: binderId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
   schemas:
     HealthResponse:
       type: object
@@ -116,6 +253,32 @@ components:
         - width
         - height
         - pages
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Trimmed on the backend; case-insensitive uniqueness is enforced there.
+        width:
+          type: integer
+          minimum: 1
+          description: Number of slot columns per binder side.
+        height:
+          type: integer
+          minimum: 1
+          description: Number of slot rows per binder side.
+        pages:
+          type: integer
+          minimum: 1
+          description: Stored binder-page count. Physical pages range from 1 through 2 * pages.
+    UpdateBinderRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        A partial update; only supplied fields are changed. Story 7 covers
+        name/width/height/pages; later stories (20-24) add notes, preview
+        page, dimension, and lock-state fields to this same request schema.
+      minProperties: 1
       properties:
         name:
           type: string
