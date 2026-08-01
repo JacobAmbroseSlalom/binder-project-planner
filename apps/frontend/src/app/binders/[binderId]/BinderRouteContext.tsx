@@ -37,6 +37,13 @@ interface BinderRouteContextValue {
   // Replaces the context's binder with the backend's authoritative
   // representation, e.g. after the Edit Details tab's `PATCH` succeeds.
   updateBinder: (binder: Binder) => void;
+  // The most recently displayed one-based physical page on the "Edit
+  // Layout" tab (story 8), or `null` if that tab hasn't been visited yet
+  // this route mount. Retained here (rather than in the layout tab's own
+  // state) so it survives switching to another tab and back without
+  // needing to reload binder data.
+  layoutFocalPage: number | null;
+  setLayoutFocalPage: (page: number) => void;
 }
 
 const BinderRouteContext = createContext<BinderRouteContextValue | null>(null);
@@ -76,6 +83,10 @@ export function BinderRouteProvider({
   // Bumped by the retry button to re-run the load effect below without
   // needing a separate imperative "reload" function threaded through state.
   const [retryToken, setRetryToken] = useState(0);
+  // Story 8's retained layout focal page; `null` means the layout tab
+  // hasn't been visited yet during this route mount, so it should still
+  // default to physical page 1 without adding `?page=1` to the URL.
+  const [layoutFocalPage, setLayoutFocalPage] = useState<number | null>(null);
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -146,8 +157,8 @@ export function BinderRouteProvider({
   // across renders.
   const value = useMemo<BinderRouteContextValue | null>(() => {
     if (!binder) return null;
-    return { binder, cards, art, updateBinder };
-  }, [binder, cards, art, updateBinder]);
+    return { binder, cards, art, updateBinder, layoutFocalPage, setLayoutFocalPage };
+  }, [binder, cards, art, updateBinder, layoutFocalPage]);
 
   if (status === 'loading') {
     return showLoading ? <LoadingIndicator label="Loading binder…" size="10" /> : null;
@@ -176,7 +187,13 @@ export function BinderRouteProvider({
     <BinderRouteContext.Provider value={value}>
       <h1 className="pt-4 text-center">{value.binder.name}</h1>
       <BinderTabs binderId={binderId} />
-      {children}
+      {/* `flex-1 min-h-0`: gives the active tab a definite, fill-remaining-
+          space container to grow into. Tabs that don't need it (Edit
+          Details, View Financials) just render their normal top-aligned
+          content inside it, identical to before; the Edit Layout tab (story
+          8) uses it to size its binder-side grids to the viewport without
+          scrolling. */}
+      <div className="flex min-h-0 flex-1 flex-col">{children}</div>
     </BinderRouteContext.Provider>
   );
 }

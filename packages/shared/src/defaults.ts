@@ -29,3 +29,11 @@ export const LOADING_INDICATOR_DELAY_MS = 200;
 // before loaded content can replace it, avoiding a flicker when a request
 // settles just after the indicator appears.
 export const LOADING_INDICATOR_MIN_DURATION_MS = 300;
+
+// The physical dimensions of one binder card slot in centimeters (story 8:
+// "Visualize a basic binder layout"). Story 24 will make per-binder
+// width/height-per-slot values configurable (`widthPerSlot`/`heightPerSlot`
+// in data-types.md); until then this fixed 6.35:9 ratio is the canonical
+// slot/card aspect ratio used by the layout grid.
+export const SLOT_WIDTH_CM = 6.35;
+export const SLOT_HEIGHT_CM = 9;

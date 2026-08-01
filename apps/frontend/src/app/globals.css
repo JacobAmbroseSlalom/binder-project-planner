@@ -76,7 +76,13 @@
   }
 
   body {
-    min-height: 100%;
+    /* `height` (not `min-height`): gives flex children a definite height to
+       grow into via `flex-1`/`h-full` (needed by the binder layout grid,
+       story 8) while short pages look identical to before - a block box
+       with `overflow: visible` never clips or hides taller content, so
+       document-level scrolling for tall pages (forms, binder lists, etc.)
+       is unaffected. */
+    height: 100%;
     display: flex;
     flex-direction: column;
     color: var(--color-neutral-100);
@@ -111,5 +117,31 @@
   small,
   .caption {
     font-size: var(--text-caption);
+  }
+}
+
+@layer components {
+  /* One binder side's fitting area (story 8: "Visualize a basic binder
+     layout"). `container-type: size` turns this element into a CSS
+     container-query container sized purely from the flex layout around it
+     (never from its own content), which is what lets `.binder-side-grid`
+     below reference its exact allotted width/height via `cqw`/`cqh` units. */
+  .binder-side-fit {
+    container-type: size;
+  }
+
+  /* The binder-side slot grid. Its width is capped by `min()` to whichever
+     is smaller: the fitting area's full width, or the width implied by the
+     fitting area's full height and the grid's overall width-to-height
+     ratio (`--slot-ratio`, set inline per binder side from its width,
+     height, and the shared slot aspect ratio). Capping only the width (not
+     a separate height rule) is intentional: each slot's own `aspect-ratio`
+     (set where slots are rendered) then derives the grid's actual height
+     from that capped width, so the complete grid - not just one slot -
+     scales to fit the available area in both dimensions without ever
+     needing internal scrolling, however small the individual slots become. */
+  .binder-side-grid {
+    width: min(100cqw, 100cqh * var(--slot-ratio, 1));
+    margin: auto;
   }
 }

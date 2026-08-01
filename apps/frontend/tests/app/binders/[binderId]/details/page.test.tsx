@@ -37,6 +37,8 @@ function renderPage(updateBinderContext: jest.Mock = jest.fn()) {
     cards: [],
     art: [],
     updateBinder: updateBinderContext,
+    layoutFocalPage: null,
+    setLayoutFocalPage: jest.fn(),
   });
 
   return render(

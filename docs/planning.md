@@ -246,7 +246,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 8. Visualize a basic binder layout
 
-**Status:** Not started
+**Status:** Done (2026-08-01 02:29 EDT)
 
 #### Acceptance criteria
 
@@ -260,8 +260,8 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Left and right arrow controls navigate backward and forward through the displayed pages.
 - The left arrow is disabled on the first displayed page.
 - The right arrow is disabled on the last displayed page.
-- A physical card slot is 7 cm wide by 9.5 cm high.
-- Binder slots and displayed cards preserve the corresponding 7:9.5 width-to-height ratio.
+- A physical card slot is 6.35 cm wide by 9 cm high.
+- Binder slots and displayed cards preserve the corresponding 6.35:9 width-to-height ratio.
 - The on-screen dimensions may scale responsively and do not need to equal the physical size.
 - The initial binder layout editor supports desktop viewports at least 1024 CSS pixels wide.
 - Returning to Edit Layout after selecting another binder tab restores the physical page or spread that was visible before leaving the layout.
@@ -868,13 +868,13 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 #### Acceptance criteria
 
 - The reusable binder-details form on the new binder page and the "Edit Details" tab has editable fields for the width per slot and width base values.
-- Width per slot defaults to 7 cm and width base defaults to 0 cm.
+- Width per slot defaults to 6.85 cm and width base defaults to -0.5 cm.
 - Displayed width is calculated as `(number of slots x width per slot) + width base`.
-- With the default width values, widths of 1, 2, and 3 slots are 7 cm, 14 cm, and 21 cm.
+- With the default width values, widths of 1, 2, and 3 slots are 6.35 cm, 13.2 cm, and 20.05 cm.
 - The reusable binder-details form has editable fields for the height per slot and height base values on both pages.
-- Height per slot defaults to 10 cm and height base defaults to -0.5 cm.
+- Height per slot defaults to 9 cm and height base defaults to 0 cm.
 - Displayed height is calculated as `(number of slots x height per slot) + height base`.
-- With the default height values, heights of 1, 2, and 3 slots are 9.5 cm, 19.5 cm, and 29.5 cm.
+- With the default height values, heights of 1, 2, and 3 slots are 9 cm, 18 cm, and 27 cm.
 - The reusable binder-details form has editable multi-slot art fields for border color, border radius, and border width on both pages.
 - Border color defaults to `#FFCB05`.
 - Border radius defaults to 38%.
@@ -892,7 +892,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Border color uses a color input paired with an editable text value, accepts only six-digit `#RRGGBB` hexadecimal colors, and normalizes hexadecimal letters to uppercase before saving.
 - Border radius follows CSS percentage semantics: horizontal radii are relative to the frame width and vertical radii are relative to the frame height across editor, layout, preview, and print rendering.
 - TBD: Define the physical or rendered dimension used as the basis for the border-width percentage before implementing multi-slot-art rendering or print export.
-- The configured one-slot width and height define the binder's on-screen slot and card aspect ratio and are also the basis for multi-slot-art and print dimensions; the default formulas retain the initial `7:9.5` one-slot ratio.
+- The configured one-slot width and height define the binder's on-screen slot and card aspect ratio and are also the basis for multi-slot-art and print dimensions; the default formulas retain the initial `6.35:9` one-slot ratio.
 
 ### 25. Add multi-slot art
 
@@ -909,7 +909,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Hovering over a cell highlights the rectangle from the top-left cell through the hovered cell.
 - Selecting a cell sets the art's width and height in slots from that highlighted rectangle.
 - Selecting row 1, column 2 creates art that is 2 slots wide and 1 slot high.
-- With the default dimension settings, art that is 2 slots wide and 1 slot high measures 14 cm by 9.5 cm.
+- With the default dimension settings, art that is 2 slots wide and 1 slot high measures 13.2 cm by 9 cm.
 - The modal has fields for art-specific border color, border radius, and border width.
 - Each art-specific border field can either use the binder's setting or define a custom value.
 - When an art-specific field uses the binder's setting, its override is stored as null in the database so later binder-setting changes apply to the art.
@@ -1167,7 +1167,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Adjacent pages for one tiled piece repeat `0.25` inch of content to support trimming and alignment during assembly.
 - Tiled pages do not add art titles, tile numbers, row or column labels, or other assembly text.
 - Other art may be packed into unused regions of a tiled page when it fits at exact scale with the required spacing.
-- With the default dimension settings, each slot occupied by art represents 7 cm of width and 9.5 cm of height, adjusted by the configured multi-slot dimension formulas.
+- With the default dimension settings, each slot occupied by art represents 6.35 cm of width and 9 cm of height, adjusted by the configured multi-slot dimension formulas.
 - Each piece of art retains its saved image positioning, scaling, aspect-ratio adjustments, and border settings.
 - The configured art border serves as the cutting reference; the PDF does not add crop marks or separate cut lines.
 - White space separates each piece of art from other art and from the page edges.
@@ -1176,7 +1176,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Art is arranged across PDF pages to reduce page count and unused space while preserving its physical dimensions and required spacing; a mathematically optimal arrangement is not required.
 - Individual pieces of art may be rotated 90 degrees on the PDF page when doing so improves packing efficiency.
 - Art may be reordered independently of its binder-page placement to improve packing efficiency.
-- CRITICAL TBD: Reconcile the targets of fitting two default 2-by-2, four default 2-by-1, or eight default 1-by-1 pieces on one page with exact physical sizing, page size, margins, and required whitespace before implementation; each target exceeds the `11`-inch page width even with zero margins or spacing.
+- With the current default dimension settings, two default 2-by-2 pieces, four default 2-by-1 pieces, or eight default 1-by-1 pieces each fit together on one page with room to spare.
 - When the art does not fit on one page, the remaining art is efficiently arranged on additional landscape pages.
 
 #### Technical requirements
@@ -1187,9 +1187,8 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The export query includes only art with non-null placement coordinates in the selected binder and renders each included art record exactly once; binder cards and unplaced art are excluded.
 - If no placed art exists when the export request is processed, the backend returns a request-validation Problem Details response and does not generate a PDF.
 - Every art-print PDF page uses US Letter landscape dimensions (`11 x 8.5` inches).
-- `ART_PRINT_PAGE_MARGIN_INCHES` and `ART_PRINT_ITEM_GAP_INCHES` each default to `0.25` in the canonical shared `defaults.ts`.
+- `ART_PRINT_PAGE_MARGIN_INCHES` defaults to `0.1` and `ART_PRINT_ITEM_GAP_INCHES` defaults to `0.25` in the canonical shared `defaults.ts`.
 - The packing algorithm treats the page margins as unavailable area and enforces the item gap between distinct art regions, including other art packed beside an oversized-art tile region.
-- Multi-slot-art print-export implementation is blocked until the critical packing-capacity TBD is resolved and the resulting page-size or packing requirements are updated.
 - The packing algorithm may rotate a fully composed art frame by 90 degrees; the border, clipped transformed image, and physical width and height rotate together without distortion or rescaling.
 - Placement coordinates determine whether art is included but do not determine print order; the packing result is deterministic for the same export snapshot and configuration.
 - Packing uses a documented deterministic rectangle-packing heuristic that prioritizes fewer pages and then lower unused area; automated tests cover stable ordering, rotation, spacing, and page-boundary behavior.

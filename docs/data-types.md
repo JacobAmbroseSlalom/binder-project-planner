@@ -33,10 +33,10 @@ shape, name, or persistence contract in [planning.md](planning.md).
 | `previewPhysicalPage` | positive integer          | Yes      | One-based physical focal page for the home-page preview; default `2`.                                      |
 | `locked`              | boolean                   | Yes      | Defaults to `false`; blocks restricted details and layout mutations.                                       |
 | `notes`               | Markdown string or `null` | Yes      | Up to 1,000,000 characters. Exactly empty input normalizes to `null`; nonempty input preserves whitespace. |
-| `widthPerSlot`        | decimal centimeters       | Yes      | Greater than zero; default `7`.                                                                            |
-| `widthBase`           | decimal centimeters       | Yes      | Default `0`; may be negative only when the one-slot computed width remains positive.                       |
-| `heightPerSlot`       | decimal centimeters       | Yes      | Greater than zero; default `10`.                                                                           |
-| `heightBase`          | decimal centimeters       | Yes      | Default `-0.5`; may be negative only when the one-slot computed height remains positive.                   |
+| `widthPerSlot`        | decimal centimeters       | Yes      | Greater than zero; default `6.85`.                                                                         |
+| `widthBase`           | decimal centimeters       | Yes      | Default `-0.5`; may be negative only when the one-slot computed width remains positive.                    |
+| `heightPerSlot`       | decimal centimeters       | Yes      | Greater than zero; default `9`.                                                                            |
+| `heightBase`          | decimal centimeters       | Yes      | Default `0`; may be negative only when the one-slot computed height remains positive.                      |
 | `borderColor`         | `#RRGGBB` string          | Yes      | Six-digit uppercase hexadecimal color; default `#FFCB05`.                                                  |
 | `borderRadius`        | decimal percentage        | Yes      | `0` through `100`; default `38`.                                                                           |
 | `borderWidth`         | decimal percentage        | Yes      | `0` through `100`; default `11`. The percentage basis remains **TBD**.                                     |
