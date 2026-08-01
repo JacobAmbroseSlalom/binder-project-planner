@@ -35,9 +35,11 @@ export type CreateBinderRequest = components['schemas']['CreateBinderRequest'];
 // Fetches the complete binder-summary collection through `GET /binders`
 // (story 5). The backend already returns it in the documented sort order
 // (updatedAt descending, then binder UUID ascending), so the frontend
-// renders the response as-is without re-sorting.
-export async function listBinders(): Promise<BinderSummary[]> {
-  const { data, error } = await apiClient.GET('/binders');
+// renders the response as-is without re-sorting. Accepts an optional
+// `AbortSignal` (story 6) so callers can cancel a stale in-flight request
+// when a newer one starts.
+export async function listBinders(signal?: AbortSignal): Promise<BinderSummary[]> {
+  const { data, error } = await apiClient.GET('/binders', { signal });
 
   if (error) {
     throw error;

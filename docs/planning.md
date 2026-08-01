@@ -175,7 +175,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 6. Add reusable loading feedback
 
-**Status:** Not started
+**Status:** Done (2026-07-31 23:52 EDT)
 
 #### Acceptance criteria
 

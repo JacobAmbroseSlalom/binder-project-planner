@@ -81,7 +81,7 @@ const spacingSteps: SpacingStep[] = [
 ];
 
 // One entry in the icon size scale, using Tailwind's default `size-*`
-// utilities (16px / 20px / 24px).
+// utilities (16px / 20px / 24px / 32px / 40px).
 type IconSizeStep = {
   label: string;
   className: string;
@@ -93,6 +93,13 @@ const iconSizeSteps: IconSizeStep[] = [
   { label: 'size-4', className: 'size-4', px: 16, usage: 'Inline with caption/body text' },
   { label: 'size-5', className: 'size-5', px: 20, usage: 'Buttons and standalone UI icons' },
   { label: 'size-6', className: 'size-6', px: 24, usage: 'Larger/prominent icons' },
+  { label: 'size-8', className: 'size-8', px: 32, usage: 'Prominent standalone icons' },
+  {
+    label: 'size-10',
+    className: 'size-10',
+    px: 40,
+    usage: "Largest; a page/list's own loading state",
+  },
 ];
 
 const swatchGroups: SwatchGroup[] = [
@@ -380,13 +387,20 @@ export default function StyleGuidePage() {
           <Loader2 className="size-4 animate-spin text-neutral-500" />
           <Loader2 className="size-5 animate-spin text-neutral-500" />
           <Loader2 className="size-6 animate-spin text-neutral-500" />
+          <Loader2 className="size-8 animate-spin text-neutral-500" />
+          <Loader2 className="size-10 animate-spin text-neutral-500" />
         </div>
+        <p className="text-caption text-neutral-500">
+          The spinner reuses the standard icon size scale (no dedicated spinner sizes). Prefer
+          `size-8`/`size-10` for a page or list&apos;s own prominent content-loading state (e.g. the
+          binder list).
+        </p>
         <p className="text-caption text-neutral-500">
           Content-loading state: the spinner replaces panel content until it&apos;s ready. Actions
           that save/mutate data use the shared `saving` toast instead of an inline spinner.
         </p>
         <div className="flex h-32 w-full items-center justify-center rounded-standard bg-surface shadow-panel">
-          <Loader2 className="size-6 animate-spin text-neutral-500" />
+          <Loader2 className="size-10 animate-spin text-neutral-500" />
         </div>
       </section>
 

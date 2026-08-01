@@ -19,3 +19,13 @@ export const DEFAULT_BINDER_PAGE_COUNT = 20;
 // Maximum trimmed binder-name length, shared by the frontend Zod schema, the
 // OpenAPI request/response contract, and the backend database field.
 export const BINDER_NAME_MAX_LENGTH = 100;
+
+// Timing for the shared loading component (story 6: "Add reusable loading
+// feedback"). A pending request only shows the spinner after it has been
+// pending this long, avoiding a flash of loading state for fast requests.
+export const LOADING_INDICATOR_DELAY_MS = 200;
+
+// Once shown, the loading indicator stays visible for at least this long
+// before loaded content can replace it, avoiding a flicker when a request
+// settles just after the indicator appears.
+export const LOADING_INDICATOR_MIN_DURATION_MS = 300;

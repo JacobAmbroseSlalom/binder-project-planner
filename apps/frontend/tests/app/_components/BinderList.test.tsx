@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { LOADING_INDICATOR_DELAY_MS } from '@binder-project-planner/shared';
+import { act, render, screen, waitFor } from '@testing-library/react';
 
 import { listBinders, type BinderSummary } from '@/lib/api';
 import { BinderList } from '@/app/_components/BinderList';
@@ -37,10 +38,23 @@ function makeBinderSummary(overrides: Partial<BinderSummary>): BinderSummary {
 }
 
 describe('BinderList', () => {
-  it('shows the loading indicator while the binder list is being retrieved', () => {
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it('shows the loading indicator only once the request has been pending for LOADING_INDICATOR_DELAY_MS', () => {
+    jest.useFakeTimers();
     mockedListBinders.mockReturnValue(new Promise(() => {}));
 
     renderBinderList();
+
+    // The shared loading component (story 6) only appears after the delay,
+    // so a fast response never flashes it.
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+
+    act(() => {
+      jest.advanceTimersByTime(LOADING_INDICATOR_DELAY_MS);
+    });
 
     expect(screen.getByRole('status')).toBeInTheDocument();
     // The empty state must not appear before loading completes, per story
@@ -48,6 +62,22 @@ describe('BinderList', () => {
     expect(
       screen.queryByText('No binders yet. Create one to get started.'),
     ).not.toBeInTheDocument();
+  });
+
+  it('aborts the in-flight request through AbortController when the component unmounts before it resolves', () => {
+    mockedListBinders.mockReturnValue(new Promise(() => {}));
+
+    const { unmount } = renderBinderList();
+
+    const [signal] = mockedListBinders.mock.calls[0];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal?.aborted).toBe(false);
+
+    unmount();
+
+    // Story 6's technical requirement: an outstanding request is aborted so
+    // its resolution can never update state after the component is gone.
+    expect(signal?.aborted).toBe(true);
   });
 
   it('shows the empty state only after loading completes successfully with no binders', async () => {

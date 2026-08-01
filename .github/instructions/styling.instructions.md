@@ -120,13 +120,17 @@ sections as decided.
 - Icons inherit color from the surrounding text via `currentColor` (lucide's
   default) rather than being given an explicit fill/stroke color; set color on a
   wrapping/parent element instead.
-- Exactly 3 icon sizes, matching Tailwind's default `size-*` scale (no custom
+- Exactly 5 icon sizes, matching Tailwind's default `size-*` scale (no custom
   tokens needed):
   - `size-4` (16px) — inline alongside `text-caption`/`text-body`, small
     indicators.
   - `size-5` (20px) — default for buttons and most standalone UI icons.
   - `size-6` (24px) — larger/prominent icons (headers, empty-state
     illustrations).
+  - `size-8` (32px) — prominent standalone icons needing more visual weight
+    than `size-6` (e.g. a page's own loading spinner).
+  - `size-10` (40px) — the largest available; the most prominent
+    standalone icon placements (e.g. a full list/page's own loading state).
 
 ## Elevation & surfaces
 
@@ -186,8 +190,10 @@ relevant modal/form, styled with `text-warning`, rather than as a toast.
 
 - Icon: `lucide-react`'s `Loader2` with `animate-spin`. There is no separate
   spinner component/SVG — reuse this same icon everywhere a spinner is needed.
-- Sizing: reuse the standard icon size scale (`size-4`/`size-5`/`size-6`); the
-  spinner does not get its own dedicated size tokens.
+- Sizing: reuse the standard icon size scale (`size-4`/`size-5`/`size-6`/
+  `size-8`/`size-10`); the spinner does not get its own dedicated size
+  tokens. Prefer `size-8`/`size-10` for a page or list's own prominent
+  content-loading state (e.g. the binder list).
 - Placement depends on what's loading, not a single fixed rule:
   - Actions that save/mutate data (most buttons) use the shared `saving` toast
     (see Toast notifications above) rather than an inline spinner on the

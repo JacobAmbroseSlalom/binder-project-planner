@@ -7,3 +7,8 @@ export { toProblemDetailsInfo } from './problemDetails';
 export type { ProblemDetailsInfo } from './problemDetails';
 export type { SaveStatusToastHandle } from './useSaveStatusToast';
 export type { FailedToastDetails, ToastEntry, ToastStatus } from './types';
+
+// The shared loading component (story 6): pair `LoadingIndicator` with
+// `useDelayedLoading` wherever the app waits on a backend request.
+export { LoadingIndicator } from './LoadingIndicator';
+export { useDelayedLoading } from './useDelayedLoading';
