@@ -288,7 +288,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 9. Jump directly to a binder page
 
-**Status:** Not started
+**Status:** Done (2026-08-01 10:23 EDT)
 
 #### Acceptance criteria
 

@@ -63,6 +63,15 @@ export function getPreviousPhysicalPage(physicalPage: number, maxPhysicalPage: n
   return previousRight <= 1 ? 1 : previousRight;
 }
 
+// The human-readable label for a spread (story 9): a single-sided spread
+// (the binder's first or last) reads as "Page N", and a two-sided spread
+// reads as "Pages L–R" using its even left page and odd right page.
+export function getSpreadLabel(spread: BinderSpread): string {
+  if (spread.left === null) return `Page ${spread.right}`;
+  if (spread.right === null) return `Page ${spread.left}`;
+  return `Pages ${spread.left}\u2013${spread.right}`;
+}
+
 // The result of resolving the layout route's `page` query parameter.
 export interface ResolvedPhysicalPage {
   // The physical page to display.
@@ -107,4 +116,23 @@ export function resolvePhysicalPageParam(
   }
 
   return { physicalPage: 1, replacementPage: 1 };
+}
+
+// Parses and validates the direct page-number input's committed value
+// (story 9): the HTML number input's raw string value must be a
+// non-empty integer within `[1, maxPhysicalPage]`. Returns `null` for an
+// empty, non-integer, or out-of-range value so the caller can reject the
+// submission, show the shared failed toast, and reset the input rather
+// than navigating.
+export function parsePhysicalPageInput(rawValue: string, maxPhysicalPage: number): number | null {
+  const trimmed = rawValue.trim();
+  if (trimmed === '') return null;
+
+  const parsed = Number(trimmed);
+  // Round-tripping through `String()` rejects non-canonical numeric forms
+  // (e.g. "1.5", "1e0") in addition to `NaN` from non-numeric input.
+  const isValidInteger = Number.isInteger(parsed) && String(parsed) === trimmed;
+  if (!isValidInteger || parsed < 1 || parsed > maxPhysicalPage) return null;
+
+  return parsed;
 }

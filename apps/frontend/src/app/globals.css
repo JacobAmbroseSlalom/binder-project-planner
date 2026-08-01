@@ -139,9 +139,15 @@
      (set where slots are rendered) then derives the grid's actual height
      from that capped width, so the complete grid - not just one slot -
      scales to fit the available area in both dimensions without ever
-     needing internal scrolling, however small the individual slots become. */
+     needing internal scrolling, however small the individual slots become.
+     `align-self: start` (overriding the fitting area's vertical centering)
+     keeps the grid pinned to the top of its area, right beneath the page
+     label above it, so any leftover vertical space - the fitting area is
+     often taller than the grid needs - falls below the grid instead of
+     being split evenly above and below it. */
   .binder-side-grid {
     width: min(100cqw, 100cqh * var(--slot-ratio, 1));
-    margin: auto;
+    margin: 0 auto;
+    align-self: start;
   }
 }
