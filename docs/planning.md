@@ -361,6 +361,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Previous search results are not presented as results for a new search while it is loading.
 - If a card search fails, the loading component is removed and the provided error is displayed using the shared failed toast.
 - Search results display the card images returned by the API.
+- When a completed search returns no matching cards, the modal displays a message stating that no cards were found instead of an empty results area.
 - Selecting a search result marks that card as the modal's current selection.
 - Selecting Add Card adds the selected card to the binder slot that originally opened the modal.
 - The selected card is saved through the backend to the database.
@@ -385,6 +386,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The backend returns all matches supplied by TCGdex without application-level pagination or truncation.
 - Search results render in a virtualized grid that mounts only visible rows, and result images use lazy loading.
 - The frontend uses `@tanstack/react-virtual` for the search-result grid virtualization.
+- The no-results message renders in place of the virtualized grid only after a qualifying search completes successfully with an empty array; it is not shown before the first qualifying search or while a search is loading.
 - The card selector is a custom React modal without a dialog-component dependency.
 - The modal exposes dialog semantics and an accessible name, traps focus while open, closes on Escape, and restores focus to the binder slot that opened it.
 - The modal also closes from its close control or a backdrop click, and closing aborts any in-flight TCGdex search.
@@ -426,6 +428,34 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The backend preserves TCGdex result ordering when normalizing, caching, and returning search results; the frontend does not re-sort them.
 - The search query matches either the card name or the card's set name: TCGdex's `name` and `set.name` filters only combine as AND, so the backend queries both independently and merges the results, listing card-name matches first, then set-name matches not already included, deduplicated by provider card id.
 - A TCGdex catalog card without a usable provider image (e.g. the "Celebrations Classic Collection" subset, which TCGdex has no image assets for at all) is excluded from search results rather than shown without an image, since the app requires an image for every saved card.
+
+### 41. Filter card search by TCG Pocket inclusion and language
+
+**Status:** Not started
+
+#### Acceptance criteria
+
+- The card-selection modal's search view has two additional toggles alongside the search bar.
+- The first toggle includes or excludes Pokémon TCG Pocket cards from search results and defaults to off (excluded).
+- The second toggle selects English or Japanese card data and defaults to English.
+- Changing either toggle updates the displayed results to reflect the new selection.
+- When updating a toggle requires a new backend search, the shared loading component is used, previous results are not presented as results for the new search while it is loading, and a search failure removes the loading component and displays the provided error using the shared failed toast.
+- Search results reflect only cards matching the current toggle selections.
+- The first time the card-selection modal is opened in a binder visit, both toggles use their default values.
+- Reopening the card-selection modal retains the toggle values last used, even though the existing empty-query, no-results reset still applies to the search itself.
+- An Add More or Bulk Add session (Stories 17 and 18) retains the toggle values in effect when that session's searches were performed.
+
+#### Technical requirements
+
+- Toggle state is ephemeral React state that lives above the card-selection modal (e.g. in the binder route context) so it survives the modal closing and reopening; it is not persisted to the backend or browser storage and resets when the binder route context unmounts or the page reloads.
+- `GET /card-catalog/search` accepts optional `includeTcgPocket` boolean and `language` (`en` or `ja`) query parameters; omitting either parameter behaves as `includeTcgPocket=false` and `language=en`.
+- The default toggle values are exported from the canonical shared `defaults.ts` as `CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT` (`false`) and `CARD_SEARCH_LANGUAGE_DEFAULT` (`"en"`).
+- Changing the language toggle immediately re-searches the current trimmed query when it already meets `CARD_SEARCH_MIN_QUERY_LENGTH`, without waiting for `CARD_SEARCH_DEBOUNCE_MS`, since a language change requires different provider data; below the minimum length, no search runs and existing below-minimum behavior is unchanged.
+- TBD (confirm during development): Prefer filtering the TCG Pocket toggle entirely on the frontend from data already fetched for the current query and language, without an additional backend call, if TCGdex's response shape makes that possible (e.g. if Pocket-card membership can be determined from fields already present in a single combined search response). If that is not feasible and Pocket-card data can only be obtained through a distinctly separate request, fall back to re-searching the backend the same way the language toggle does.
+- A toggle change that triggers a backend search aborts any in-flight search before starting the new one, reusing the existing `AbortController` cancellation behavior; only the latest qualifying query-and-toggle combination may publish results.
+- The backend search-response cache key (`CARD_SEARCH_CACHE_MAX_ENTRIES`, `CARD_SEARCH_CACHE_TTL_MS`) incorporates the trimmed, case-normalized query together with any toggle values that affect the backend request, so cached results are never returned for a different toggle combination.
+- Bulk Add (Story 18) submits its complete current result set together with the toggle values that produced it; the backend applies the same per-card normalization regardless of toggle state.
+- TBD: Confirm the exact TCGdex request shape used to select Pokémon TCG Pocket card data versus the standard trading-card-game catalog, and the exact TCGdex mechanism for selecting English versus Japanese card data, before implementation.
 
 ### 12. Add a custom card manually
 

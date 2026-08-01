@@ -73,6 +73,13 @@ export function CardSelectionModal({
   const [debouncedQuery, setDebouncedQuery] = useState(lastSearchQuery);
   const [results, setResults] = useState<TcgDexCatalogCard[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  // Tracks whether the *current* qualifying query has a completed,
+  // successful search behind it - distinct from `results.length === 0`,
+  // which is also true before any search has ever run. Gates the no-results
+  // message (planning.md story 11: "it is not shown before the first
+  // qualifying search or while a search is loading") so an empty initial
+  // state or an empty in-flight state never renders it.
+  const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
   const [selectedCard, setSelectedCard] = useState<TcgDexCatalogCard | null>(null);
 
   const showLoading = useDelayedLoading(isSearching);
@@ -123,16 +130,22 @@ export function CardSelectionModal({
     if (trimmed.length < CARD_SEARCH_MIN_QUERY_LENGTH) {
       setResults([]);
       setIsSearching(false);
+      setHasCompletedSearch(false);
       return;
     }
 
     const controller = new AbortController();
     setIsSearching(true);
+    // Cleared immediately (rather than only on success) so a query change
+    // can never leave a stale no-results message visible during the gap
+    // before `showLoading` itself flips true.
+    setHasCompletedSearch(false);
 
     searchCardCatalog(trimmed, controller.signal)
       .then((catalogCards) => {
         setResults(catalogCards);
         setIsSearching(false);
+        setHasCompletedSearch(true);
         dismiss(CARD_SEARCH_TOAST_ID);
       })
       .catch((error) => {
@@ -247,6 +260,12 @@ export function CardSelectionModal({
         <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
           {showLoading ? (
             <LoadingIndicator label="Searching for cards…" size="8" />
+          ) : hasCompletedSearch && results.length === 0 ? (
+            // Only reached once a qualifying search has actually completed
+            // successfully with zero matches (see `hasCompletedSearch`
+            // above) - never shown for the modal's initial empty state or
+            // while a search is still loading.
+            <p className="text-center text-neutral-500">No cards were found.</p>
           ) : (
             <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
               {rowVirtualizer.getVirtualItems().map((virtualRow) => (
