@@ -67,6 +67,18 @@ function getSetsEndpoint(language: CardSearchLanguage): string {
   return `https://api.tcgdex.net/v2/${language}/sets`;
 }
 
+// TCGdex's Pokémon TCG Pocket "serie" detail endpoint (story 41), which
+// lists every set belonging to that serie in one request - used to filter
+// Pocket cards out of search results by default (see
+// `getTcgPocketSetIds`/`searchCardCatalog` below) without a per-set or
+// per-card request. Confirmed live: TCGdex's regular `/cards` search
+// already mixes Pocket-catalog cards (e.g. set `A1`) into its results, and
+// the bulk `/sets` listing has no `serie` field to distinguish them, so
+// this dedicated serie lookup is the only cheap way to identify them.
+function getTcgPocketSeriesEndpoint(language: CardSearchLanguage): string {
+  return `https://api.tcgdex.net/v2/${language}/series/tcgp`;
+}
+
 // Only image bytes fetched from these hosts are ever downloaded and
 // installed locally (planning.md: "accepts image downloads only from
 // approved TCGdex image origins"). TCGdex serves card artwork from its
@@ -161,6 +173,38 @@ function getSetNamesById(language: CardSearchLanguage): Promise<Map<string, stri
         throw error;
       });
     setNamesByIdPromises.set(language, promise);
+  }
+  return promise;
+}
+
+// Memoizes the one-time (per process) fetch of the Pokémon TCG Pocket
+// serie's member set ids (story 41), mirroring `getSetNamesById` above -
+// keyed per language, shared across concurrent searches (never tied to an
+// individual search's `AbortSignal`), and cleared on failure so a later
+// search retries instead of caching a permanently-empty set.
+const tcgPocketSetIdsPromises = new Map<CardSearchLanguage, Promise<Set<string>>>();
+
+function getTcgPocketSetIds(language: CardSearchLanguage): Promise<Set<string>> {
+  let promise = tcgPocketSetIdsPromises.get(language);
+  if (!promise) {
+    promise = fetchWithRetry(getTcgPocketSeriesEndpoint(language), undefined)
+      .then((response) => response.json())
+      .then((body: unknown) => {
+        const ids = new Set<string>();
+        const sets = (body as { sets?: unknown } | null)?.sets;
+        if (Array.isArray(sets)) {
+          for (const entry of sets) {
+            const id = (entry as { id?: unknown } | null)?.id;
+            if (typeof id === 'string') ids.add(id);
+          }
+        }
+        return ids;
+      })
+      .catch((error: unknown) => {
+        tcgPocketSetIdsPromises.delete(language);
+        throw error;
+      });
+    tcgPocketSetIdsPromises.set(language, promise);
   }
   return promise;
 }
@@ -311,15 +355,16 @@ function setCached(key: string, results: TcgDexCatalogCard[]): void {
 
 // Searches TCGdex for `trimmedQuery`, using the in-memory LRU/TTL cache
 // keyed by the trimmed, case-normalized query together with the requested
-// language (planning.md story 41: "cached results are never returned for a
-// different toggle combination"; cache cleared on backend restart, which
-// is inherent to this in-process `Map`).
+// language and TCG Pocket inclusion (planning.md story 41: "cached results
+// are never returned for a different toggle combination"; cache cleared on
+// backend restart, which is inherent to this in-process `Map`).
 export async function searchCardCatalog(
   trimmedQuery: string,
   language: CardSearchLanguage,
+  includeTcgPocket: boolean,
   signal?: AbortSignal,
 ): Promise<TcgDexCatalogCard[]> {
-  const cacheKey = `${language}:${trimmedQuery.toLowerCase()}`;
+  const cacheKey = `${language}:${includeTcgPocket}:${trimmedQuery.toLowerCase()}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
@@ -335,15 +380,20 @@ export async function searchCardCatalog(
   const searchEndpoint = getCardSearchEndpoint(language);
   const nameUrl = `${searchEndpoint}?name=${encodeURIComponent(trimmedQuery)}`;
   const setNameUrl = `${searchEndpoint}?set.name=${encodeURIComponent(trimmedQuery)}`;
-  // Runs alongside the card search(es) rather than after them - the sets
-  // lookup is independent of the search query. A failure resolving set
-  // names degrades to an empty map (every result's `setName` falls back to
-  // `null`) rather than failing the whole search over a secondary,
-  // rarely-changing resource.
-  const [nameResponse, setNameResponse, setNamesById] = await Promise.all([
+  // Runs alongside the card search(es) rather than after them - both the
+  // sets-name and TCG Pocket set-id lookups are independent of the search
+  // query. A failure resolving set names degrades to an empty map (every
+  // result's `setName` falls back to `null`); a failure resolving Pocket
+  // set ids degrades to an empty set (nothing gets filtered out, so a
+  // lookup failure never blocks the search - it only means the default
+  // exclusion silently doesn't apply for this one request).
+  const [nameResponse, setNameResponse, setNamesById, tcgPocketSetIds] = await Promise.all([
     fetchWithRetry(nameUrl, signal),
     language === 'en' ? fetchWithRetry(setNameUrl, signal) : Promise.resolve(null),
     getSetNamesById(language).catch(() => new Map<string, string>()),
+    includeTcgPocket
+      ? Promise.resolve(new Set<string>())
+      : getTcgPocketSetIds(language).catch(() => new Set<string>()),
   ]);
   const nameBody: unknown = await nameResponse.json();
   const setNameBody: unknown = setNameResponse ? await setNameResponse.json() : [];
@@ -369,10 +419,16 @@ export async function searchCardCatalog(
   }
 
   // Preserves the merged ordering above; unrecognized entries are dropped
-  // rather than breaking the whole search.
+  // rather than breaking the whole search. TCGdex's regular card search
+  // mixes Pokémon TCG Pocket cards into its results by default (confirmed
+  // live), so Pocket cards are excluded here - after normalization, since
+  // that's what gives each result its `providerSetId` - unless
+  // `includeTcgPocket` is true (in which case `tcgPocketSetIds` is left
+  // empty above and nothing is filtered).
   const results = combined
     .map((raw) => normalizeCard(raw as RawTcgDexCard, setNamesById))
-    .filter((card): card is TcgDexCatalogCard => card !== null);
+    .filter((card): card is TcgDexCatalogCard => card !== null)
+    .filter((card) => !tcgPocketSetIds.has(card.providerSetId));
 
   setCached(cacheKey, results);
   return results;

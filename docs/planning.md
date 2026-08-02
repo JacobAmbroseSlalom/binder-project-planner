@@ -433,7 +433,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 41. Filter card search by TCG Pocket inclusion and language
 
-**Status:** In progress (language toggle and Japanese translation implemented; TCG Pocket toggle not started)
+**Status:** Done (2026-08-01 21:17 EDT)
 
 #### Acceptance criteria
 
@@ -462,11 +462,13 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - A PokéAPI lookup miss (`404`), timeout, or other request failure does not block or fail the search: TCGdex is still searched using the original entered query, and the search response includes a nonblocking translation-warning flag rather than a Problem Details error.
 - The frontend displays the translation warning alongside successfully loaded results without invoking the shared failed toast or replacing the loading or empty-results behavior.
 - `language=ja` searches match only against card name, not set name; the set-name search TCGdex issues for `language=en` is skipped entirely for Japanese (out of scope per product direction).
-- TBD (confirm during development): Prefer filtering the TCG Pocket toggle entirely on the frontend from data already fetched for the current query and language, without an additional backend call, if TCGdex's response shape makes that possible (e.g. if Pocket-card membership can be determined from fields already present in a single combined search response). If that is not feasible and Pocket-card data can only be obtained through a distinctly separate request, fall back to re-searching the backend the same way the language toggle does.
+- TCG Pocket set membership is determined backend-side: TCGdex has no per-card or per-set field distinguishing Pocket cards in the existing bulk search/sets responses, and TCGdex's regular card search already mixes Pocket-catalog cards into its results by default (confirmed during development, e.g. searching "Bulbasaur" without the toggle returned Pocket sets like `A1` alongside standard-catalog matches). Filtering therefore requires a separate, one-time-per-process lookup rather than being derivable from data already fetched for the current query.
+- The backend fetches the Pokémon TCG Pocket serie's member set ids via `GET /v2/{language}/series/tcgp` (TCGdex's `tcgp` serie detail endpoint, whose `sets[]` array lists every member set's id in one request) and caches the resulting id set in memory per language for the life of the process, mirroring the existing per-language set-name cache. A card is excluded from `includeTcgPocket=false` results when its `providerSetId` is a member of that cached set.
+- A failure resolving the Pocket set-id list (upstream error, timeout, or unexpected shape) degrades to not filtering anything for that one request, rather than failing the search outright; the lookup is retried on a later request instead of being cached as permanently empty.
 - A toggle change that triggers a backend search aborts any in-flight search before starting the new one, reusing the existing `AbortController` cancellation behavior; only the latest qualifying query-and-toggle combination may publish results.
 - The backend search-response cache key (`CARD_SEARCH_CACHE_MAX_ENTRIES`, `CARD_SEARCH_CACHE_TTL_MS`) incorporates the trimmed, case-normalized query together with any toggle values that affect the backend request, so cached results are never returned for a different toggle combination.
 - Bulk Add (Story 18) submits its complete current result set together with the toggle values that produced it; the backend applies the same per-card normalization regardless of toggle state.
-- TBD: Confirm the exact TCGdex request shape used to select Pokémon TCG Pocket card data versus the standard trading-card-game catalog, and the exact TCGdex mechanism for selecting English versus Japanese card data, before implementation.
+- Changing the TCG Pocket toggle immediately re-searches the current trimmed query the same way the language toggle does, without waiting for `CARD_SEARCH_DEBOUNCE_MS`, so both toggles behave consistently per the "Changing either toggle updates the displayed results" acceptance criterion.
 
 ### 12. Add a custom card manually
 

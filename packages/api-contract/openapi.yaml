@@ -242,7 +242,10 @@ paths:
         application-level pagination or truncation. Story 41 adds the
         optional `language` parameter and, for `language=ja`, an automatic
         English-to-Japanese Pokémon species name translation applied to
-        `query` before searching TCGdex.
+        `query` before searching TCGdex. Story 41 also adds the optional
+        `includeTcgPocket` parameter, which defaults to `false` (Pokémon
+        TCG Pocket cards are excluded from results unless explicitly
+        requested).
       parameters:
         - name: query
           in: query
@@ -258,6 +261,16 @@ paths:
             (see `CardSearchResponse.translationWarning`).
           schema:
             $ref: '#/components/schemas/CardSearchLanguage'
+        - name: includeTcgPocket
+          in: query
+          required: false
+          description: >-
+            Defaults to `false` when omitted. When `false`, cards belonging
+            to a Pokémon TCG Pocket set (TCGdex's `tcgp` serie) are excluded
+            from results; when `true`, they're included alongside all other
+            matches.
+          schema:
+            type: boolean
       responses:
         '200':
           description: The normalized TCGdex search results.

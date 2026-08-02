@@ -1,6 +1,9 @@
 'use client';
 
-import { CARD_SEARCH_LANGUAGE_DEFAULT } from '@binder-project-planner/shared';
+import {
+  CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
+  CARD_SEARCH_LANGUAGE_DEFAULT,
+} from '@binder-project-planner/shared';
 import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
@@ -82,6 +85,11 @@ interface BinderRouteContextValue {
   // to the backend or browser storage.
   cardSearchLanguage: CardSearchLanguage;
   setCardSearchLanguage: (language: CardSearchLanguage) => void;
+  // Story 41's card-selection modal TCG Pocket toggle: ephemeral React
+  // state with the same lifetime and reset behavior as `cardSearchLanguage`
+  // above.
+  includeTcgPocket: boolean;
+  setIncludeTcgPocket: (includeTcgPocket: boolean) => void;
 }
 
 const BinderRouteContext = createContext<BinderRouteContextValue | null>(null);
@@ -134,6 +142,11 @@ export function BinderRouteProvider({
   // this route mount (see the context value's own doc comment above).
   const [cardSearchLanguage, setCardSearchLanguage] = useState<CardSearchLanguage>(
     CARD_SEARCH_LANGUAGE_DEFAULT,
+  );
+  // Story 41's card-selection modal TCG Pocket toggle - ephemeral, scoped
+  // the same way as `cardSearchLanguage` above.
+  const [includeTcgPocket, setIncludeTcgPocket] = useState<boolean>(
+    CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
   );
 
   const showLoading = useDelayedLoading(status === 'loading');
@@ -276,6 +289,8 @@ export function BinderRouteProvider({
       pendingPlacementKeys,
       cardSearchLanguage,
       setCardSearchLanguage,
+      includeTcgPocket,
+      setIncludeTcgPocket,
     };
   }, [
     binder,
@@ -286,6 +301,7 @@ export function BinderRouteProvider({
     assignCard,
     pendingPlacementKeys,
     cardSearchLanguage,
+    includeTcgPocket,
   ]);
 
   if (status === 'loading') {

@@ -70,6 +70,10 @@ export const TCGDEX_RETRY_DELAY_MS = 500;
 // card-selection modal's language toggle defaults to English; switching it
 // to Japanese searches TCGdex's `ja` catalog instead.
 export const CARD_SEARCH_LANGUAGE_DEFAULT = 'en';
+// The card-selection modal's TCG Pocket toggle defaults to off: search
+// results exclude Pokémon TCG Pocket cards (TCGdex's `tcgp` serie) unless
+// the user explicitly opts in.
+export const CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT = false;
 // Upstream PokéAPI species-name lookups (used to translate an English
 // Pokémon species name to Japanese before a `language=ja` search) are
 // aborted after this long; a timeout is treated as a translation miss

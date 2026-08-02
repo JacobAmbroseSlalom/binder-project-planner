@@ -239,6 +239,16 @@ export function createCardsRouter(
     // already rejects any value other than `en`/`ja` before this handler
     // runs, per the shared `CardSearchLanguage` enum (story 41).
     const language: CardSearchLanguage = request.query.language === 'ja' ? 'ja' : 'en';
+    // Defaults to excluded (`false`) when omitted, per story 41. The OpenAPI
+    // validator middleware's ajv instance is configured with `coerceTypes`
+    // (confirmed by direct testing), so a `boolean`-schema query parameter
+    // arrives here already coerced to an actual JS `boolean` at runtime -
+    // not the literal string `'true'`/`'false'` Express's own `ParsedQs`
+    // typing implies. Comparing against the runtime `true` (rather than the
+    // string `'true'`) is what actually matches; the `unknown` cast exists
+    // only because TypeScript's static `ParsedQs` value type doesn't know
+    // about that coercion.
+    const includeTcgPocket = (request.query.includeTcgPocket as unknown) === true;
 
     // Propagates a disconnected/aborted client request to the upstream
     // TCGdex request (planning.md).
@@ -266,7 +276,12 @@ export function createCardsRouter(
         }
       }
 
-      const results = await searchCardCatalog(searchQuery, language, controller.signal);
+      const results = await searchCardCatalog(
+        searchQuery,
+        language,
+        includeTcgPocket,
+        controller.signal,
+      );
       response.status(200).json({ results, translationWarning });
     } catch (error) {
       if (error instanceof TcgDexAbortedError) return;

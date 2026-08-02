@@ -43,6 +43,8 @@ function renderPage(updateBinderContext: jest.Mock = jest.fn()) {
     pendingPlacementKeys: new Set(),
     cardSearchLanguage: 'en',
     setCardSearchLanguage: jest.fn(),
+    includeTcgPocket: false,
+    setIncludeTcgPocket: jest.fn(),
   });
 
   return render(

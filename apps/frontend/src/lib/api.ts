@@ -124,14 +124,17 @@ export async function listBinderCards(binderId: string, signal?: AbortSignal): P
 // Accepts an `AbortSignal` so the modal can cancel a stale in-flight search
 // as soon as a newer query is typed. `language` (story 41) defaults to
 // English on the backend when omitted; the response's `translationWarning`
-// flag is only ever meaningful for a `ja` search.
+// flag is only ever meaningful for a `ja` search. `includeTcgPocket`
+// (story 41) defaults to `false` on the backend when omitted, excluding
+// Pokémon TCG Pocket cards from results.
 export async function searchCardCatalog(
   query: string,
   language?: CardSearchLanguage,
+  includeTcgPocket?: boolean,
   signal?: AbortSignal,
 ): Promise<CardSearchResponse> {
   const { data, error } = await apiClient.GET('/card-catalog/search', {
-    params: { query: { query, language } },
+    params: { query: { query, language, includeTcgPocket } },
     signal,
   });
 

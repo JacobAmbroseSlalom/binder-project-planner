@@ -69,8 +69,10 @@ export function CardSelectionModal({
   const { markFailed, dismiss } = useToastContext();
   // Story 41's language toggle lives in the route context (rather than as
   // local state) so it survives this modal's own mount/unmount cycle within
-  // the same binder visit.
-  const { cardSearchLanguage, setCardSearchLanguage } = useBinderRouteContext();
+  // the same binder visit. The TCG Pocket inclusion toggle lives there for
+  // the same reason.
+  const { cardSearchLanguage, setCardSearchLanguage, includeTcgPocket, setIncludeTcgPocket } =
+    useBinderRouteContext();
 
   // Both seeded from the remembered last query (rather than empty) so a
   // reopened modal shows and re-searches the previous query right away
@@ -153,7 +155,7 @@ export function CardSelectionModal({
     // before `showLoading` itself flips true.
     setHasCompletedSearch(false);
 
-    searchCardCatalog(trimmed, cardSearchLanguage, controller.signal)
+    searchCardCatalog(trimmed, cardSearchLanguage, includeTcgPocket, controller.signal)
       .then(({ results: catalogCards, translationWarning: missedTranslation }) => {
         setResults(catalogCards);
         setTranslationWarning(missedTranslation);
@@ -170,13 +172,13 @@ export function CardSelectionModal({
     return () => {
       controller.abort();
     };
-    // `cardSearchLanguage` in the dependency array is what satisfies
-    // planning.md's "changing the language toggle immediately re-searches
-    // the current trimmed query... without waiting for
+    // `cardSearchLanguage`/`includeTcgPocket` in the dependency array is
+    // what satisfies planning.md's "changing either toggle immediately
+    // re-searches the current trimmed query... without waiting for
     // CARD_SEARCH_DEBOUNCE_MS" - a toggle flip re-runs this effect using
     // whatever `debouncedQuery` already holds, rather than waiting for a new
     // debounce cycle.
-  }, [debouncedQuery, cardSearchLanguage, markFailed, dismiss]);
+  }, [debouncedQuery, cardSearchLanguage, includeTcgPocket, markFailed, dismiss]);
 
   // Chunks the flat results list into fixed-size rows for the virtualizer,
   // which measures whole rows rather than individual cards.
@@ -294,6 +296,28 @@ export function CardSelectionModal({
               <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
             </span>
             <span className="text-caption text-neutral-500">Japanese</span>
+          </label>
+
+          {/* Story 41's TCG Pocket inclusion toggle: same checkbox
+              convention as the language toggle above. Defaults to excluded
+              (`includeTcgPocket` starts at
+              `CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT`); checking it
+              includes Pokémon TCG Pocket cards in results. */}
+          <label
+            htmlFor="card-search-include-tcg-pocket-toggle"
+            className="flex shrink-0 items-center gap-2"
+          >
+            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+              <input
+                id="card-search-include-tcg-pocket-toggle"
+                type="checkbox"
+                checked={includeTcgPocket}
+                onChange={(event) => setIncludeTcgPocket(event.target.checked)}
+                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+              />
+              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+            </span>
+            <span className="text-caption text-neutral-500">TCG Pocket</span>
           </label>
         </div>
 

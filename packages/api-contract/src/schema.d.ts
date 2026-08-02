@@ -103,7 +103,7 @@ export interface paths {
         };
         /**
          * Search the TCGdex card catalog
-         * @description Searches TCGdex through the backend (story 11) and returns normalized catalog cards in the provider's original order, without application-level pagination or truncation. Story 41 adds the optional `language` parameter and, for `language=ja`, an automatic English-to-Japanese Pokémon species name translation applied to `query` before searching TCGdex.
+         * @description Searches TCGdex through the backend (story 11) and returns normalized catalog cards in the provider's original order, without application-level pagination or truncation. Story 41 adds the optional `language` parameter and, for `language=ja`, an automatic English-to-Japanese Pokémon species name translation applied to `query` before searching TCGdex. Story 41 also adds the optional `includeTcgPocket` parameter, which defaults to `false` (Pokémon TCG Pocket cards are excluded from results unless explicitly requested).
          */
         get: operations["searchCardCatalog"];
         put?: never;
@@ -606,6 +606,8 @@ export interface operations {
                 query: string;
                 /** @description Defaults to `en` when omitted. For `ja`, the backend first attempts to translate `query` as an English Pokémon species name (see `CardSearchResponse.translationWarning`). */
                 language?: components["schemas"]["CardSearchLanguage"];
+                /** @description Defaults to `false` when omitted. When `false`, cards belonging to a Pokémon TCG Pocket set (TCGdex's `tcgp` serie) are excluded from results; when `true`, they're included alongside all other matches. */
+                includeTcgPocket?: boolean;
             };
             header?: never;
             path?: never;
