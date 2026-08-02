@@ -1,5 +1,5 @@
 import { SLOT_HEIGHT_CM, SLOT_WIDTH_CM } from '@binder-project-planner/shared';
-import { Plus } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useMemo } from 'react';
 
 import { resolveCardImageUrl, type Card } from '@/lib/api';
@@ -21,6 +21,8 @@ export function BinderSide({
   cards,
   pendingPlacementKeys,
   onSlotClick,
+  onRemoveCard,
+  pendingCardDeletionIds,
   michiIndicatorsVisible = false,
 }: {
   side: 'left' | 'right';
@@ -42,6 +44,13 @@ export function BinderSide({
   // Opens the card-selection modal for the clicked, currently-empty slot
   // (story 11).
   onSlotClick: (row: number, column: number) => void;
+  // Permanently removes an occupied slot's card (story 13), revealed as a
+  // hover action over the card's top-right corner.
+  onRemoveCard: (cardId: string) => void;
+  // Card ids with a removal currently in flight (story 13), so that card's
+  // own actions are disabled - and no further actions permitted on it -
+  // until the request settles.
+  pendingCardDeletionIds: Set<string>;
   // Story 10's toggle: when true, a strip above the slot grid shows a
   // Michi indicator above every gap between paired columns whose slot
   // openings face each other (see `michiIndicators.ts`). Defaults to off,
@@ -127,11 +136,12 @@ export function BinderSide({
         >
           {/* Each slot (story 11) shows its assigned card's image if one
               occupies its (row, column) on this physical page, otherwise
-              the centered "+" indicating it can receive a card. Occupied
-              slots aren't clickable yet (story 12 will add
-              view/replace/remove); only empty slots open the
-              card-selection modal, and a slot with an assignment in
-              flight is disabled so it can't be clicked again mid-request. */}
+              the centered "+" indicating it can receive a card. Only empty
+              slots open the card-selection modal; a slot with an
+              assignment in flight is disabled so it can't be clicked again
+              mid-request. Occupied slots reveal a hover-triggered remove
+              action over their top-right corner (story 13); later stories
+              (14+) will add view/replace/move. */}
           {Array.from({ length: width * height }, (_, index) => {
             const row = Math.floor(index / width) + 1;
             const column = (index % width) + 1;
@@ -139,21 +149,51 @@ export function BinderSide({
             const isPending = pendingPlacementKeys.has(`${physicalPage}-${row}-${column}`);
 
             if (card) {
+              // A pending removal disables the card's own action (story
+              // 13: "permits no further actions on that pending card")
+              // without needing a whole-slot pending flag like the empty
+              // slot's own `isPending` above, since only the X action
+              // exists on an occupied slot right now.
+              const isRemovalPending = pendingCardDeletionIds.has(card.id);
               return (
+                // `group relative` lets the hover-revealed X action below
+                // sit in this slot's own top-right corner (as a sibling of
+                // the clipped image div, not a child of it), overlapping
+                // the card so it stays within the slot's clickable bounds
+                // rather than sliding out over a neighboring slot.
                 <div
                   key={index}
-                  className="flex items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800"
+                  className="group relative"
                   style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element -- the
-                      card image comes from an arbitrary backend/provider
-                      origin, so next/image's fixed-domain optimization
-                      doesn't apply here. */}
-                  <img
-                    src={resolveCardImageUrl(card.imageUrl)}
-                    alt={card.name}
-                    className="h-full w-full object-contain"
-                  />
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element -- the
+                        card image comes from an arbitrary backend/provider
+                        origin, so next/image's fixed-domain optimization
+                        doesn't apply here. */}
+                    <img
+                      src={resolveCardImageUrl(card.imageUrl)}
+                      alt={card.name}
+                      className="h-full w-full object-contain"
+                    />
+                  </div>
+                  {/* Hover-revealed card actions (styling.instructions.md):
+                      hidden and nudged up/right until hovered, then settles
+                      into place over the card's top-right corner.
+                      `pointer-events-none` while hidden keeps it from
+                      intercepting clicks meant for the card underneath. */}
+                  <div className="pointer-events-none absolute top-0 right-0 z-10 flex -translate-y-1 translate-x-1 gap-1 opacity-0 transition-all duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100">
+                    <button
+                      type="button"
+                      disabled={isRemovalPending}
+                      onClick={() => onRemoveCard(card.id)}
+                      aria-label={`Remove ${card.name} from row ${row}, column ${column}`}
+                      title="Remove card"
+                      className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <X className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
                 </div>
               );
             }

@@ -62,6 +62,8 @@ export function BinderLayoutView() {
     assignCustomCard,
     manualEntryRestore,
     clearManualEntryRestore,
+    removeCard,
+    pendingCardDeletionIds,
   } = useBinderRouteContext();
   const router = useRouter();
   const pathname = usePathname();
@@ -332,6 +334,8 @@ export function BinderLayoutView() {
                 onSlotClick={(row, column) =>
                   setSelectedSlot({ physicalPage: spread.left as number, row, column })
                 }
+                onRemoveCard={removeCard}
+                pendingCardDeletionIds={pendingCardDeletionIds}
                 michiIndicatorsVisible={michiIndicatorsVisible}
               />
             ) : (
@@ -348,6 +352,8 @@ export function BinderLayoutView() {
                 onSlotClick={(row, column) =>
                   setSelectedSlot({ physicalPage: spread.right as number, row, column })
                 }
+                onRemoveCard={removeCard}
+                pendingCardDeletionIds={pendingCardDeletionIds}
                 michiIndicatorsVisible={michiIndicatorsVisible}
               />
             ) : (

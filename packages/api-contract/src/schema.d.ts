@@ -114,12 +114,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cards/{cardId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Permanently delete a binder-owned card
+         * @description Permanently deletes the binder-owned card identified by its UUID (story 13). Deleting an already-absent card also returns `204 No Content`. Card-owned dependent records cascade-delete with the card in the same database transaction. If this removes the final card reference to its image asset, the backend also deletes the image-asset record and local file in that transaction; a failure to delete the now-orphaned local file does not roll back the committed deletion.
+         */
+        delete: operations["deleteCard"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cards/{cardId}/image": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cardId: string;
+                cardId: components["parameters"]["cardId"];
             };
             cookie?: never;
         };
@@ -313,6 +335,7 @@ export interface components {
     responses: never;
     parameters: {
         binderId: string;
+        cardId: string;
     };
     requestBodies: never;
     headers: never;
@@ -682,12 +705,41 @@ export interface operations {
             };
         };
     };
+    deleteCard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card was deleted, or no card existed with the given id. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The cardId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     getCardImage: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                cardId: string;
+                cardId: components["parameters"]["cardId"];
             };
             cookie?: never;
         };

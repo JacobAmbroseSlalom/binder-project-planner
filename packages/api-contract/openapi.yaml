@@ -313,15 +313,33 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /cards/{cardId}:
+    parameters:
+      - $ref: '#/components/parameters/cardId'
+    delete:
+      operationId: deleteCard
+      summary: Permanently delete a binder-owned card
+      description: >-
+        Permanently deletes the binder-owned card identified by its UUID
+        (story 13). Deleting an already-absent card also returns `204 No
+        Content`. Card-owned dependent records cascade-delete with the card
+        in the same database transaction. If this removes the final card
+        reference to its image asset, the backend also deletes the
+        image-asset record and local file in that transaction; a failure to
+        delete the now-orphaned local file does not roll back the committed
+        deletion.
+      responses:
+        '204':
+          description: The card was deleted, or no card existed with the given id.
+        '400':
+          description: The cardId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /cards/{cardId}/image:
     parameters:
-      - name: cardId
-        in: path
-        required: true
-        schema:
-          type: string
-          format: uuid
-          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      - $ref: '#/components/parameters/cardId'
     get:
       operationId: getCardImage
       summary: Stream a card's image
@@ -382,6 +400,14 @@ components:
   parameters:
     binderId:
       name: binderId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    cardId:
+      name: cardId
       in: path
       required: true
       schema:

@@ -10,6 +10,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import {
   createCard,
   createCustomCard,
+  deleteCard,
   getBinder,
   listBinderArt,
   listBinderCards,
@@ -117,6 +118,14 @@ interface BinderRouteContextValue {
   // in flight, so the layout tab can disable those slots against further
   // clicks until the request settles.
   pendingPlacementKeys: Set<string>;
+  // Permanently removes a card from its binder slot (story 13):
+  // optimistically removes it from context immediately, restoring it to
+  // its exact prior list index if the backend delete fails.
+  removeCard: (cardId: string) => void;
+  // The set of card ids with a removal currently in flight, so the layout
+  // tab can disable that card's own actions (permitting no further actions
+  // on it) until the request settles.
+  pendingCardDeletionIds: Set<string>;
   // Story 41's card-selection modal language toggle: ephemeral React state
   // that lives above the modal so it survives the modal closing and
   // reopening within the same binder visit, but resets (back to
@@ -192,6 +201,9 @@ export function BinderRouteProvider({
   // comment above) - `null` whenever there's no failed custom-card
   // submission awaiting correction.
   const [manualEntryRestore, setManualEntryRestore] = useState<ManualEntryRestore | null>(null);
+  // Story 13's in-flight card removals, by card id - lets the layout tab
+  // disable a pending card's own actions until its delete request settles.
+  const [pendingCardDeletionIds, setPendingCardDeletionIds] = useState<Set<string>>(new Set());
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -395,6 +407,46 @@ export function BinderRouteProvider({
     setManualEntryRestore(null);
   }, []);
 
+  // Permanently removes a card from a binder slot (story 13). Sending X
+  // immediately: no confirmation dialog. Captures the card's current list
+  // index and full record before removing it so a failed delete restores
+  // it to the exact same spot rather than appending it back at the end -
+  // this list itself is what already encodes each card's slot, so there's
+  // no separate placement state to roll back alongside it.
+  const removeCard = useCallback(
+    (cardId: string) => {
+      const index = cards.findIndex((card) => card.id === cardId);
+      if (index === -1) return;
+      const removedCard = cards[index];
+
+      setCards((previous) => previous.filter((card) => card.id !== cardId));
+      setPendingCardDeletionIds((previous) => new Set(previous).add(cardId));
+
+      const toast = start(`remove-card-${cardId}`);
+
+      deleteCard(cardId)
+        .then(() => {
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setCards((previous) => {
+            const restored = [...previous];
+            restored.splice(index, 0, removedCard);
+            return restored;
+          });
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingCardDeletionIds((previous) => {
+            const next = new Set(previous);
+            next.delete(cardId);
+            return next;
+          });
+        });
+    },
+    [cards, start],
+  );
+
   // Only meaningful once `status === 'success'`; computed unconditionally
   // (rather than after an early return) so hook call order stays stable
   // across renders.
@@ -412,6 +464,8 @@ export function BinderRouteProvider({
       assignCustomCard,
       manualEntryRestore,
       clearManualEntryRestore,
+      removeCard,
+      pendingCardDeletionIds,
       cardSearchLanguage,
       setCardSearchLanguage,
       includeTcgPocket,
@@ -428,6 +482,8 @@ export function BinderRouteProvider({
     assignCustomCard,
     manualEntryRestore,
     clearManualEntryRestore,
+    removeCard,
+    pendingCardDeletionIds,
     cardSearchLanguage,
     includeTcgPocket,
   ]);

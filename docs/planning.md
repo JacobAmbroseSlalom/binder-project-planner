@@ -516,11 +516,11 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 13. Remove a card from a binder slot
 
-**Status:** Not started
+**Status:** Done (2026-08-01 23:05 EDT)
 
 #### Acceptance criteria
 
-- Hovering over a card displays card actions to the right of the card.
+- Hovering over a card displays card actions over the card's top-right corner.
 - The first action is an X button.
 - Selecting the X removes the card from its binder slot on the page.
 - Selecting the X deletes the binder-owned card record from the database through the backend.

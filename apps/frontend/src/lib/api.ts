@@ -211,6 +211,21 @@ export async function createCustomCard(
   return data;
 }
 
+// Permanently deletes a binder-owned card through `DELETE /cards/{cardId}`
+// (story 13). Deleting an already-absent card also succeeds (`204 No
+// Content`), matching the backend's idempotent-delete contract; throws the
+// Problem Details body on any other failure so the caller can roll back its
+// optimistic removal and surface the error via `toProblemDetailsInfo`.
+export async function deleteCard(cardId: string): Promise<void> {
+  const { error } = await apiClient.DELETE('/cards/{cardId}', {
+    params: { path: { cardId } },
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 // Resolves a `Card.imageUrl` into a full URL for an `<img>` tag (story 11).
 // The backend's persisted representation returns a backend-relative path
 // (`/cards/{cardId}/image`), which needs the backend origin prefixed; the
