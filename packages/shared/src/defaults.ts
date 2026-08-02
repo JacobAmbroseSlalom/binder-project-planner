@@ -65,3 +65,13 @@ export const TCGDEX_REQUEST_TIMEOUT_MS = 30_000;
 // image download (network error, timeout, 429, or 5xx) when the provider
 // doesn't supply a valid `Retry-After` header.
 export const TCGDEX_RETRY_DELAY_MS = 500;
+
+// Story 41: "Filter card search by TCG Pocket inclusion and language". The
+// card-selection modal's language toggle defaults to English; switching it
+// to Japanese searches TCGdex's `ja` catalog instead.
+export const CARD_SEARCH_LANGUAGE_DEFAULT = 'en';
+// Upstream PokéAPI species-name lookups (used to translate an English
+// Pokémon species name to Japanese before a `language=ja` search) are
+// aborted after this long; a timeout is treated as a translation miss
+// rather than a search failure.
+export const POKEAPI_REQUEST_TIMEOUT_MS = 10_000;

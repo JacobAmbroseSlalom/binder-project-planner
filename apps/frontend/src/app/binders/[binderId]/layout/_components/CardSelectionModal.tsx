@@ -5,7 +5,7 @@ import {
   CARD_SEARCH_MIN_QUERY_LENGTH,
 } from '@binder-project-planner/shared';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { X } from 'lucide-react';
+import { Check, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { resolveCardImageUrl, searchCardCatalog, type TcgDexCatalogCard } from '@/lib/api';
@@ -15,6 +15,8 @@ import {
   useDelayedLoading,
   useToastContext,
 } from '@/shared/feedback';
+
+import { useBinderRouteContext } from '../../BinderRouteContext';
 
 // The number of results per virtualized row. Not a shared/application
 // default (per coding-conventions.instructions.md, `defaults.ts` only holds
@@ -65,6 +67,10 @@ export function CardSelectionModal({
   onSelectCard: (card: TcgDexCatalogCard) => void;
 }) {
   const { markFailed, dismiss } = useToastContext();
+  // Story 41's language toggle lives in the route context (rather than as
+  // local state) so it survives this modal's own mount/unmount cycle within
+  // the same binder visit.
+  const { cardSearchLanguage, setCardSearchLanguage } = useBinderRouteContext();
 
   // Both seeded from the remembered last query (rather than empty) so a
   // reopened modal shows and re-searches the previous query right away
@@ -73,6 +79,11 @@ export function CardSelectionModal({
   const [debouncedQuery, setDebouncedQuery] = useState(lastSearchQuery);
   const [results, setResults] = useState<TcgDexCatalogCard[]>([]);
   const [isSearching, setIsSearching] = useState(false);
+  // Set only when a `language=ja` search's PokéAPI translation attempt
+  // missed and TCGdex was searched using the original entered text instead
+  // (story 41) - rendered as a nonblocking inline warning, never the shared
+  // failed toast.
+  const [translationWarning, setTranslationWarning] = useState(false);
   // Tracks whether the *current* qualifying query has a completed,
   // successful search behind it - distinct from `results.length === 0`,
   // which is also true before any search has ever run. Gates the no-results
@@ -131,6 +142,7 @@ export function CardSelectionModal({
       setResults([]);
       setIsSearching(false);
       setHasCompletedSearch(false);
+      setTranslationWarning(false);
       return;
     }
 
@@ -141,9 +153,10 @@ export function CardSelectionModal({
     // before `showLoading` itself flips true.
     setHasCompletedSearch(false);
 
-    searchCardCatalog(trimmed, controller.signal)
-      .then((catalogCards) => {
+    searchCardCatalog(trimmed, cardSearchLanguage, controller.signal)
+      .then(({ results: catalogCards, translationWarning: missedTranslation }) => {
         setResults(catalogCards);
+        setTranslationWarning(missedTranslation);
         setIsSearching(false);
         setHasCompletedSearch(true);
         dismiss(CARD_SEARCH_TOAST_ID);
@@ -157,7 +170,13 @@ export function CardSelectionModal({
     return () => {
       controller.abort();
     };
-  }, [debouncedQuery, markFailed, dismiss]);
+    // `cardSearchLanguage` in the dependency array is what satisfies
+    // planning.md's "changing the language toggle immediately re-searches
+    // the current trimmed query... without waiting for
+    // CARD_SEARCH_DEBOUNCE_MS" - a toggle flip re-runs this effect using
+    // whatever `debouncedQuery` already holds, rather than waiting for a new
+    // debounce cycle.
+  }, [debouncedQuery, cardSearchLanguage, markFailed, dismiss]);
 
   // Chunks the flat results list into fixed-size rows for the virtualizer,
   // which measures whole rows rather than individual cards.
@@ -247,15 +266,47 @@ export function CardSelectionModal({
           </button>
         </div>
 
-        <input
-          ref={searchInputRef}
-          type="text"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search for a card by name…"
-          aria-label="Search for a card by name"
-          className="rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
-        />
+        <div className="flex items-center gap-4">
+          <input
+            ref={searchInputRef}
+            type="text"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search for a card by name…"
+            aria-label="Search for a card by name"
+            className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
+          />
+
+          {/* Story 41's language toggle: matches the Michi-indicator
+              checkbox convention (styling.instructions.md's "Forms &
+              inputs" section). Defaults to English (`cardSearchLanguage`
+              starts at `CARD_SEARCH_LANGUAGE_DEFAULT`); checking it
+              switches to searching TCGdex's Japanese catalog. */}
+          <label htmlFor="card-search-language-toggle" className="flex shrink-0 items-center gap-2">
+            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+              <input
+                id="card-search-language-toggle"
+                type="checkbox"
+                checked={cardSearchLanguage === 'ja'}
+                onChange={(event) => setCardSearchLanguage(event.target.checked ? 'ja' : 'en')}
+                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+              />
+              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+            </span>
+            <span className="text-caption text-neutral-500">Japanese</span>
+          </label>
+        </div>
+
+        {/* Nonblocking translation-miss warning (story 41): rendered inline
+            per styling.instructions.md's "Non-blocking warnings" guidance,
+            never as a toast, and never in place of the results/loading/
+            empty-state content below. */}
+        {translationWarning && (
+          <p className="text-caption text-warning">
+            No Japanese translation was found for “{debouncedQuery.trim()}”; showing results for the
+            entered text instead.
+          </p>
+        )}
 
         <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
           {showLoading ? (

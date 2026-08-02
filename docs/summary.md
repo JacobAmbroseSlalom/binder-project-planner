@@ -11,3 +11,6 @@ had versioning issues, copilot was able to quickly resolve them and find alterna
 
 Made styling specifications with copilot walking me through what would be helpful, creating a styling-guide page for visually showing options and final choices.
 Helped me learn tailwind
+
+Very useful for the external api tcg Dex
+Tried to assume I would type a search in japanese

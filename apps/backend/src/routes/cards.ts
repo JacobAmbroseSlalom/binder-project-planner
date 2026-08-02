@@ -18,11 +18,13 @@ import { Router } from 'express';
 import type { DatabaseConnection } from '../database/client.js';
 import { binders, cardImageAssets, cards } from '../database/schema.js';
 import { detectImageFormat } from '../images/imageFormat.js';
+import { translateEnglishNameToJapanese } from '../integrations/pokeapi.js';
 import {
   downloadCardImage,
   searchCardCatalog,
   TcgDexAbortedError,
   TcgDexProviderError,
+  type CardSearchLanguage,
 } from '../integrations/tcgdex.js';
 
 // The validated, OpenAPI-typed shape of a TCGdex create-card request body
@@ -233,14 +235,39 @@ export function createCardsRouter(
       return;
     }
 
+    // Defaults to English when omitted; the OpenAPI validator middleware
+    // already rejects any value other than `en`/`ja` before this handler
+    // runs, per the shared `CardSearchLanguage` enum (story 41).
+    const language: CardSearchLanguage = request.query.language === 'ja' ? 'ja' : 'en';
+
     // Propagates a disconnected/aborted client request to the upstream
     // TCGdex request (planning.md).
     const controller = new AbortController();
     request.on('close', () => controller.abort());
 
     try {
-      const results = await searchCardCatalog(trimmedQuery, controller.signal);
-      response.status(200).json(results);
+      // A `ja` search first attempts to translate the trimmed query as an
+      // English Pokémon species name into its Japanese equivalent
+      // (planning.md story 41). A translation miss - unknown species name,
+      // free text, or a PokéAPI failure/timeout - doesn't fail the search:
+      // TCGdex is still searched using the original entered query, and the
+      // response's nonblocking `translationWarning` flag tells the client.
+      let searchQuery = trimmedQuery;
+      let translationWarning = false;
+      if (language === 'ja') {
+        const translatedName = await translateEnglishNameToJapanese(
+          trimmedQuery,
+          controller.signal,
+        );
+        if (translatedName) {
+          searchQuery = translatedName;
+        } else {
+          translationWarning = true;
+        }
+      }
+
+      const results = await searchCardCatalog(searchQuery, language, controller.signal);
+      response.status(200).json({ results, translationWarning });
     } catch (error) {
       if (error instanceof TcgDexAbortedError) return;
       if (error instanceof TcgDexProviderError) {

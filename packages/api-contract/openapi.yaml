@@ -239,22 +239,32 @@ paths:
       description: >-
         Searches TCGdex through the backend (story 11) and returns
         normalized catalog cards in the provider's original order, without
-        application-level pagination or truncation.
+        application-level pagination or truncation. Story 41 adds the
+        optional `language` parameter and, for `language=ja`, an automatic
+        English-to-Japanese Pokémon species name translation applied to
+        `query` before searching TCGdex.
       parameters:
         - name: query
           in: query
           required: true
           schema:
             type: string
+        - name: language
+          in: query
+          required: false
+          description: >-
+            Defaults to `en` when omitted. For `ja`, the backend first
+            attempts to translate `query` as an English Pokémon species name
+            (see `CardSearchResponse.translationWarning`).
+          schema:
+            $ref: '#/components/schemas/CardSearchLanguage'
       responses:
         '200':
           description: The normalized TCGdex search results.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/TcgDexCatalogCard'
+                $ref: '#/components/schemas/CardSearchResponse'
         '400':
           description: >-
             The query is missing, or its trimmed length is below the
@@ -571,6 +581,36 @@ components:
           type: string
           format: uri
           description: The provider's image location; not the frontend-facing image URL.
+    CardSearchLanguage:
+      type: string
+      description: Which TCGdex-language dataset a card-catalog search targets (story 41).
+      enum:
+        - en
+        - ja
+    CardSearchResponse:
+      type: object
+      additionalProperties: false
+      description: >-
+        `GET /card-catalog/search`'s response body (story 41). Wraps the
+        normalized results with a nonblocking translation-warning flag
+        instead of returning a bare array, so an unsuccessful
+        English-to-Japanese translation attempt can be surfaced without an
+        error response.
+      required:
+        - results
+        - translationWarning
+      properties:
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TcgDexCatalogCard'
+        translationWarning:
+          type: boolean
+          description: >-
+            True only when `language=ja` and `query` looked like an English
+            Pokémon species name attempt but no matching translation was
+            found, so TCGdex was searched using the original entered query
+            instead.
     CreateCardRequest:
       type: object
       additionalProperties: false

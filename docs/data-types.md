@@ -208,7 +208,15 @@ card creation.
 The backend preserves the provider's result ordering and returns all matches without
 application-level pagination or truncation.
 
-### CreateCardRequest
+### CardSearchResponse
+
+`GET /card-catalog/search`'s response body (story 41): wraps the normalized results with a
+nonblocking translation-warning flag instead of returning a bare array.
+
+| Property             | Type                  | Notes                                                                                                                                |
+| -------------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `results`            | `TcgDexCatalogCard[]` | The normalized search results.                                                                                                       |
+| `translationWarning` | boolean               | `true` only when `language=ja` and no PokéAPI translation was found for the query, so the original entered query was searched as-is. |
 
 `POST /binders/{binderId}/cards` supports two variants.
 

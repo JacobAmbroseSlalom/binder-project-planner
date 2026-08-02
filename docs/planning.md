@@ -433,13 +433,15 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 41. Filter card search by TCG Pocket inclusion and language
 
-**Status:** Not started
+**Status:** In progress (language toggle and Japanese translation implemented; TCG Pocket toggle not started)
 
 #### Acceptance criteria
 
 - The card-selection modal's search view has two additional toggles alongside the search bar.
 - The first toggle includes or excludes Pokémon TCG Pocket cards from search results and defaults to off (excluded).
 - The second toggle selects English or Japanese card data and defaults to English.
+- When the language toggle is set to Japanese, an entered English query is automatically translated to its Japanese Pokémon species name using PokéAPI before searching TCGdex.
+- If the query does not match a known English Pokémon species name, the original query is searched as entered and the modal displays a nonblocking warning stating that no Japanese translation was found for the query.
 - Changing either toggle updates the displayed results to reflect the new selection.
 - When updating a toggle requires a new backend search, the shared loading component is used, previous results are not presented as results for the new search while it is loading, and a search failure removes the loading component and displays the provided error using the shared failed toast.
 - Search results reflect only cards matching the current toggle selections.
@@ -453,6 +455,13 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - `GET /card-catalog/search` accepts optional `includeTcgPocket` boolean and `language` (`en` or `ja`) query parameters; omitting either parameter behaves as `includeTcgPocket=false` and `language=en`.
 - The default toggle values are exported from the canonical shared `defaults.ts` as `CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT` (`false`) and `CARD_SEARCH_LANGUAGE_DEFAULT` (`"en"`).
 - Changing the language toggle immediately re-searches the current trimmed query when it already meets `CARD_SEARCH_MIN_QUERY_LENGTH`, without waiting for `CARD_SEARCH_DEBOUNCE_MS`, since a language change requires different provider data; below the minimum length, no search runs and existing below-minimum behavior is unchanged.
+- Automatic translation applies only to `language=ja` searches and only translates the trimmed query as a candidate English Pokémon species name; it does not translate set names or other free text.
+- The backend looks up the candidate name against PokéAPI's species data using a case-insensitive exact match and, when found, searches TCGdex using the returned Japanese name instead of the original query.
+- The backend caches successful PokéAPI name-translation lookups in memory for the life of the process; a cache miss triggers a new PokéAPI request rather than being retained as a negative cache entry.
+- Upstream PokéAPI lookups time out after `POKEAPI_REQUEST_TIMEOUT_MS`, which defaults to `10000` in the canonical shared defaults module.
+- A PokéAPI lookup miss (`404`), timeout, or other request failure does not block or fail the search: TCGdex is still searched using the original entered query, and the search response includes a nonblocking translation-warning flag rather than a Problem Details error.
+- The frontend displays the translation warning alongside successfully loaded results without invoking the shared failed toast or replacing the loading or empty-results behavior.
+- `language=ja` searches match only against card name, not set name; the set-name search TCGdex issues for `language=en` is skipped entirely for Japanese (out of scope per product direction).
 - TBD (confirm during development): Prefer filtering the TCG Pocket toggle entirely on the frontend from data already fetched for the current query and language, without an additional backend call, if TCGdex's response shape makes that possible (e.g. if Pocket-card membership can be determined from fields already present in a single combined search response). If that is not feasible and Pocket-card data can only be obtained through a distinctly separate request, fall back to re-searching the backend the same way the language toggle does.
 - A toggle change that triggers a backend search aborts any in-flight search before starting the new one, reusing the existing `AbortController` cancellation behavior; only the latest qualifying query-and-toggle combination may publish results.
 - The backend search-response cache key (`CARD_SEARCH_CACHE_MAX_ENTRIES`, `CARD_SEARCH_CACHE_TTL_MS`) incorporates the trimmed, case-normalized query together with any toggle values that affect the backend request, so cached results are never returned for a different toggle combination.

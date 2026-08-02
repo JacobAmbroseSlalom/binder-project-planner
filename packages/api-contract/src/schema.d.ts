@@ -103,7 +103,7 @@ export interface paths {
         };
         /**
          * Search the TCGdex card catalog
-         * @description Searches TCGdex through the backend (story 11) and returns normalized catalog cards in the provider's original order, without application-level pagination or truncation.
+         * @description Searches TCGdex through the backend (story 11) and returns normalized catalog cards in the provider's original order, without application-level pagination or truncation. Story 41 adds the optional `language` parameter and, for `language=ja`, an automatic English-to-Japanese Pokémon species name translation applied to `query` before searching TCGdex.
          */
         get: operations["searchCardCatalog"];
         put?: never;
@@ -241,6 +241,17 @@ export interface components {
              * @description The provider's image location; not the frontend-facing image URL.
              */
             imageUrl: string;
+        };
+        /**
+         * @description Which TCGdex-language dataset a card-catalog search targets (story 41).
+         * @enum {string}
+         */
+        CardSearchLanguage: "en" | "ja";
+        /** @description `GET /card-catalog/search`'s response body (story 41). Wraps the normalized results with a nonblocking translation-warning flag instead of returning a bare array, so an unsuccessful English-to-Japanese translation attempt can be surfaced without an error response. */
+        CardSearchResponse: {
+            results: components["schemas"]["TcgDexCatalogCard"][];
+            /** @description True only when `language=ja` and `query` looked like an English Pokémon species name attempt but no matching translation was found, so TCGdex was searched using the original entered query instead. */
+            translationWarning: boolean;
         };
         /** @description Creates a TCGdex-sourced binder card (story 11). The backend does not refetch card details before saving; it assigns `source` server-side and downloads the image from `imageUrl` itself. */
         CreateCardRequest: {
@@ -593,6 +604,8 @@ export interface operations {
         parameters: {
             query: {
                 query: string;
+                /** @description Defaults to `en` when omitted. For `ja`, the backend first attempts to translate `query` as an English Pokémon species name (see `CardSearchResponse.translationWarning`). */
+                language?: components["schemas"]["CardSearchLanguage"];
             };
             header?: never;
             path?: never;
@@ -606,7 +619,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TcgDexCatalogCard"][];
+                    "application/json": components["schemas"]["CardSearchResponse"];
                 };
             };
             /** @description The query is missing, or its trimmed length is below the configured minimum. */

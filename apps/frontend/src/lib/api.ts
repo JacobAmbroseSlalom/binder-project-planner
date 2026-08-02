@@ -37,6 +37,8 @@ export type UpdateBinderRequest = components['schemas']['UpdateBinderRequest'];
 export type Card = components['schemas']['Card'];
 export type TcgDexCatalogCard = components['schemas']['TcgDexCatalogCard'];
 export type CreateCardRequest = components['schemas']['CreateCardRequest'];
+export type CardSearchLanguage = components['schemas']['CardSearchLanguage'];
+export type CardSearchResponse = components['schemas']['CardSearchResponse'];
 
 // Fetches the complete binder-summary collection through `GET /binders`
 // (story 5). The backend already returns it in the documented sort order
@@ -120,13 +122,16 @@ export async function listBinderCards(binderId: string, signal?: AbortSignal): P
 // Searches the TCGdex card catalog through `GET /card-catalog/search`
 // (story 11), used by the card-selection modal's debounced search box.
 // Accepts an `AbortSignal` so the modal can cancel a stale in-flight search
-// as soon as a newer query is typed.
+// as soon as a newer query is typed. `language` (story 41) defaults to
+// English on the backend when omitted; the response's `translationWarning`
+// flag is only ever meaningful for a `ja` search.
 export async function searchCardCatalog(
   query: string,
+  language?: CardSearchLanguage,
   signal?: AbortSignal,
-): Promise<TcgDexCatalogCard[]> {
+): Promise<CardSearchResponse> {
   const { data, error } = await apiClient.GET('/card-catalog/search', {
-    params: { query: { query } },
+    params: { query: { query, language } },
     signal,
   });
 

@@ -1,5 +1,6 @@
 'use client';
 
+import { CARD_SEARCH_LANGUAGE_DEFAULT } from '@binder-project-planner/shared';
 import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
@@ -10,6 +11,7 @@ import {
   listBinderCards,
   type Binder,
   type Card,
+  type CardSearchLanguage,
   type CreateCardRequest,
 } from '@/lib/api';
 import {
@@ -72,6 +74,14 @@ interface BinderRouteContextValue {
   // in flight, so the layout tab can disable those slots against further
   // clicks until the request settles.
   pendingPlacementKeys: Set<string>;
+  // Story 41's card-selection modal language toggle: ephemeral React state
+  // that lives above the modal so it survives the modal closing and
+  // reopening within the same binder visit, but resets (back to
+  // `CARD_SEARCH_LANGUAGE_DEFAULT`) whenever this route context itself
+  // remounts (a fresh binder visit or a page reload) - it's never persisted
+  // to the backend or browser storage.
+  cardSearchLanguage: CardSearchLanguage;
+  setCardSearchLanguage: (language: CardSearchLanguage) => void;
 }
 
 const BinderRouteContext = createContext<BinderRouteContextValue | null>(null);
@@ -120,6 +130,11 @@ export function BinderRouteProvider({
   // hasn't been visited yet during this route mount, so it should still
   // default to physical page 1 without adding `?page=1` to the URL.
   const [layoutFocalPage, setLayoutFocalPage] = useState<number | null>(null);
+  // Story 41's card-selection modal language toggle - ephemeral, scoped to
+  // this route mount (see the context value's own doc comment above).
+  const [cardSearchLanguage, setCardSearchLanguage] = useState<CardSearchLanguage>(
+    CARD_SEARCH_LANGUAGE_DEFAULT,
+  );
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -259,8 +274,19 @@ export function BinderRouteProvider({
       setLayoutFocalPage,
       assignCard,
       pendingPlacementKeys,
+      cardSearchLanguage,
+      setCardSearchLanguage,
     };
-  }, [binder, cards, art, updateBinder, layoutFocalPage, assignCard, pendingPlacementKeys]);
+  }, [
+    binder,
+    cards,
+    art,
+    updateBinder,
+    layoutFocalPage,
+    assignCard,
+    pendingPlacementKeys,
+    cardSearchLanguage,
+  ]);
 
   if (status === 'loading') {
     return showLoading ? <LoadingIndicator label="Loading binder…" size="10" /> : null;

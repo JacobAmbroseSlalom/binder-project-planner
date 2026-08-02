@@ -49,11 +49,23 @@ export class TcgDexAbortedError extends Error {
 // TCGdex's actual REST API host (`api.tcgdex.net`), not the `tcgdex.dev`
 // documentation site - that host serves HTML, not JSON, and was the cause
 // of a production "Unexpected token '<' ... is not valid JSON" failure.
-const CARD_SEARCH_ENDPOINT = 'https://api.tcgdex.net/v2/en/cards';
+// TCGdex namespaces its entire catalog by a `{lang}` path segment (story 41
+// confirmed live: `/v2/ja/cards` returns cards with Japanese names/sets,
+// distinct from `/v2/en/cards`), so both endpoints are functions of the
+// requested `CardSearchLanguage` rather than fixed `en` URLs.
+export type CardSearchLanguage = 'en' | 'ja';
+
+function getCardSearchEndpoint(language: CardSearchLanguage): string {
+  return `https://api.tcgdex.net/v2/${language}/cards`;
+}
+
 // TCGdex's bulk sets listing, used to resolve a search result's set name
 // (see `getSetNamesById` below) since the brief card-search endpoint below
-// never includes a `set` object per card.
-const SETS_ENDPOINT = 'https://api.tcgdex.net/v2/en/sets';
+// never includes a `set` object per card. Also language-namespaced, since a
+// `ja` search result's `setName` must be the Japanese set name, not English.
+function getSetsEndpoint(language: CardSearchLanguage): string {
+  return `https://api.tcgdex.net/v2/${language}/sets`;
+}
 
 // Only image bytes fetched from these hosts are ever downloaded and
 // installed locally (planning.md: "accepts image downloads only from
@@ -118,16 +130,18 @@ function normalizeCard(
 
 // Memoizes the one-time (per process) fetch of TCGdex's complete sets list
 // into a `providerSetId -> setName` map, since sets change rarely and this
-// avoids a per-search-result provider request. Not tied to any individual
-// search's `AbortSignal` - concurrent searches share this fetch, so one
-// search's cancellation must never abort it for the others. Cleared on
-// failure so a later search retries the fetch instead of caching a
-// permanently-empty map.
-let setNamesByIdPromise: Promise<Map<string, string>> | null = null;
+// avoids a per-search-result provider request. Keyed per language (story
+// 41) since `en` and `ja` sets have entirely different id spaces and names.
+// Not tied to any individual search's `AbortSignal` - concurrent searches
+// share this fetch, so one search's cancellation must never abort it for
+// the others. Cleared on failure so a later search retries the fetch
+// instead of caching a permanently-empty map.
+const setNamesByIdPromises = new Map<CardSearchLanguage, Promise<Map<string, string>>>();
 
-function getSetNamesById(): Promise<Map<string, string>> {
-  if (!setNamesByIdPromise) {
-    setNamesByIdPromise = fetchWithRetry(SETS_ENDPOINT, undefined)
+function getSetNamesById(language: CardSearchLanguage): Promise<Map<string, string>> {
+  let promise = setNamesByIdPromises.get(language);
+  if (!promise) {
+    promise = fetchWithRetry(getSetsEndpoint(language), undefined)
       .then((response) => response.json())
       .then((body: unknown) => {
         const map = new Map<string, string>();
@@ -143,11 +157,12 @@ function getSetNamesById(): Promise<Map<string, string>> {
         return map;
       })
       .catch((error: unknown) => {
-        setNamesByIdPromise = null;
+        setNamesByIdPromises.delete(language);
         throw error;
       });
+    setNamesByIdPromises.set(language, promise);
   }
-  return setNamesByIdPromise;
+  return promise;
 }
 
 // A parsed `Retry-After` header value in milliseconds, or `null` if the
@@ -295,35 +310,43 @@ function setCached(key: string, results: TcgDexCatalogCard[]): void {
 }
 
 // Searches TCGdex for `trimmedQuery`, using the in-memory LRU/TTL cache
-// keyed by the trimmed, case-normalized query (planning.md: cache cleared
-// on backend restart, which is inherent to this in-process `Map`).
+// keyed by the trimmed, case-normalized query together with the requested
+// language (planning.md story 41: "cached results are never returned for a
+// different toggle combination"; cache cleared on backend restart, which
+// is inherent to this in-process `Map`).
 export async function searchCardCatalog(
   trimmedQuery: string,
+  language: CardSearchLanguage,
   signal?: AbortSignal,
 ): Promise<TcgDexCatalogCard[]> {
-  const cacheKey = trimmedQuery.toLowerCase();
+  const cacheKey = `${language}:${trimmedQuery.toLowerCase()}`;
   const cached = getCached(cacheKey);
   if (cached) return cached;
 
   // TCGdex's `name` and `set.name` filters only ever combine as AND, never
   // OR (confirmed live: `name=umbreon&set.name=Generations` returns no
   // results even though Umbreon exists in other sets) - there is no single
-  // query parameter that matches either field. So the query is matched
-  // against both independently, and the two result sets are merged below.
-  const nameUrl = `${CARD_SEARCH_ENDPOINT}?name=${encodeURIComponent(trimmedQuery)}`;
-  const setNameUrl = `${CARD_SEARCH_ENDPOINT}?set.name=${encodeURIComponent(trimmedQuery)}`;
-  // Runs alongside the card searches rather than after them - the sets
+  // query parameter that matches either field. So `en` searches match the
+  // query against both independently and merge the two result sets below.
+  // `ja` searches skip the `set.name` query entirely (story 41): the query
+  // is already, in practice, a PokéAPI-translated Pokémon species name
+  // rather than free text, so a set-name match was never a meaningful
+  // signal there, and set-name search in Japanese is out of scope.
+  const searchEndpoint = getCardSearchEndpoint(language);
+  const nameUrl = `${searchEndpoint}?name=${encodeURIComponent(trimmedQuery)}`;
+  const setNameUrl = `${searchEndpoint}?set.name=${encodeURIComponent(trimmedQuery)}`;
+  // Runs alongside the card search(es) rather than after them - the sets
   // lookup is independent of the search query. A failure resolving set
   // names degrades to an empty map (every result's `setName` falls back to
   // `null`) rather than failing the whole search over a secondary,
   // rarely-changing resource.
   const [nameResponse, setNameResponse, setNamesById] = await Promise.all([
     fetchWithRetry(nameUrl, signal),
-    fetchWithRetry(setNameUrl, signal),
-    getSetNamesById().catch(() => new Map<string, string>()),
+    language === 'en' ? fetchWithRetry(setNameUrl, signal) : Promise.resolve(null),
+    getSetNamesById(language).catch(() => new Map<string, string>()),
   ]);
   const nameBody: unknown = await nameResponse.json();
-  const setNameBody: unknown = await setNameResponse.json();
+  const setNameBody: unknown = setNameResponse ? await setNameResponse.json() : [];
 
   if (!Array.isArray(nameBody) || !Array.isArray(setNameBody)) {
     throw new TcgDexProviderError('TCGdex returned an unexpected search response shape.');
@@ -332,7 +355,8 @@ export async function searchCardCatalog(
   // Merges the two independent queries: card-name matches first (in
   // TCGdex's own order), then set-name matches not already included,
   // deduplicated by the raw provider card id so a card whose name and set
-  // both match the query isn't listed twice.
+  // both match the query isn't listed twice. `setNameBody` is always empty
+  // for `ja` (see above), so this is effectively name-only there.
   const seenIds = new Set<string>();
   const combined: unknown[] = [];
   for (const raw of [...nameBody, ...setNameBody]) {

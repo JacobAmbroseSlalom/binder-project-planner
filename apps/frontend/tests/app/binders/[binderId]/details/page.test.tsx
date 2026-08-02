@@ -41,6 +41,8 @@ function renderPage(updateBinderContext: jest.Mock = jest.fn()) {
     setLayoutFocalPage: jest.fn(),
     assignCard: jest.fn(),
     pendingPlacementKeys: new Set(),
+    cardSearchLanguage: 'en',
+    setCardSearchLanguage: jest.fn(),
   });
 
   return render(
