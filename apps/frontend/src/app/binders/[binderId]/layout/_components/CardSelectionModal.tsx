@@ -51,6 +51,12 @@ const CARD_SEARCH_TOAST_ID = 'card-catalog-search';
 // acceptable scope for "remember the last search".
 let lastSearchQuery = '';
 
+// Remembers the results list's scroll offset alongside `lastSearchQuery`
+// above, for the same reason (the modal fully unmounts on close, so
+// component state can't survive a reopen) - lets a reopened modal restore
+// the user's previous scroll position instead of resetting to the top.
+let lastScrollOffset = 0;
+
 // The selectors `focusableSelector` below considers tabbable, for the
 // modal's own focus trap (styling.instructions.md requires interactive
 // components to be fully custom-built, including dialog focus trapping).
@@ -168,6 +174,16 @@ export function CardSelectionModal({
   // button that opened it), restored on unmount so keyboard/screen-reader
   // users land back where they started.
   const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
+  // Guards the scroll-restore effect below so it only ever applies once per
+  // mount, rather than re-snapping the list back on every later results
+  // update.
+  const hasRestoredScrollRef = useRef(false);
+  // Captured once at mount: the scroll-restore effect below only restores
+  // `lastScrollOffset` while the query is still this remembered initial
+  // one. If the user starts a new search before the old results repopulate,
+  // restoring the old offset against the new (unrelated) results would be
+  // confusing, so restoring is skipped instead.
+  const initialQueryRef = useRef(query);
 
   // Focuses the search input on mount and restores focus to the triggering
   // element on unmount (close or selection), per the story's dialog
@@ -260,6 +276,24 @@ export function CardSelectionModal({
     estimateSize: () => ESTIMATED_RESULT_ROW_HEIGHT_PX,
     overscan: 3,
   });
+
+  // Restores the previous scroll offset once the reopened modal's results
+  // have repopulated - restoring before any rows exist would just clamp
+  // back to 0, so this waits for `rows` to actually contain something, then
+  // only ever fires once per mount (see `hasRestoredScrollRef` above).
+  useEffect(() => {
+    if (hasRestoredScrollRef.current) return;
+    if (query !== initialQueryRef.current) {
+      // The user has already changed the search since this modal opened;
+      // give up on restoring rather than applying a stale offset later.
+      hasRestoredScrollRef.current = true;
+      return;
+    }
+    if (rows.length === 0) return;
+
+    hasRestoredScrollRef.current = true;
+    scrollContainerRef.current?.scrollTo({ top: lastScrollOffset });
+  }, [rows.length, query]);
 
   // Escape closes the modal; Tab/Shift+Tab is trapped within the dialog so
   // focus never escapes to the page behind the backdrop.
@@ -463,7 +497,13 @@ export function CardSelectionModal({
               </p>
             )}
 
-            <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
+            <div
+              ref={scrollContainerRef}
+              onScroll={(event) => {
+                lastScrollOffset = event.currentTarget.scrollTop;
+              }}
+              className="min-h-0 flex-1 overflow-y-auto"
+            >
               {showLoading ? (
                 <LoadingIndicator label="Searching for cards…" size="8" />
               ) : hasCompletedSearch && results.length === 0 ? (
