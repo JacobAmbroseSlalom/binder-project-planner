@@ -316,6 +316,63 @@ paths:
   /cards/{cardId}:
     parameters:
       - $ref: '#/components/parameters/cardId'
+    patch:
+      operationId: moveCards
+      summary: Move or swap one or two cards' binder positions
+      description: >-
+        Applies a simple move (one update) or a swap (two updates) of card
+        placement coordinates in one database transaction (story 14). The
+        path `cardId` must identify the dragged card included among
+        `updates`. Each update supplies the affected card's currently
+        expected placement plus its final placement; the backend compares
+        every expected placement against the persisted row before applying
+        any change, so a stale client never silently overwrites a position
+        another request already changed. A destination occupied by a card
+        not included in `updates` is rejected as a conflict rather than
+        applied. Nullable placement triples are accepted (story 15's future
+        unplaced-cards section) alongside populated ones.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveCardsRequest'
+      responses:
+        '200':
+          description: >-
+            The complete persisted representation of every card updated by
+            the move or swap.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+        '400':
+          description: >-
+            The cardId path parameter is not a well-formed UUID, the path
+            cardId isn't included in `updates`, a placement is malformed or
+            out of the binder's bounds, or the updates don't all belong to
+            the same binder.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: One or more updates identify a card that doesn't exist.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: >-
+            An update's expected placement no longer matches the card's
+            persisted placement, or the destination is occupied by a card
+            not included in `updates`. No card positions are changed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
     delete:
       operationId: deleteCard
       summary: Permanently delete a binder-owned card
@@ -604,6 +661,40 @@ components:
           type: integer
           minimum: 1
           nullable: true
+    CardPositionUpdate:
+      type: object
+      additionalProperties: false
+      description: >-
+        One card's expected current placement and its final placement
+        (story 14), used within `MoveCardsRequest`.
+      required:
+        - cardId
+        - expectedPlacement
+        - finalPlacement
+      properties:
+        cardId:
+          type: string
+          format: uuid
+        expectedPlacement:
+          $ref: '#/components/schemas/PlacementCoordinates'
+        finalPlacement:
+          $ref: '#/components/schemas/PlacementCoordinates'
+    MoveCardsRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `PATCH /cards/{cardId}`'s request body (story 14): one update for a
+        simple move, or two updates - the dragged card and the destination's
+        prior occupant - for a swap.
+      required:
+        - updates
+      properties:
+        updates:
+          type: array
+          minItems: 1
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/CardPositionUpdate'
     TcgDexCatalogCard:
       type: object
       additionalProperties: false

@@ -1,10 +1,25 @@
 'use client';
 
+import {
+  DndContext,
+  DragOverlay,
+  pointerWithin,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+  CARD_DRAG_ACTIVATION_DISTANCE_PX,
+  SLOT_HEIGHT_CM,
+  SLOT_WIDTH_CM,
+} from '@binder-project-planner/shared';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import type { TcgDexCatalogCard } from '@/lib/api';
+import { resolveCardImageUrl, type Card, type TcgDexCatalogCard } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
 import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
@@ -64,6 +79,8 @@ export function BinderLayoutView() {
     clearManualEntryRestore,
     removeCard,
     pendingCardDeletionIds,
+    moveCard,
+    isMovePending,
   } = useBinderRouteContext();
   const router = useRouter();
   const pathname = usePathname();
@@ -73,6 +90,61 @@ export function BinderLayoutView() {
   // The slot (if any) currently targeted by an open card-selection modal
   // (story 11).
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+  // The card currently being dragged (story 14), or `null` while no drag
+  // is in progress - drives the `DragOverlay`'s content, the source slot's
+  // empty-placeholder rendering (in `BinderSlot`), and disabling page
+  // navigation while a drag is active.
+  const [activeDragCard, setActiveDragCard] = useState<Card | null>(null);
+  // Only a `PointerSensor` (mouse/touch pointer) is wired up for story 14
+  // - keyboard dragging is explicitly deferred. `activationConstraint`
+  // requires the pointer to move a few pixels before a drag starts, so an
+  // ordinary click (e.g. a future card-details action) isn't mistaken for
+  // a drag attempt.
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: CARD_DRAG_ACTIVATION_DISTANCE_PX },
+    }),
+  );
+
+  // Tracks which card is being dragged, once the pointer sensor's
+  // activation distance is exceeded.
+  function handleDragStart(event: DragStartEvent) {
+    const card = event.active.data.current?.card as Card | undefined;
+    setActiveDragCard(card ?? null);
+  }
+
+  // Resolves a completed drag into a move/swap request (story 14), or a
+  // silent no-op if dropped outside any slot or back onto its own source
+  // slot - per the story's "dropping a card onto its own source slot ends
+  // the drag without changing anything" requirement.
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    setActiveDragCard(null);
+
+    const draggedCard = active.data.current?.card as Card | undefined;
+    if (!draggedCard || !over) return;
+
+    const destination = over.data.current as {
+      physicalPage: number;
+      row: number;
+      column: number;
+    };
+    const source = draggedCard.placement;
+    if (
+      source.physicalPage === destination.physicalPage &&
+      source.row === destination.row &&
+      source.column === destination.column
+    ) {
+      return;
+    }
+
+    moveCard(draggedCard.id, destination);
+  }
+
+  function handleDragCancel() {
+    setActiveDragCard(null);
+  }
+
   // The manual-entry values/file to seed the modal with, only set while
   // reopening it to correct a failed custom-card submission (story 12) -
   // `null` for a normal (blank) modal open.
@@ -241,76 +313,83 @@ export function BinderLayoutView() {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-10 p-8">
-      {/* The Michi-indicator toggle (story 10) and the direct page-number
-          input (story 9), side by side on their own row above the binder
-          visualization. */}
-      <div className="flex items-center justify-center gap-10">
-        {/* Story 10's toggle: custom-styled checkbox matching the app's
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={handleDragCancel}
+    >
+      <div className="flex h-full min-h-0 flex-1 flex-col gap-10 p-8">
+        {/* The Michi-indicator toggle (story 10) and the direct page-number
+            input (story 9), side by side on their own row above the binder
+            visualization. */}
+        <div className="flex items-center justify-center gap-10">
+          {/* Story 10's toggle: custom-styled checkbox matching the app's
             checkbox convention (styling.instructions.md's "Forms & inputs"
             section). Defaults to off since `michiIndicatorsVisible` is only
             true when the URL explicitly has `michi=true`. The label is
             forced onto 2 short lines (rather than one long line) so this
             control stays narrow next to the page input. */}
-        <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
-          <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-            <input
-              id="michi-indicators-toggle"
-              type="checkbox"
-              checked={michiIndicatorsVisible}
-              onChange={toggleMichiIndicators}
-              className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-            />
-            <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-          </span>
-          <span className="flex flex-col text-caption leading-tight text-neutral-500">
-            <span>Show Michi</span>
-            <span>slot indicators</span>
-          </span>
-        </label>
-
-        <div className="flex flex-col items-center gap-1">
-          <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
-            Go to page
+          <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
+            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+              <input
+                id="michi-indicators-toggle"
+                type="checkbox"
+                checked={michiIndicatorsVisible}
+                onChange={toggleMichiIndicators}
+                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+              />
+              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+            </span>
+            <span className="flex flex-col text-caption leading-tight text-neutral-500">
+              <span>Show Michi</span>
+              <span>slot indicators</span>
+            </span>
           </label>
-          <input
-            id="layout-page-input"
-            type="number"
-            min={1}
-            max={maxPhysicalPage}
-            step={1}
-            value={pageInputValue}
-            onChange={(event) => setPageInputValue(event.target.value)}
-            onBlur={commitPageInput}
-            onKeyDown={(event) => {
-              // Commits on Enter by blurring, which routes through the same
-              // `commitPageInput` handler instead of duplicating its logic.
-              if (event.key === 'Enter') event.currentTarget.blur();
-            }}
-            className={PAGE_INPUT_CLASS_NAME}
-          />
+
+          <div className="flex flex-col items-center gap-1">
+            <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
+              Go to page
+            </label>
+            <input
+              id="layout-page-input"
+              type="number"
+              min={1}
+              max={maxPhysicalPage}
+              step={1}
+              value={pageInputValue}
+              onChange={(event) => setPageInputValue(event.target.value)}
+              onBlur={commitPageInput}
+              onKeyDown={(event) => {
+                // Commits on Enter by blurring, which routes through the same
+                // `commitPageInput` handler instead of duplicating its logic.
+                if (event.key === 'Enter') event.currentTarget.blur();
+              }}
+              className={PAGE_INPUT_CLASS_NAME}
+            />
+          </div>
         </div>
-      </div>
 
-      <div className="flex h-full min-h-0 flex-1 items-center justify-center gap-4">
-        <button
-          type="button"
-          aria-label="Previous page"
-          disabled={isFirstSpread}
-          onClick={() =>
-            navigateToPhysicalPage(getPreviousPhysicalPage(physicalPage, maxPhysicalPage))
-          }
-          className={ARROW_BUTTON_CLASS_NAME}
-        >
-          <ChevronLeft className="size-6" />
-        </button>
+        <div className="flex h-full min-h-0 flex-1 items-center justify-center gap-4">
+          <button
+            type="button"
+            aria-label="Previous page"
+            disabled={isFirstSpread || activeDragCard !== null}
+            onClick={() =>
+              navigateToPhysicalPage(getPreviousPhysicalPage(physicalPage, maxPhysicalPage))
+            }
+            className={ARROW_BUTTON_CLASS_NAME}
+          >
+            <ChevronLeft className="size-6" />
+          </button>
 
-        {/* The current spread's label (story 9), centered directly above
+          {/* The current spread's label (story 9), centered directly above
             the binder visualization it describes. */}
-        <div className="flex h-full min-h-0 max-w-2xl flex-1 flex-col items-center gap-2">
-          <p className="text-caption text-neutral-500">{getSpreadLabel(spread)}</p>
+          <div className="flex h-full min-h-0 max-w-2xl flex-1 flex-col items-center gap-2">
+            <p className="text-caption text-neutral-500">{getSpreadLabel(spread)}</p>
 
-          {/* Only the active spread's data is mounted - the previous/next
+            {/* Only the active spread's data is mounted - the previous/next
               spreads are never rendered or retained as hidden elements. A
               tight gap keeps the two sides reading as one bound spread (like
               facing pages meeting at the spine), and the max-width cap keeps
@@ -322,56 +401,82 @@ export function BinderLayoutView() {
               spread) so that single-sided spread reserves the exact same
               half-row share of space as a two-sided spread instead of its
               lone binder side stretching to fill the whole row. */}
-          <div className="flex h-full min-h-0 w-full flex-1 items-stretch justify-center gap-1">
-            {spread.left !== null ? (
-              <BinderSide
-                side="left"
-                width={binder.width}
-                height={binder.height}
-                physicalPage={spread.left}
-                cards={cards}
-                pendingPlacementKeys={pendingPlacementKeys}
-                onSlotClick={(row, column) =>
-                  setSelectedSlot({ physicalPage: spread.left as number, row, column })
-                }
-                onRemoveCard={removeCard}
-                pendingCardDeletionIds={pendingCardDeletionIds}
-                michiIndicatorsVisible={michiIndicatorsVisible}
-              />
-            ) : (
-              <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
-            )}
-            {spread.right !== null ? (
-              <BinderSide
-                side="right"
-                width={binder.width}
-                height={binder.height}
-                physicalPage={spread.right}
-                cards={cards}
-                pendingPlacementKeys={pendingPlacementKeys}
-                onSlotClick={(row, column) =>
-                  setSelectedSlot({ physicalPage: spread.right as number, row, column })
-                }
-                onRemoveCard={removeCard}
-                pendingCardDeletionIds={pendingCardDeletionIds}
-                michiIndicatorsVisible={michiIndicatorsVisible}
-              />
-            ) : (
-              <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
-            )}
+            <div className="flex h-full min-h-0 w-full flex-1 items-stretch justify-center gap-1">
+              {spread.left !== null ? (
+                <BinderSide
+                  side="left"
+                  width={binder.width}
+                  height={binder.height}
+                  physicalPage={spread.left}
+                  cards={cards}
+                  pendingPlacementKeys={pendingPlacementKeys}
+                  onSlotClick={(row, column) =>
+                    setSelectedSlot({ physicalPage: spread.left as number, row, column })
+                  }
+                  onRemoveCard={removeCard}
+                  pendingCardDeletionIds={pendingCardDeletionIds}
+                  isMovePending={isMovePending}
+                  michiIndicatorsVisible={michiIndicatorsVisible}
+                />
+              ) : (
+                <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
+              )}
+              {spread.right !== null ? (
+                <BinderSide
+                  side="right"
+                  width={binder.width}
+                  height={binder.height}
+                  physicalPage={spread.right}
+                  cards={cards}
+                  pendingPlacementKeys={pendingPlacementKeys}
+                  onSlotClick={(row, column) =>
+                    setSelectedSlot({ physicalPage: spread.right as number, row, column })
+                  }
+                  onRemoveCard={removeCard}
+                  pendingCardDeletionIds={pendingCardDeletionIds}
+                  isMovePending={isMovePending}
+                  michiIndicatorsVisible={michiIndicatorsVisible}
+                />
+              ) : (
+                <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
+              )}
+            </div>
           </div>
-        </div>
 
-        <button
-          type="button"
-          aria-label="Next page"
-          disabled={isLastSpread}
-          onClick={() => navigateToPhysicalPage(getNextPhysicalPage(physicalPage, maxPhysicalPage))}
-          className={ARROW_BUTTON_CLASS_NAME}
-        >
-          <ChevronRight className="size-6" />
-        </button>
+          <button
+            type="button"
+            aria-label="Next page"
+            disabled={isLastSpread || activeDragCard !== null}
+            onClick={() =>
+              navigateToPhysicalPage(getNextPhysicalPage(physicalPage, maxPhysicalPage))
+            }
+            className={ARROW_BUTTON_CLASS_NAME}
+          >
+            <ChevronRight className="size-6" />
+          </button>
+        </div>
       </div>
+
+      {/* The drag overlay (story 14): renders the dragged card's image
+          following the pointer, sized to match the original slot's
+          rendered dimensions automatically (dnd-kit sizes `DragOverlay`'s
+          content to the original draggable node's measured rect). */}
+      <DragOverlay>
+        {activeDragCard && (
+          <div
+            className="flex h-full w-full items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800"
+            style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element -- mirrors
+                the same arbitrary-origin image handling as `BinderSlot`. */}
+            <img
+              src={resolveCardImageUrl(activeDragCard.imageUrl)}
+              alt={activeDragCard.name}
+              className="h-full w-full object-contain"
+            />
+          </div>
+        )}
+      </DragOverlay>
 
       {selectedSlot && (
         <CardSelectionModal
@@ -384,6 +489,6 @@ export function BinderLayoutView() {
           initialManualEntry={manualEntryDraft ?? undefined}
         />
       )}
-    </div>
+    </DndContext>
   );
 }

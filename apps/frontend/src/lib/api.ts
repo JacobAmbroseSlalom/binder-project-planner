@@ -39,6 +39,7 @@ export type TcgDexCatalogCard = components['schemas']['TcgDexCatalogCard'];
 export type CreateCardRequest = components['schemas']['CreateCardRequest'];
 export type CardSearchLanguage = components['schemas']['CardSearchLanguage'];
 export type CardSearchResponse = components['schemas']['CardSearchResponse'];
+export type CardPositionUpdate = components['schemas']['CardPositionUpdate'];
 
 // Fetches the complete binder-summary collection through `GET /binders`
 // (story 5). The backend already returns it in the documented sort order
@@ -224,6 +225,28 @@ export async function deleteCard(cardId: string): Promise<void> {
   if (error) {
     throw error;
   }
+}
+
+// Moves or swaps card positions through `PATCH /cards/{cardId}` (story 14).
+// `updates` contains one entry for a simple move or two for a swap; the
+// path `cardId` must identify the dragged card included among them. Returns
+// the complete persisted representation of every card the backend updated,
+// so the caller can replace its optimistic values with the authoritative
+// ones. Throws the Problem Details body on failure (e.g. `409 Conflict` for
+// a stale expected position or an occupied destination) so the caller can
+// roll back its optimistic move/swap and surface the error via
+// `toProblemDetailsInfo`.
+export async function moveCards(cardId: string, updates: CardPositionUpdate[]): Promise<Card[]> {
+  const { data, error } = await apiClient.PATCH('/cards/{cardId}', {
+    params: { path: { cardId } },
+    body: { updates },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }
 
 // Resolves a `Card.imageUrl` into a full URL for an `<img>` tag (story 11).

@@ -14,8 +14,10 @@ import {
   getBinder,
   listBinderArt,
   listBinderCards,
+  moveCards,
   type Binder,
   type Card,
+  type CardPositionUpdate,
   type CardSearchLanguage,
   type CreateCardRequest,
 } from '@/lib/api';
@@ -126,6 +128,23 @@ interface BinderRouteContextValue {
   // tab can disable that card's own actions (permitting no further actions
   // on it) until the request settles.
   pendingCardDeletionIds: Set<string>;
+  // Moves (or, if `destination` is already occupied, swaps with) a card to
+  // another slot on the same binder (story 14): optimistically applies the
+  // new placement(s) immediately, then replaces the affected cards with
+  // the backend's authoritative representation on success, or restores
+  // both cards' exact prior placements on failure (e.g. a `409 Conflict`
+  // from a stale expected position or an occupied destination).
+  moveCard: (
+    cardId: string,
+    destination: { physicalPage: number; row: number; column: number },
+  ) => void;
+  // True while a move/swap request is in flight for this binder. Per story
+  // 14's serialization requirement, at most one movement request is ever
+  // in flight at a time, so this single flag (rather than a per-card set)
+  // is enough for the layout tab to disable all card dragging in the
+  // binder until it settles - new movement operations are never queued
+  // behind it.
+  isMovePending: boolean;
   // Story 41's card-selection modal language toggle: ephemeral React state
   // that lives above the modal so it survives the modal closing and
   // reopening within the same binder visit, but resets (back to
@@ -204,6 +223,9 @@ export function BinderRouteProvider({
   // Story 13's in-flight card removals, by card id - lets the layout tab
   // disable a pending card's own actions until its delete request settles.
   const [pendingCardDeletionIds, setPendingCardDeletionIds] = useState<Set<string>>(new Set());
+  // Story 14's single in-flight-movement flag (see the context value's own
+  // doc comment above for why one flag suffices instead of a per-card set).
+  const [isMovePending, setIsMovePending] = useState(false);
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -447,6 +469,88 @@ export function BinderRouteProvider({
     [cards, start],
   );
 
+  // Moves (or swaps) a card to another slot in the same binder (story 14).
+  // `destination` always identifies a concrete slot the layout tab's drop
+  // target resolved to; a `null`/missing dragged card is unreachable in
+  // practice (dragging only starts from an occupied slot) but guarded
+  // rather than asserted. If another card already occupies `destination`,
+  // both cards trade placements (a swap) in a single `PATCH` request;
+  // otherwise only the dragged card moves.
+  const moveCard = useCallback(
+    (cardId: string, destination: { physicalPage: number; row: number; column: number }) => {
+      const draggedCard = cards.find((card) => card.id === cardId);
+      if (!draggedCard) return;
+
+      const occupyingCard = cards.find(
+        (card) =>
+          card.id !== cardId &&
+          card.placement.physicalPage === destination.physicalPage &&
+          card.placement.row === destination.row &&
+          card.placement.column === destination.column,
+      );
+
+      const previousDraggedPlacement = draggedCard.placement;
+      const previousOccupyingPlacement = occupyingCard?.placement ?? null;
+
+      setCards((previous) =>
+        previous.map((card) => {
+          if (card.id === draggedCard.id) return { ...card, placement: destination };
+          if (occupyingCard && card.id === occupyingCard.id) {
+            return { ...card, placement: previousDraggedPlacement };
+          }
+          return card;
+        }),
+      );
+      setIsMovePending(true);
+
+      const updates: CardPositionUpdate[] = [
+        {
+          cardId: draggedCard.id,
+          expectedPlacement: previousDraggedPlacement,
+          finalPlacement: destination,
+        },
+      ];
+      if (occupyingCard && previousOccupyingPlacement) {
+        updates.push({
+          cardId: occupyingCard.id,
+          expectedPlacement: previousOccupyingPlacement,
+          finalPlacement: previousDraggedPlacement,
+        });
+      }
+
+      const toast = start(`move-card-${draggedCard.id}`);
+
+      moveCards(draggedCard.id, updates)
+        .then((updatedCards) => {
+          setCards((previous) =>
+            previous.map((card) => updatedCards.find((updated) => updated.id === card.id) ?? card),
+          );
+          toast.markSaved();
+        })
+        .catch((error) => {
+          // Rolls both cards back to their exact pre-drop placements
+          // (rather than re-fetching the binder) so an unaffected slot's
+          // optimistic state elsewhere in the grid is left untouched.
+          setCards((previous) =>
+            previous.map((card) => {
+              if (card.id === draggedCard.id) {
+                return { ...card, placement: previousDraggedPlacement };
+              }
+              if (occupyingCard && card.id === occupyingCard.id) {
+                return { ...card, placement: previousOccupyingPlacement! };
+              }
+              return card;
+            }),
+          );
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setIsMovePending(false);
+        });
+    },
+    [cards, start],
+  );
+
   // Only meaningful once `status === 'success'`; computed unconditionally
   // (rather than after an early return) so hook call order stays stable
   // across renders.
@@ -466,6 +570,8 @@ export function BinderRouteProvider({
       clearManualEntryRestore,
       removeCard,
       pendingCardDeletionIds,
+      moveCard,
+      isMovePending,
       cardSearchLanguage,
       setCardSearchLanguage,
       includeTcgPocket,
@@ -484,6 +590,8 @@ export function BinderRouteProvider({
     clearManualEntryRestore,
     removeCard,
     pendingCardDeletionIds,
+    moveCard,
+    isMovePending,
     cardSearchLanguage,
     includeTcgPocket,
   ]);

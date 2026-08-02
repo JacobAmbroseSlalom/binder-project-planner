@@ -543,7 +543,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 14. Move a card to a different binder slot
 
-**Status:** Not started
+**Status:** Done (2026-08-01 23:39 EDT) - with one known gap: the "if the destination slot is occupied by multi-slot art, the card returns to its original slot" acceptance criterion isn't enforceable yet because story 25 ("Add multi-slot art") hasn't been built - there's no art table or route, and `listBinderArt` always returns `[]`. Every other acceptance criterion (drag/drop move, swap, transactional save, rollback on failure, shared save-status toast) is fully implemented end to end.
 
 #### Acceptance criteria
 

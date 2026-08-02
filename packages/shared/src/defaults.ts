@@ -92,3 +92,9 @@ export const CUSTOM_CARD_NUMBER_MAX_LENGTH = 50;
 // input's `accept` value and the backend's magic-byte signature check both
 // derive from this same list.
 export const CUSTOM_CARD_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
+
+// Story 14: "Move a card to a different binder slot". dnd-kit's pointer
+// sensor only starts a drag once the pointer has moved this many CSS
+// pixels, so an ordinary click (e.g. a future card-details action) doesn't
+// get mistaken for a drag attempt.
+export const CARD_DRAG_ACTIVATION_DISTANCE_PX = 8;

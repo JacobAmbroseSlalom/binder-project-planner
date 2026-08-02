@@ -133,7 +133,11 @@ export interface paths {
         delete: operations["deleteCard"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Move or swap one or two cards' binder positions
+         * @description Applies a simple move (one update) or a swap (two updates) of card placement coordinates in one database transaction (story 14). The path `cardId` must identify the dragged card included among `updates`. Each update supplies the affected card's currently expected placement plus its final placement; the backend compares every expected placement against the persisted row before applying any change, so a stale client never silently overwrites a position another request already changed. A destination occupied by a card not included in `updates` is rejected as a conflict rather than applied. Nullable placement triples are accepted (story 15's future unplaced-cards section) alongside populated ones.
+         */
+        patch: operations["moveCards"];
         trace?: never;
     };
     "/cards/{cardId}/image": {
@@ -250,6 +254,17 @@ export interface components {
             physicalPage: number | null;
             row: number | null;
             column: number | null;
+        };
+        /** @description One card's expected current placement and its final placement (story 14), used within `MoveCardsRequest`. */
+        CardPositionUpdate: {
+            /** Format: uuid */
+            cardId: string;
+            expectedPlacement: components["schemas"]["PlacementCoordinates"];
+            finalPlacement: components["schemas"]["PlacementCoordinates"];
+        };
+        /** @description `PATCH /cards/{cardId}`'s request body (story 14): one update for a simple move, or two updates - the dragged card and the destination's prior occupant - for a swap. */
+        MoveCardsRequest: {
+            updates: components["schemas"]["CardPositionUpdate"][];
         };
         /** @description A normalized TCGdex catalog card (story 11), returned by `GET /card-catalog/search` and submitted as-is (plus variation and placement) to create a TCGdex-sourced binder card. */
         TcgDexCatalogCard: {
@@ -725,6 +740,59 @@ export interface operations {
             };
             /** @description The cardId path parameter is not a well-formed UUID. */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    moveCards: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveCardsRequest"];
+            };
+        };
+        responses: {
+            /** @description The complete persisted representation of every card updated by the move or swap. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"][];
+                };
+            };
+            /** @description The cardId path parameter is not a well-formed UUID, the path cardId isn't included in `updates`, a placement is malformed or out of the binder's bounds, or the updates don't all belong to the same binder. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description One or more updates identify a card that doesn't exist. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description An update's expected placement no longer matches the card's persisted placement, or the destination is occupied by a card not included in `updates`. No card positions are changed. */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };
