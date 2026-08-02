@@ -17,7 +17,7 @@ import {
   CUSTOM_CARD_NUMBER_MAX_LENGTH,
   CUSTOM_CARD_SET_MAX_LENGTH,
 } from '@binder-project-planner/shared';
-import { eq } from 'drizzle-orm';
+import { asc, desc, eq } from 'drizzle-orm';
 import { Router, type Response } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
@@ -714,10 +714,16 @@ export function createCardsRouter(
       return;
     }
 
-    // Story 11's TCGdex JSON branch.
+    // Story 11's TCGdex JSON branch. Story 15 added the unplaced-cards
+    // section's own add button, which reuses this same endpoint but
+    // targets a fully-null placement rather than a real slot - so a
+    // fully-null triple is valid here too (not just a fully-populated
+    // one), matching `resolveCustomCardPlacement`/`validateMovePlacement`'s
+    // existing all-or-none rule instead of `validatePlacement`'s
+    // always-fully-populated one.
     const body = request.body as CreateCardRequestBody;
 
-    const placementError = validatePlacement(body.placement, binder);
+    const placementError = validateMovePlacement(body.placement, binder);
     if (placementError) {
       response
         .status(400)
@@ -1025,6 +1031,19 @@ export function createCardsRouter(
 
 // Replaces the placeholder `[]`-returning implementation in
 // routes/binders.ts: returns every binder-owned card, placed and unplaced.
+// Ordered by creation timestamp descending, then id ascending as a
+// deterministic tie-breaker (story 15: "Unplaced cards are ordered by
+// creation timestamp descending and then card UUID ascending"). This order
+// is harmless for placed cards - the layout tab looks them up by
+// (physicalPage, row, column) rather than list position - and gives the
+// unplaced-cards panel its required newest-first order directly from this
+// one shared endpoint.
 export function listCardsForBinder(database: DatabaseConnection['database'], binderId: string) {
-  return database.select().from(cards).where(eq(cards.binderId, binderId)).all().map(serializeCard);
+  return database
+    .select()
+    .from(cards)
+    .where(eq(cards.binderId, binderId))
+    .orderBy(desc(cards.createdAt), asc(cards.id))
+    .all()
+    .map(serializeCard);
 }

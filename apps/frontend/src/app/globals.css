@@ -123,11 +123,24 @@
 @layer components {
   /* One binder side's fitting area (story 8: "Visualize a basic binder
      layout"). `container-type: size` turns this element into a CSS
-     container-query container sized purely from the flex layout around it
-     (never from its own content), which is what lets `.binder-side-grid`
-     below reference its exact allotted width/height via `cqw`/`cqh` units. */
+     container-query container sized purely from its own explicit `height`
+     below (never from its own content, which would be circular), which is
+     what lets `.binder-side-grid` below reference its exact allotted
+     width/height via `cqw`/`cqh` units.
+
+     The height is a fixed, viewport-relative bound (`min(32rem, 60vh)`)
+     rather than `h-full`/`flex-1` filling 100% of whatever vertical tab
+     space happens to be left below the spread label: a stretch-to-fill
+     height would let the surrounding flex row grow tall enough to leave a
+     large gap between the label and the (frequently width-capped, and so
+     much shorter than that full height) rendered grid. A fixed bound keeps
+     the row - and so the whole binder visualization plus its flanking
+     chevrons (`BinderLayoutView`) - packed just under the label, while
+     still giving tall/many-row binders generous room to grow into before
+     needing internal scrolling. */
   .binder-side-fit {
     container-type: size;
+    height: min(32rem, 60vh);
   }
 
   /* The binder-side slot grid. Its width is capped by `min()` to whichever
@@ -140,14 +153,13 @@
      from that capped width, so the complete grid - not just one slot -
      scales to fit the available area in both dimensions without ever
      needing internal scrolling, however small the individual slots become.
-     `align-self: start` (overriding the fitting area's vertical centering)
-     keeps the grid pinned to the top of its area, right beneath the page
-     label above it, so any leftover vertical space - the fitting area is
-     often taller than the grid needs - falls below the grid instead of
-     being split evenly above and below it. */
+     No `align-self` override here - the grid centers within its fitting
+     area via that area's own `items-center`, matching how `BinderLayoutView`
+     centers the prev/next chevrons within their own (separately sized, not
+     artificially stretched) row - so the grid and its flanking chevrons
+     land on the same vertical center. */
   .binder-side-grid {
     width: min(100cqw, 100cqh * var(--slot-ratio, 1));
     margin: 0 auto;
-    align-self: start;
   }
 }

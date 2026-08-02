@@ -584,16 +584,17 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 15. Manage unplaced cards
 
-**Status:** Not started
+**Status:** Done (2026-08-02 01:17 EDT) - with one known gap: the "dropping a card onto the unplaced art section redirects it to the unplaced cards section" acceptance criterion was added after this story shipped, before story 25's separate unplaced art section existed, and is not yet implemented.
 
 #### Acceptance criteria
 
-- An unplaced cards section appears on the right side of the "Edit Layout" tab.
+- An unplaced cards section appears on the left side of the "Edit Layout" tab.
 - A card can be moved from a binder slot into the unplaced cards section.
 - Moving a card into the unplaced cards section clears its binder slot and saves the card as unplaced in the database through the backend.
 - An unplaced card can be moved into an empty or card-occupied binder slot.
 - Moving an unplaced card into an empty slot removes it from the unplaced cards section and saves its physical page, row, and column in the database through the backend.
 - Moving an unplaced card into a card-occupied slot places the dragged card in the slot and moves the prior occupant into the unplaced cards section.
+- Dropping a placed or unplaced card onto the unplaced art section is still accepted and moves the card into the unplaced cards section instead of rejecting the drop.
 - The unplaced cards section has an add button that opens the existing card-selection modal.
 - Selecting a card from the modal adds it to the unplaced cards section and saves it to the database through the backend.
 - Hovering over an unplaced card displays the existing card actions to its right, with the X as the first action.
@@ -607,6 +608,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The unplaced section is an independently scrolling virtualized list implemented with `@tanstack/react-virtual`; only visible list items and its overscan are mounted.
 - The panel fills the available viewport height below the layout toolbar and uses its own vertical scroll container; its height does not depend on the rendered binder spread.
 - The complete unplaced panel is one dnd-kit drop target; dropping a placed card anywhere within its bounds clears the card's physical page, row, and column.
+- The unplaced art section is also a valid dnd-kit drop target for a card drag; dropping a card there routes it through the same unplaced-cards move or swap logic as dropping within the unplaced cards section, rather than being rejected as an invalid target.
 - Pointer position does not define list order; the moved card is inserted according to the section's newest-first ordering.
 - Moves into and out of the unplaced section use `PATCH /cards/{cardId}` with nullable expected and final coordinate triples and inherit the movement API's concurrency, transaction, response, and rollback requirements.
 - An unplaced-to-occupied swap submits both cards: the dragged card changes from all-null coordinates to the destination coordinates, and the prior occupant changes from those coordinates to all null.
@@ -880,7 +882,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 #### Acceptance criteria
 
 - The binder view/edit page has a toggle for showing or hiding a notes section.
-- The notes section appears on the left side of the screen when it is visible.
+- The notes section appears below the binder layout and the unplaced cards and unplaced art sections, spanning the full width of the tab, when it is visible.
 - The notes toggle defaults to on for an unlocked binder.
 - The notes toggle and notes section are hidden while the binder is locked.
 - The notes section contains a large text box for free-form notes and to-do items.
@@ -946,7 +948,8 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 #### Acceptance criteria
 
-- The unplaced cards section has an add-art button that opens a modal for creating multi-slot art.
+- An unplaced art section appears on the right side of the "Edit Layout" tab, separate from the unplaced cards section.
+- The unplaced art section has an add-art button that opens a modal for creating multi-slot art.
 - The modal allows the user to upload an image from the computer's files.
 - The modal also accepts an image pasted from the clipboard with Cmd+V.
 - The modal has fields for the multi-slot art's title and description.
@@ -972,7 +975,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The image-quality warning does not prevent the user from saving the multi-slot art.
 - The title, description, original uploaded image, selected slot dimensions, image-editing specifications, and art-specific style overrides are saved through the backend.
 - Outside the editor, the art renders with the saved positioning, scaling, rotation, aspect-ratio adjustments, and border settings.
-- After it is added, the multi-slot art appears in the unplaced cards section with an aspect ratio derived from its configured physical dimensions and scaled to fit the panel width.
+- After it is added, the multi-slot art appears in the unplaced art section with an aspect ratio derived from its configured physical dimensions and scaled to fit the panel width.
 - Placement and other interactions for multi-slot art on the binder layout will be defined in the next story.
 - Image upload and multi-slot art creation use the shared save-status toast, and the modal retains its image and entered settings if either operation fails.
 
@@ -994,9 +997,9 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Art descriptions are optional, limited to 10,000 characters, and stored as `null` when blank.
 - New art initializes border color, radius, and width in Use Binder Setting mode, with each corresponding override persisted as `null`.
 - Switching one field to a custom value affects only that nullable override; fields that remain `null` resolve against the binder's current settings at render time.
-- Once art is supported, the unplaced virtualized panel orders cards and art together by creation timestamp descending and then item UUID ascending, regardless of item type.
+- The unplaced art section orders art by creation timestamp descending and then art UUID ascending, matching the unplaced cards section's tie-breaking rule, but is an independently rendered panel rather than a combined list with cards.
 - Unplaced art preserves its configured physical aspect ratio and scales down to fit the panel width without horizontal scrolling; proportional sizing does not require an absolute shared scale with card thumbnails.
-- The unplaced virtualizer measures variable art-row heights after rendering rather than assuming the fixed card-row estimate.
+- The unplaced art section's virtualizer measures variable art-row heights after rendering rather than assuming the unplaced cards section's fixed card-row estimate.
 - The image editor uses `konva` with `react-konva` for dragging and transform handles.
 - The editor persists normalized focal X and Y coordinates plus independent horizontal and vertical scale multipliers relative to the computed centered-cover fit rather than a rendered canvas snapshot.
 - Each art record also stores `imageRotationDegrees` as one of `0`, `90`, `180`, or `270`; rotate-left and rotate-right controls change it by one quarter turn with wraparound.
@@ -1026,19 +1029,20 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Hovering over multi-slot art displays edit, delete, and duplicate actions comparable to the existing card actions.
 - Selecting edit opens the same modal used to add multi-slot art, populated with the art's saved title, description, image, dimensions, positioning, scaling, rotation, aspect-ratio adjustments, and style overrides.
 - Saving an edit updates the multi-slot art in the database through the backend.
-- Selecting delete removes the multi-slot art from the layout or unplaced cards section and deletes it from the database through the backend.
-- Selecting duplicate creates a new, independent multi-slot art entry in the database through the backend and adds it to the unplaced cards section.
-- Multi-slot art can be moved from the unplaced cards section into the binder layout.
+- Selecting delete removes the multi-slot art from the layout or unplaced art section and deletes it from the database through the backend.
+- Selecting duplicate creates a new, independent multi-slot art entry in the database through the backend and adds it to the unplaced art section.
+- Multi-slot art can be moved from the unplaced art section into the binder layout.
 - The art occupies a rectangular group of slots matching its saved width and height in slots.
 - A placement succeeds only when every slot in the art's target area is unoccupied.
-- If any slot in the target area is occupied, the placement is rejected and the art remains in the unplaced cards section with no saved position change.
+- If any slot in the target area is occupied, the placement is rejected and the art remains in the unplaced art section with no saved position change.
 - Multi-slot art cannot swap positions with a card or another piece of multi-slot art.
 - Any move involving multi-slot art is rejected if one or more slots in its target area are occupied, regardless of the occupying item type.
-- After a successful placement, the art is removed from the unplaced cards section and its binder position is saved through the backend.
+- After a successful placement, the art is removed from the unplaced art section and its binder position is saved through the backend.
 - Every slot covered by placed multi-slot art is considered occupied.
 - Cards and other multi-slot art cannot be placed in any slot occupied by multi-slot art.
-- Multi-slot art can be moved from the binder layout back into the unplaced cards section.
-- Moving art back to the unplaced cards section clears all slots it occupied and saves it as unplaced through the backend.
+- Multi-slot art can be moved from the binder layout back into the unplaced art section.
+- Moving art back to the unplaced art section clears all slots it occupied and saves it as unplaced through the backend.
+- Dropping placed or unplaced art onto the unplaced cards section is still accepted and moves the art into the unplaced art section instead of rejecting the drop.
 - Editing, deleting, duplicating, and moving multi-slot art use the shared save-status toast and restore the art's previous state or location if an operation fails.
 
 #### Technical requirements
@@ -1050,6 +1054,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The backend compares the expected placement and validates every destination slot in one transaction; stale placement or occupied coverage returns `409 Conflict` using Problem Details and changes nothing.
 - A successful movement returns `200 OK` with the complete persisted art representation.
 - Card and art moves share one binder-scoped movement queue; at most one layout move is in flight for a binder, and all card and art dragging is disabled until it settles.
+- The unplaced cards section is also a valid dnd-kit drop target for an art drag; dropping art there routes it through the same unplaced-art move logic as dropping within the unplaced art section, rather than being rejected as an invalid target.
 - Art dragging records the relative footprint cell under the initial pointer; the hovered destination slot aligns with that cell, and the client derives the destination top-left anchor by subtracting the grabbed row and column offsets.
 - For unplaced-art thumbnails, the initial pointer's normalized position within the thumbnail maps to the corresponding footprint cell before dragging begins.
 - During an art drag, the client highlights every slot in the derived candidate footprint and uses distinct valid and blocked styles.
@@ -1074,7 +1079,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The duplicate references the source art's existing immutable source and normalized image assets rather than copying image files.
 - `POST /art/{artId}/duplicate` reads the authoritative source art and returns `201 Created`, a `Location` header, and the complete unplaced duplicate representation.
 - Each duplicate action uses a client-generated UUID idempotency key; retries reuse that key, and the backend retains and replays the outcome for the shared 24-hour mutation-idempotency period.
-- Selecting Duplicate optimistically inserts a disabled unplaced copy with a client-generated temporary ID and the source art's existing image URL, ordered by the established combined unplaced-item rules.
+- Selecting Duplicate optimistically inserts a disabled unplaced copy with a client-generated temporary ID and the source art's existing image URL, ordered by the unplaced art section's established ordering rules.
 - Success replaces the optimistic copy with the response; failure removes it and displays the shared failed toast.
 - Art actions are revealed by pointer hover only in the initial desktop-supported version; keyboard and touch action disclosure remain deferred.
 - Edit, Delete, and Duplicate use Lucide icons in stable icon-button hit areas with accessible labels and hover tooltips.
@@ -1092,9 +1097,9 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Before reducing the binder's width, height, or page count, the app identifies every card and piece of multi-slot art whose placement would no longer exist or fit.
 - Multi-slot art is affected if any slot in its occupied area falls outside the reduced binder layout.
 - If no placed items are affected, the reduced binder details can be saved without a relocation confirmation.
-- If placed items are affected, saving opens a confirmation modal that identifies how many cards and pieces of multi-slot art will be moved to the unplaced cards section.
+- If placed items are affected, saving opens a confirmation modal that identifies how many cards and pieces of multi-slot art will be moved to the unplaced cards section or unplaced art section, respectively.
 - Selecting cancel closes the confirmation modal without changing the binder or any item positions.
-- Confirming the change moves every affected card and piece of multi-slot art to the unplaced cards section.
+- Confirming the change moves every affected card to the unplaced cards section and every affected piece of multi-slot art to the unplaced art section.
 - The binder detail changes and all affected item relocations are saved together through the backend.
 - If any part of the update fails, the binder details and item positions remain unchanged.
 - Binder size and page-count changes use the shared save-status toast.
@@ -1123,7 +1128,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - The "Edit Layout" tab has undo and redo buttons.
 - Each successful drag-and-drop movement of a card or multi-slot art is added to the layout movement history.
 - A card swap is added to movement history as one action containing both cards' original and swapped positions.
-- Movement history includes moves between binder slots and moves between the binder layout and the unplaced cards section.
+- Movement history includes moves between binder slots and moves between the binder layout and the unplaced cards section or unplaced art section.
 - Selecting undo returns every card or piece of multi-slot art affected by the most recent movement to its previous location and saves the restored positions through the backend.
 - Undoing a card swap restores both cards to their original slots together.
 - Selecting redo reapplies the most recently undone movement and saves all reapplied positions through the backend.
@@ -1260,28 +1265,24 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 #### Acceptance criteria
 
-- The unplaced cards section has a search field for narrowing the displayed items.
-- Cards can be found by card name, set, number, or variation.
-- Multi-slot art can be found by title or description.
-- The unplaced cards section can be filtered by item type to show all items, cards only, or multi-slot art only.
-- Search and item-type filters can be used together.
-- Clearing the search and filters restores all unplaced items.
-- When no unplaced items match, the section displays an empty-results state.
+- The unplaced cards section has a search field for narrowing the displayed cards by name, set, number, or variation.
+- The unplaced art section has its own, independent search field for narrowing the displayed art by title or description.
+- Clearing a section's search field restores all of that section's unplaced items.
+- When a section's search has no matches, that section displays an empty-results state.
 
 #### Technical requirements
 
-- Search and item-type filtering run client-side against the unplaced cards and art already loaded in the binder-scoped React context; changing either control sends no backend request.
-- The client filters the complete unplaced collection before passing matching items to the existing TanStack Virtual list, so virtualization affects rendering rather than search coverage.
-- The trimmed search query uses case-insensitive substring matching against card name, set, number, and variation fields and art title and description fields.
+- Search filtering runs client-side against the unplaced cards and unplaced art already loaded in the binder-scoped React context; changing either section's search field sends no backend request.
+- Each section filters its own complete unplaced collection before passing matching items to its existing TanStack Virtual list, so virtualization affects rendering rather than search coverage.
+- The trimmed search query uses case-insensitive substring matching against card name, set, number, and variation fields in the unplaced cards section, and art title and description fields in the unplaced art section.
 - The client splits a nonblank query on whitespace; every search term must match at least one supported field on the same item, and different terms may match different fields.
 - A blank or whitespace-only query applies no text filter.
-- Search text and item-type filter state are local to the mounted layout tab and are not stored in route query parameters, binder context, browser storage, or the backend.
-- Each layout-tab mount starts with a blank search and the All item-types filter; refreshes and navigation away from the layout reset both controls.
-- Item type uses one mutually exclusive segmented control with All, Cards, and Art options; All is selected initially.
-- The search input state updates on every keystroke, and the frontend uses React `useDeferredValue` for the query consumed by filtering so result rendering may lag briefly without delaying typing.
+- Each section's search text is local to the mounted layout tab and is not stored in route query parameters, binder context, browser storage, or the backend.
+- Each layout-tab mount starts with both search fields blank; refreshes and navigation away from the layout reset both.
+- Each search input's state updates on every keystroke, and the frontend uses React `useDeferredValue` for the query consumed by filtering so result rendering may lag briefly without delaying typing.
 - The current input value remains visible while deferred results update; no debounce timer, minimum query length, loading indicator, or backend request is used.
-- When filtering produces no matches, the results region displays `No matching items` and a Clear filters action that empties the search query and selects All item types.
-- Filtering and the empty-results state do not remove or disable the unplaced panel's existing add-card and add-art controls.
+- When a section's filtering produces no matches, that section displays `No matching items` and a Clear search action that empties its search field.
+- Filtering and the empty-results state do not remove or disable either unplaced panel's existing add-card or add-art control.
 
 ### 32. Lock a binder
 

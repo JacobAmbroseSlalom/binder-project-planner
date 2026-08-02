@@ -1,8 +1,10 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core';
 import { SLOT_HEIGHT_CM, SLOT_WIDTH_CM } from '@binder-project-planner/shared';
-import { Plus, X } from 'lucide-react';
+import { Plus } from 'lucide-react';
 
-import { resolveCardImageUrl, type Card } from '@/lib/api';
+import type { Card } from '@/lib/api';
+
+import { CardTile } from './CardTile';
 
 // One binder slot (story 11), extracted out of `BinderSide`'s render loop
 // so `useDraggable`/`useDroppable` (story 14) can be called once per slot
@@ -70,70 +72,26 @@ export function BinderSlot({
   const highlightClassName = isOver ? 'ring-2 ring-inset ring-primary' : '';
 
   if (card) {
-    // While this card is being dragged, its own slot shows an empty
-    // placeholder (the `DragOverlay` in `BinderLayoutView` renders the
-    // actual dragged image) rather than the card twice on screen at once.
-    if (isDragging) {
-      return (
-        <div
-          ref={setDroppableRef}
-          className={`rounded-standard border border-neutral-700 bg-neutral-800 ${highlightClassName}`}
-          style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
-        />
-      );
-    }
-
+    // Both the dragging placeholder and the real tile share the same
+    // `CardTile` an unplaced card also uses - only the ref-combining
+    // (droppable + draggable, since an occupied slot is simultaneously a
+    // valid swap target for another drag) and the `isOver` highlight ring
+    // are specific to being a binder slot rather than an unplaced card.
     return (
-      // `group relative` lets the hover-revealed X action below sit in
-      // this slot's own top-right corner (as a sibling of the clipped
-      // image div, not a child of it), overlapping the card so it stays
-      // within the slot's clickable bounds rather than sliding out over a
-      // neighboring slot. Both the draggable and droppable refs land on
-      // this same outer node, since an occupied slot is simultaneously
-      // the thing being dragged and a valid swap target for another drag.
-      <div
-        ref={(node) => {
+      <CardTile
+        card={card}
+        isDragging={isDragging}
+        isRemovalPending={isRemovalPending}
+        onRemoveCard={onRemoveCard}
+        removeAriaLabel={`Remove ${card.name} from row ${row}, column ${column}`}
+        highlightClassName={highlightClassName}
+        tileRef={(node) => {
           setDroppableRef(node);
           setDraggableRef(node);
         }}
-        {...attributes}
-        {...listeners}
-        className={`group relative touch-none ${highlightClassName}`}
-        style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
-      >
-        <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800">
-          {/* eslint-disable-next-line @next/next/no-img-element -- the
-              card image comes from an arbitrary backend/provider origin,
-              so next/image's fixed-domain optimization doesn't apply
-              here. */}
-          <img
-            src={resolveCardImageUrl(card.imageUrl)}
-            alt={card.name}
-            // Disables the browser's native HTML5 image dragging (story
-            // 14's technical requirement) so it never competes with
-            // dnd-kit's own pointer-based dragging on the same element.
-            draggable={false}
-            className="h-full w-full object-contain"
-          />
-        </div>
-        {/* Hover-revealed card actions (styling.instructions.md): hidden
-            and nudged up/right until hovered, then settles into place
-            over the card's top-right corner. `pointer-events-none` while
-            hidden keeps it from intercepting clicks meant for the card
-            underneath. */}
-        <div className="pointer-events-none absolute top-0 right-0 z-10 flex -translate-y-1 translate-x-1 gap-1 opacity-0 transition-all duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100">
-          <button
-            type="button"
-            disabled={isRemovalPending}
-            onClick={() => onRemoveCard(card.id)}
-            aria-label={`Remove ${card.name} from row ${row}, column ${column}`}
-            title="Remove card"
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </div>
-      </div>
+        dragAttributes={attributes}
+        dragListeners={listeners}
+      />
     );
   }
 

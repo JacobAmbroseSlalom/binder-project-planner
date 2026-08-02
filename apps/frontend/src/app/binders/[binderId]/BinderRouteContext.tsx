@@ -102,14 +102,20 @@ interface BinderRouteContextValue {
   assignCard: (request: CreateCardRequest) => void;
   // Assigns a manually-entered custom card to a binder slot (story 12),
   // mirroring `assignCard`'s optimistic-insert/replace-or-remove lifecycle.
-  // `placement` is `null` only for the (currently unreachable in the UI -
-  // see story 15) unplaced-card case; the backend fully supports it either
-  // way.
+  // `placement` is `null` for an unplaced-section target (story 15's panel
+  // add button).
   assignCustomCard: (
     values: CustomCardFormValues,
     file: File,
     placement: { physicalPage: number; row: number; column: number } | null,
   ) => void;
+  // The set of optimistic card ids for a card currently being created
+  // directly into the unplaced section (story 15) - either through
+  // `assignCard` or `assignCustomCard` with an all-null placement target -
+  // so the unplaced panel can disable that one pending card's own actions
+  // until its create request settles. Keyed by id (not `placementKey`,
+  // which needs concrete coordinates that an unplaced card never has).
+  pendingUnplacedCardIds: Set<string>;
   // Set once by `assignCustomCard` when a submission fails, so the layout
   // tab can reopen the card-selection modal pre-filled with the failed
   // attempt's values/file rather than losing them. Consumed exactly once
@@ -136,7 +142,7 @@ interface BinderRouteContextValue {
   // from a stale expected position or an occupied destination).
   moveCard: (
     cardId: string,
-    destination: { physicalPage: number; row: number; column: number },
+    destination: { physicalPage: number | null; row: number | null; column: number | null },
   ) => void;
   // True while a move/swap request is in flight for this binder. Per story
   // 14's serialization requirement, at most one movement request is ever
@@ -226,6 +232,9 @@ export function BinderRouteProvider({
   // Story 14's single in-flight-movement flag (see the context value's own
   // doc comment above for why one flag suffices instead of a per-card set).
   const [isMovePending, setIsMovePending] = useState(false);
+  // Story 15's in-flight-unplaced-create ids (see the context value's own
+  // doc comment above).
+  const [pendingUnplacedCardIds, setPendingUnplacedCardIds] = useState<Set<string>>(new Set());
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -291,18 +300,20 @@ export function BinderRouteProvider({
     setRetryToken((token) => token + 1);
   }, []);
 
-  // Assigns a TCGdex catalog card to a binder slot (story 11). The
-  // placement is guaranteed fully populated by callers (the layout tab only
-  // ever opens the card-selection modal for one concrete slot), so it's
-  // safe to derive a `placementKey` from it directly. Uses a synthetic
+  // Assigns a TCGdex catalog card to a binder slot, or to the unplaced
+  // section if `request.placement` is all-null (story 11; unplaced target
+  // added in story 15). A placed target is tracked by `placementKey` (so
+  // the occupied/targeted slot itself can be disabled); an unplaced target
+  // has no slot to disable, so it's tracked by the optimistic card's own id
+  // in `pendingUnplacedCardIds` instead. Uses a synthetic
   // `crypto.randomUUID()` id for the optimistic card so it can be found and
   // replaced/removed again once the request settles, without colliding
   // with any real backend-issued id.
   const assignCard = useCallback(
     (request: CreateCardRequest) => {
       const { physicalPage, row, column } = request.placement;
-      if (physicalPage === null || row === null || column === null) return;
-      const key = placementKey({ physicalPage, row, column });
+      const isPlaced = physicalPage !== null && row !== null && column !== null;
+      const key = isPlaced ? placementKey({ physicalPage, row, column }) : null;
       const optimisticId = `optimistic-${crypto.randomUUID()}`;
       const now = new Date().toISOString();
       const optimisticCard: Card = {
@@ -325,9 +336,13 @@ export function BinderRouteProvider({
       };
 
       setCards((previous) => [...previous, optimisticCard]);
-      setPendingPlacementKeys((previous) => new Set(previous).add(key));
+      if (key) {
+        setPendingPlacementKeys((previous) => new Set(previous).add(key));
+      } else {
+        setPendingUnplacedCardIds((previous) => new Set(previous).add(optimisticId));
+      }
 
-      const toast = start(`assign-card-${key}`);
+      const toast = start(key ? `assign-card-${key}` : `assign-card-${optimisticId}`);
 
       createCard(binderId, request)
         .then((created) => {
@@ -341,11 +356,19 @@ export function BinderRouteProvider({
           toast.markFailed(error);
         })
         .finally(() => {
-          setPendingPlacementKeys((previous) => {
-            const next = new Set(previous);
-            next.delete(key);
-            return next;
-          });
+          if (key) {
+            setPendingPlacementKeys((previous) => {
+              const next = new Set(previous);
+              next.delete(key);
+              return next;
+            });
+          } else {
+            setPendingUnplacedCardIds((previous) => {
+              const next = new Set(previous);
+              next.delete(optimisticId);
+              return next;
+            });
+          }
         });
     },
     [binderId, start],
@@ -389,6 +412,8 @@ export function BinderRouteProvider({
       setCards((previous) => [...previous, optimisticCard]);
       if (placement) {
         setPendingPlacementKeys((previous) => new Set(previous).add(key));
+      } else {
+        setPendingUnplacedCardIds((previous) => new Set(previous).add(optimisticId));
       }
 
       const toast = start(`assign-custom-card-${key}`);
@@ -415,6 +440,12 @@ export function BinderRouteProvider({
             setPendingPlacementKeys((previous) => {
               const next = new Set(previous);
               next.delete(key);
+              return next;
+            });
+          } else {
+            setPendingUnplacedCardIds((previous) => {
+              const next = new Set(previous);
+              next.delete(optimisticId);
               return next;
             });
           }
@@ -469,25 +500,37 @@ export function BinderRouteProvider({
     [cards, start],
   );
 
-  // Moves (or swaps) a card to another slot in the same binder (story 14).
-  // `destination` always identifies a concrete slot the layout tab's drop
-  // target resolved to; a `null`/missing dragged card is unreachable in
-  // practice (dragging only starts from an occupied slot) but guarded
-  // rather than asserted. If another card already occupies `destination`,
-  // both cards trade placements (a swap) in a single `PATCH` request;
-  // otherwise only the dragged card moves.
+  // Moves (or swaps) a card to another slot in the same binder, or into the
+  // unplaced section if `destination` is all-null (story 14; unplaced
+  // destination/source added in story 15). `destination` always identifies
+  // whatever the layout tab's drop target resolved to (a concrete slot or
+  // the unplaced panel); a `null`/missing dragged card is unreachable in
+  // practice (dragging only starts from an occupied slot or an unplaced
+  // list item) but guarded rather than asserted. If another card already
+  // occupies a *placed* `destination`, both cards trade placements (a
+  // swap) in a single `PATCH` request; otherwise only the dragged card
+  // moves. An all-null destination never has an "occupant" to swap with -
+  // every unplaced card already shares that same null placement, and the
+  // backend's unique-placement index is inert for null coordinates - so
+  // the occupant lookup only ever runs against a placed destination.
   const moveCard = useCallback(
-    (cardId: string, destination: { physicalPage: number; row: number; column: number }) => {
+    (
+      cardId: string,
+      destination: { physicalPage: number | null; row: number | null; column: number | null },
+    ) => {
       const draggedCard = cards.find((card) => card.id === cardId);
       if (!draggedCard) return;
 
-      const occupyingCard = cards.find(
-        (card) =>
-          card.id !== cardId &&
-          card.placement.physicalPage === destination.physicalPage &&
-          card.placement.row === destination.row &&
-          card.placement.column === destination.column,
-      );
+      const occupyingCard =
+        destination.physicalPage !== null
+          ? cards.find(
+              (card) =>
+                card.id !== cardId &&
+                card.placement.physicalPage === destination.physicalPage &&
+                card.placement.row === destination.row &&
+                card.placement.column === destination.column,
+            )
+          : undefined;
 
       const previousDraggedPlacement = draggedCard.placement;
       const previousOccupyingPlacement = occupyingCard?.placement ?? null;
@@ -566,6 +609,7 @@ export function BinderRouteProvider({
       assignCard,
       pendingPlacementKeys,
       assignCustomCard,
+      pendingUnplacedCardIds,
       manualEntryRestore,
       clearManualEntryRestore,
       removeCard,
@@ -586,6 +630,7 @@ export function BinderRouteProvider({
     assignCard,
     pendingPlacementKeys,
     assignCustomCard,
+    pendingUnplacedCardIds,
     manualEntryRestore,
     clearManualEntryRestore,
     removeCard,

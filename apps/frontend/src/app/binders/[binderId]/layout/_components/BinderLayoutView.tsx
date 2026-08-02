@@ -34,17 +34,27 @@ import {
 } from '../layoutSpread';
 import { BinderSide } from './BinderSide';
 import { CardSelectionModal } from './CardSelectionModal';
+import { UnplacedCardsPanel } from './UnplacedCardsPanel';
 
-// The empty slot currently targeted by an open card-selection modal (story
-// 11): `null` while no modal is open. Physical page is captured alongside
+// The slot (or unplaced-panel target) currently targeted by an open
+// card-selection modal (story 11; unplaced target added in story 15):
+// `null` while no modal is open. Physical page is captured alongside
 // row/column (rather than re-derived from the spread at selection time) so
 // the modal's target stays fixed even if the user could somehow navigate
-// spreads while it's open.
+// spreads while it's open. All 3 fields are `null` together for the
+// unplaced panel's own add button - never partially null - mirroring the
+// backend's own all-or-none placement shape.
 interface SelectedSlot {
-  physicalPage: number;
-  row: number;
-  column: number;
+  physicalPage: number | null;
+  row: number | null;
+  column: number | null;
 }
+
+// The unplaced panel's add-button target (story 15): reused as-is by both
+// `handleSelectCard` and `handleSubmitCustomCard` below, since its shape
+// already matches a concrete slot's, so neither handler needs a separate
+// branch for "no slot at all."
+const UNPLACED_SLOT_TARGET: SelectedSlot = { physicalPage: null, row: null, column: null };
 
 // Shared styling for the previous/next icon buttons, matching the app's
 // disabled-state convention (reduced opacity + not-allowed cursor).
@@ -81,6 +91,7 @@ export function BinderLayoutView() {
     pendingCardDeletionIds,
     moveCard,
     isMovePending,
+    pendingUnplacedCardIds,
   } = useBinderRouteContext();
   const router = useRouter();
   const pathname = usePathname();
@@ -114,9 +125,13 @@ export function BinderLayoutView() {
   }
 
   // Resolves a completed drag into a move/swap request (story 14), or a
-  // silent no-op if dropped outside any slot or back onto its own source
-  // slot - per the story's "dropping a card onto its own source slot ends
-  // the drag without changing anything" requirement.
+  // silent no-op if dropped outside any drop target or back onto its own
+  // current location - per the story's "dropping a card onto its own
+  // source slot ends the drag without changing anything" requirement,
+  // generalized to the unplaced panel too (story 15): a drop target's
+  // `data.current` is either a concrete slot's `{ physicalPage, row,
+  // column }` or the unplaced panel's `{ unplaced: true }` marker (see
+  // `UnplacedCardsPanel`), which resolves to an all-null destination.
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveDragCard(null);
@@ -124,11 +139,13 @@ export function BinderLayoutView() {
     const draggedCard = active.data.current?.card as Card | undefined;
     if (!draggedCard || !over) return;
 
-    const destination = over.data.current as {
-      physicalPage: number;
-      row: number;
-      column: number;
-    };
+    const overData = over.data.current as
+      { physicalPage: number; row: number; column: number } | { unplaced: true } | undefined;
+    if (!overData) return;
+
+    const destination: { physicalPage: number | null; row: number | null; column: number | null } =
+      'unplaced' in overData ? { physicalPage: null, row: null, column: null } : overData;
+
     const source = draggedCard.placement;
     if (
       source.physicalPage === destination.physicalPage &&
@@ -159,15 +176,14 @@ export function BinderLayoutView() {
   // `lastSyncedPhysicalPage` convention below, rather than in a `useEffect`
   // - React's documented "adjusting state when a prop changes" pattern -
   // since `manualEntryRestore` is an ordinary context value, not a
-  // subscription to an external system. Only handles the placed-slot
-  // case - a `null` placement can currently only originate from an
-  // unplaced-cards section that doesn't exist in the UI yet (story 15), so
-  // there's nowhere to reopen it to.
+  // subscription to an external system. A `null` `placement` reopens
+  // targeting the unplaced panel (story 15) rather than being skipped, now
+  // that section exists in the UI.
   const [lastSeenManualEntryRestore, setLastSeenManualEntryRestore] = useState(manualEntryRestore);
   if (manualEntryRestore !== lastSeenManualEntryRestore) {
     setLastSeenManualEntryRestore(manualEntryRestore);
-    if (manualEntryRestore?.placement) {
-      setSelectedSlot(manualEntryRestore.placement);
+    if (manualEntryRestore) {
+      setSelectedSlot(manualEntryRestore.placement ?? UNPLACED_SLOT_TARGET);
       setManualEntryDraft({
         values: manualEntryRestore.values,
         file: manualEntryRestore.file,
@@ -182,34 +198,39 @@ export function BinderLayoutView() {
     if (manualEntryRestore) clearManualEntryRestore();
   }, [manualEntryRestore, clearManualEntryRestore]);
 
-  // Assigns the chosen catalog card to the currently selected slot and
-  // closes the modal immediately - the route context's `assignCard` owns
-  // the optimistic-update/request lifecycle from here (see
+  // Assigns the chosen catalog card to the currently selected slot (or the
+  // unplaced panel - story 15) and closes the modal immediately -
+  // `selectedSlot` already matches `CreateCardRequest['placement']`'s
+  // nullable-triple shape either way - the route context's `assignCard`
+  // owns the optimistic-update/request lifecycle from here (see
   // `BinderRouteContext.tsx`).
   function handleSelectCard(card: TcgDexCatalogCard) {
     if (!selectedSlot) return;
     assignCard({
       ...card,
       variation: null,
-      placement: {
-        physicalPage: selectedSlot.physicalPage,
-        row: selectedSlot.row,
-        column: selectedSlot.column,
-      },
+      placement: selectedSlot,
     });
     setSelectedSlot(null);
   }
 
   // Submits the manual-entry form's custom card to the currently selected
-  // slot and closes the modal immediately (story 12), mirroring
-  // `handleSelectCard` above.
+  // slot or the unplaced panel (story 12; unplaced target added in story
+  // 15) and closes the modal immediately, mirroring `handleSelectCard`
+  // above. `assignCustomCard`'s `placement` parameter is `null` only as a
+  // whole (never partially), so a placed `selectedSlot`'s numeric fields
+  // are passed through together.
   function handleSubmitCustomCard(values: CustomCardFormValues, file: File) {
     if (!selectedSlot) return;
-    assignCustomCard(values, file, {
-      physicalPage: selectedSlot.physicalPage,
-      row: selectedSlot.row,
-      column: selectedSlot.column,
-    });
+    const placement =
+      selectedSlot.physicalPage !== null
+        ? {
+            physicalPage: selectedSlot.physicalPage,
+            row: selectedSlot.row as number,
+            column: selectedSlot.column as number,
+          }
+        : null;
+    assignCustomCard(values, file, placement);
     setSelectedSlot(null);
     setManualEntryDraft(null);
   }
@@ -319,142 +340,179 @@ export function BinderLayoutView() {
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
+      // Story 15: the unplaced panel's own scroll position must stay
+      // stationary during a drag rather than dnd-kit auto-scrolling it (or
+      // any other ancestor) toward the pointer.
+      autoScroll={false}
     >
-      <div className="flex h-full min-h-0 flex-1 flex-col gap-10 p-8">
-        {/* The Michi-indicator toggle (story 10) and the direct page-number
-            input (story 9), side by side on their own row above the binder
-            visualization. */}
-        <div className="flex items-center justify-center gap-10">
-          {/* Story 10's toggle: custom-styled checkbox matching the app's
-            checkbox convention (styling.instructions.md's "Forms & inputs"
-            section). Defaults to off since `michiIndicatorsVisible` is only
-            true when the URL explicitly has `michi=true`. The label is
-            forced onto 2 short lines (rather than one long line) so this
-            control stays narrow next to the page input. */}
-          <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
-            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-              <input
-                id="michi-indicators-toggle"
-                type="checkbox"
-                checked={michiIndicatorsVisible}
-                onChange={toggleMichiIndicators}
-                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-              />
-              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-            </span>
-            <span className="flex flex-col text-caption leading-tight text-neutral-500">
-              <span>Show Michi</span>
-              <span>slot indicators</span>
-            </span>
-          </label>
+      {/* A 3-column grid: the unplaced-cards panel, the centered
+          toolbar+spread content, and a fixed-width invisible spacer
+          (story 15) - in that order. The spacer's width always mirrors
+          the panel's own fixed width, so the middle column is centered on
+          the *entire* tab's width exactly as it was before the panel
+          existed, rather than being re-centered only within the leftover
+          space next to the panel. A single explicit row
+          (`grid-rows-[minmax(0,1fr)]`) fills the tab's full height and
+          stretches every column - including the panel - to it, so the
+          panel's top edge lines up with the toolbar row above the spread
+          instead of starting only alongside the spread. */}
+      <div className="grid h-full min-h-0 flex-1 grid-cols-[24rem_1fr_24rem] grid-rows-[minmax(0,1fr)] gap-8 p-8">
+        <UnplacedCardsPanel
+          cards={cards}
+          pendingCardDeletionIds={pendingCardDeletionIds}
+          pendingUnplacedCardIds={pendingUnplacedCardIds}
+          isMovePending={isMovePending}
+          onRemoveCard={removeCard}
+          onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
+        />
 
-          <div className="flex flex-col items-center gap-1">
-            <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
-              Go to page
+        <div className="flex h-full min-h-0 flex-col gap-4">
+          {/* The Michi-indicator toggle (story 10) and the direct page-number
+              input (story 9), side by side on their own row above the binder
+              visualization. */}
+          <div className="flex items-center justify-center gap-10">
+            {/* Story 10's toggle: custom-styled checkbox matching the app's
+              checkbox convention (styling.instructions.md's "Forms & inputs"
+              section). Defaults to off since `michiIndicatorsVisible` is only
+              true when the URL explicitly has `michi=true`. The label is
+              forced onto 2 short lines (rather than one long line) so this
+              control stays narrow next to the page input. */}
+            <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                <input
+                  id="michi-indicators-toggle"
+                  type="checkbox"
+                  checked={michiIndicatorsVisible}
+                  onChange={toggleMichiIndicators}
+                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                />
+                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+              </span>
+              <span className="flex flex-col text-caption leading-tight text-neutral-500">
+                <span>Show Michi</span>
+                <span>slot indicators</span>
+              </span>
             </label>
-            <input
-              id="layout-page-input"
-              type="number"
-              min={1}
-              max={maxPhysicalPage}
-              step={1}
-              value={pageInputValue}
-              onChange={(event) => setPageInputValue(event.target.value)}
-              onBlur={commitPageInput}
-              onKeyDown={(event) => {
-                // Commits on Enter by blurring, which routes through the same
-                // `commitPageInput` handler instead of duplicating its logic.
-                if (event.key === 'Enter') event.currentTarget.blur();
-              }}
-              className={PAGE_INPUT_CLASS_NAME}
-            />
-          </div>
-        </div>
 
-        <div className="flex h-full min-h-0 flex-1 items-center justify-center gap-4">
-          <button
-            type="button"
-            aria-label="Previous page"
-            disabled={isFirstSpread || activeDragCard !== null}
-            onClick={() =>
-              navigateToPhysicalPage(getPreviousPhysicalPage(physicalPage, maxPhysicalPage))
-            }
-            className={ARROW_BUTTON_CLASS_NAME}
-          >
-            <ChevronLeft className="size-6" />
-          </button>
-
-          {/* The current spread's label (story 9), centered directly above
-            the binder visualization it describes. */}
-          <div className="flex h-full min-h-0 max-w-2xl flex-1 flex-col items-center gap-2">
-            <p className="text-caption text-neutral-500">{getSpreadLabel(spread)}</p>
-
-            {/* Only the active spread's data is mounted - the previous/next
-              spreads are never rendered or retained as hidden elements. A
-              tight gap keeps the two sides reading as one bound spread (like
-              facing pages meeting at the spine), and the max-width cap keeps
-              the overall visualization compact so future flanking panels
-              (notes on the left, unplaced cards on the right) have room
-              beside it rather than being crowded out by an edge-to-edge
-              layout. Both flex slots always render (a blank, non-content
-              placeholder standing in for the side missing on the first/last
-              spread) so that single-sided spread reserves the exact same
-              half-row share of space as a two-sided spread instead of its
-              lone binder side stretching to fill the whole row. */}
-            <div className="flex h-full min-h-0 w-full flex-1 items-stretch justify-center gap-1">
-              {spread.left !== null ? (
-                <BinderSide
-                  side="left"
-                  width={binder.width}
-                  height={binder.height}
-                  physicalPage={spread.left}
-                  cards={cards}
-                  pendingPlacementKeys={pendingPlacementKeys}
-                  onSlotClick={(row, column) =>
-                    setSelectedSlot({ physicalPage: spread.left as number, row, column })
-                  }
-                  onRemoveCard={removeCard}
-                  pendingCardDeletionIds={pendingCardDeletionIds}
-                  isMovePending={isMovePending}
-                  michiIndicatorsVisible={michiIndicatorsVisible}
-                />
-              ) : (
-                <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
-              )}
-              {spread.right !== null ? (
-                <BinderSide
-                  side="right"
-                  width={binder.width}
-                  height={binder.height}
-                  physicalPage={spread.right}
-                  cards={cards}
-                  pendingPlacementKeys={pendingPlacementKeys}
-                  onSlotClick={(row, column) =>
-                    setSelectedSlot({ physicalPage: spread.right as number, row, column })
-                  }
-                  onRemoveCard={removeCard}
-                  pendingCardDeletionIds={pendingCardDeletionIds}
-                  isMovePending={isMovePending}
-                  michiIndicatorsVisible={michiIndicatorsVisible}
-                />
-              ) : (
-                <div className="h-full min-h-0 w-full min-w-0 flex-1" aria-hidden="true" />
-              )}
+            <div className="flex flex-col items-center gap-1">
+              <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
+                Go to page
+              </label>
+              <input
+                id="layout-page-input"
+                type="number"
+                min={1}
+                max={maxPhysicalPage}
+                step={1}
+                value={pageInputValue}
+                onChange={(event) => setPageInputValue(event.target.value)}
+                onBlur={commitPageInput}
+                onKeyDown={(event) => {
+                  // Commits on Enter by blurring, which routes through the same
+                  // `commitPageInput` handler instead of duplicating its logic.
+                  if (event.key === 'Enter') event.currentTarget.blur();
+                }}
+                className={PAGE_INPUT_CLASS_NAME}
+              />
             </div>
           </div>
 
-          <button
-            type="button"
-            aria-label="Next page"
-            disabled={isLastSpread || activeDragCard !== null}
-            onClick={() =>
-              navigateToPhysicalPage(getNextPhysicalPage(physicalPage, maxPhysicalPage))
-            }
-            className={ARROW_BUTTON_CLASS_NAME}
-          >
-            <ChevronRight className="size-6" />
-          </button>
+          {/* The current spread's label (story 9) lives on its own row,
+              centered above the binder visualization. */}
+          <p className="text-center text-caption text-neutral-500">{getSpreadLabel(spread)}</p>
+
+          {/* Two nested containers split "claim the leftover height" from
+              "center the visible content": the OUTER div reserves the tab's
+              full remaining height (`flex-1`) and pins its child to the TOP
+              of it (`items-start`), so the binder visualization renders
+              right under the label - any leftover height (the fitting area
+              is often shorter than the full remaining space) falls below
+              the content rather than pushing it down the tab. The INNER row
+              is not stretched - it only hugs its own real content height -
+              so its own `items-center` correctly centers the chevrons
+              against the actual rendered grid height, with no artificial
+              extra space to throw that off. */}
+          <div className="flex h-full min-h-0 flex-1 items-start justify-center">
+            <div className="flex w-full items-center justify-center gap-4">
+              <button
+                type="button"
+                aria-label="Previous page"
+                disabled={isFirstSpread || activeDragCard !== null}
+                onClick={() =>
+                  navigateToPhysicalPage(getPreviousPhysicalPage(physicalPage, maxPhysicalPage))
+                }
+                className={ARROW_BUTTON_CLASS_NAME}
+              >
+                <ChevronLeft className="size-6" />
+              </button>
+
+              {/* Only the active spread's data is mounted - the previous/next
+                spreads are never rendered or retained as hidden elements. A
+                tight gap keeps the two sides reading as one bound spread (like
+                facing pages meeting at the spine), and the max-width cap keeps
+                the overall visualization compact. Both flex slots always
+                render (a blank, non-content placeholder standing in for the
+                side missing on the first/last spread) so that single-sided
+                spread reserves the exact same half-row share of space as a
+                two-sided spread instead of its lone binder side stretching to
+                fill the whole row. */}
+              <div className="flex max-w-2xl flex-1 items-stretch justify-center gap-1">
+                {spread.left !== null ? (
+                  <BinderSide
+                    side="left"
+                    width={binder.width}
+                    height={binder.height}
+                    physicalPage={spread.left}
+                    cards={cards}
+                    pendingPlacementKeys={pendingPlacementKeys}
+                    onSlotClick={(row, column) =>
+                      setSelectedSlot({ physicalPage: spread.left as number, row, column })
+                    }
+                    onRemoveCard={removeCard}
+                    pendingCardDeletionIds={pendingCardDeletionIds}
+                    isMovePending={isMovePending}
+                    michiIndicatorsVisible={michiIndicatorsVisible}
+                  />
+                ) : (
+                  <div className="w-full min-w-0 flex-1" aria-hidden="true" />
+                )}
+                {spread.right !== null ? (
+                  <BinderSide
+                    side="right"
+                    width={binder.width}
+                    height={binder.height}
+                    physicalPage={spread.right}
+                    cards={cards}
+                    pendingPlacementKeys={pendingPlacementKeys}
+                    onSlotClick={(row, column) =>
+                      setSelectedSlot({ physicalPage: spread.right as number, row, column })
+                    }
+                    onRemoveCard={removeCard}
+                    pendingCardDeletionIds={pendingCardDeletionIds}
+                    isMovePending={isMovePending}
+                    michiIndicatorsVisible={michiIndicatorsVisible}
+                  />
+                ) : (
+                  <div className="w-full min-w-0 flex-1" aria-hidden="true" />
+                )}
+              </div>
+
+              <button
+                type="button"
+                aria-label="Next page"
+                disabled={isLastSpread || activeDragCard !== null}
+                onClick={() =>
+                  navigateToPhysicalPage(getNextPhysicalPage(physicalPage, maxPhysicalPage))
+                }
+                className={ARROW_BUTTON_CLASS_NAME}
+              >
+                <ChevronRight className="size-6" />
+              </button>
+            </div>
+          </div>
         </div>
+
+        <div aria-hidden="true" />
       </div>
 
       {/* The drag overlay (story 14): renders the dragged card's image

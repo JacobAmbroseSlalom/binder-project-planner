@@ -84,8 +84,8 @@ export interface paths {
         get: operations["listBinderCards"];
         put?: never;
         /**
-         * Assign a TCGdex or custom card to a binder slot
-         * @description Creates a binder-owned card from either a normalized TCGdex catalog result (story 11, `application/json`) or a manually-entered custom card (story 12, `multipart/form-data`) and its target placement. The backend assigns the `source` server-side, installs the card's image, and validates placement against the binder's current dimensions.
+         * Assign a TCGdex or custom card to a binder slot or the unplaced-cards section
+         * @description Creates a binder-owned card from either a normalized TCGdex catalog result (story 11, `application/json`) or a manually-entered custom card (story 12, `multipart/form-data`) and its target placement, or with a fully-null placement to add it to the unplaced-cards section instead (story 15). The backend assigns the `source` server-side, installs the card's image, and validates a fully-populated placement against the binder's current dimensions.
          */
         post: operations["createBinderCard"];
         delete?: never;
@@ -249,7 +249,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
-        /** @description One-based physical page, row, and column. All three are populated for a placed item and all three are null for an unplaced item (story 11's slot assignment always supplies all three). */
+        /** @description One-based physical page, row, and column. All three are populated for a placed item and all three are null for an unplaced item (story 15's unplaced-cards section). */
         PlacementCoordinates: {
             physicalPage: number | null;
             row: number | null;

@@ -84,7 +84,7 @@ export function BinderSide({
   }, [cards, physicalPage]);
 
   return (
-    <div className="binder-side-fit flex h-full min-h-0 w-full min-w-0 flex-1 items-center justify-center">
+    <div className="binder-side-fit flex w-full min-w-0 flex-1 items-center justify-center">
       {/* `.binder-side-grid` (the size-capping class) now lives on this
           outer wrapper rather than the surface box below, so the Michi
           indicator strip (story 10) can render as its own row above the
