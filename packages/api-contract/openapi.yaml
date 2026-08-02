@@ -505,6 +505,48 @@ components:
           maximum: 599
         detail:
           type: string
+    BinderWidthPerSlot:
+      type: number
+      exclusiveMinimum: 0
+      description: >-
+        Centimeters, to two decimal places. Must be greater than zero. Used
+        with widthBase to compute displayed width:
+        (slots * widthPerSlot) + widthBase.
+    BinderWidthBase:
+      type: number
+      description: >-
+        Centimeters, to two decimal places. May be negative only when the
+        one-slot computed width (widthPerSlot + widthBase) remains greater
+        than zero; the backend rejects combinations that don't.
+    BinderHeightPerSlot:
+      type: number
+      exclusiveMinimum: 0
+      description: >-
+        Centimeters, to two decimal places. Must be greater than zero. Used
+        with heightBase to compute displayed height:
+        (slots * heightPerSlot) + heightBase.
+    BinderHeightBase:
+      type: number
+      description: >-
+        Centimeters, to two decimal places. May be negative only when the
+        one-slot computed height (heightPerSlot + heightBase) remains
+        greater than zero; the backend rejects combinations that don't.
+    BinderBorderColor:
+      type: string
+      pattern: '^#[0-9A-Fa-f]{6}$'
+      description: >-
+        Six-digit `#RRGGBB` hexadecimal color. The backend normalizes
+        hexadecimal letters to uppercase before saving.
+    BinderBorderRadius:
+      type: number
+      minimum: 0
+      maximum: 100
+      description: Percentage, to two decimal places, from 0 through 100 inclusive.
+    BinderBorderWidth:
+      type: number
+      minimum: 0
+      maximum: 100
+      description: Percentage, to two decimal places, from 0 through 100 inclusive.
     CreateBinderRequest:
       type: object
       additionalProperties: false
@@ -533,13 +575,50 @@ components:
           type: integer
           minimum: 1
           description: Stored binder-page count. Physical pages range from 1 through 2 * pages.
+        widthPerSlot:
+          allOf:
+            - $ref: '#/components/schemas/BinderWidthPerSlot'
+          description: >-
+            Defaults to the shared DEFAULT_WIDTH_PER_SLOT_CM value when
+            omitted.
+        widthBase:
+          allOf:
+            - $ref: '#/components/schemas/BinderWidthBase'
+          description: Defaults to the shared DEFAULT_WIDTH_BASE_CM value when omitted.
+        heightPerSlot:
+          allOf:
+            - $ref: '#/components/schemas/BinderHeightPerSlot'
+          description: >-
+            Defaults to the shared DEFAULT_HEIGHT_PER_SLOT_CM value when
+            omitted.
+        heightBase:
+          allOf:
+            - $ref: '#/components/schemas/BinderHeightBase'
+          description: Defaults to the shared DEFAULT_HEIGHT_BASE_CM value when omitted.
+        borderColor:
+          allOf:
+            - $ref: '#/components/schemas/BinderBorderColor'
+          description: Defaults to the shared DEFAULT_BORDER_COLOR value when omitted.
+        borderRadius:
+          allOf:
+            - $ref: '#/components/schemas/BinderBorderRadius'
+          description: >-
+            Defaults to the shared DEFAULT_BORDER_RADIUS_PERCENT value when
+            omitted.
+        borderWidth:
+          allOf:
+            - $ref: '#/components/schemas/BinderBorderWidth'
+          description: >-
+            Defaults to the shared DEFAULT_BORDER_WIDTH_PERCENT value when
+            omitted.
     UpdateBinderRequest:
       type: object
       additionalProperties: false
       description: >-
         A partial update; only supplied fields are changed. Story 7 covers
-        name/width/height/pages; later stories (20-24) add notes, preview
-        page, dimension, and lock-state fields to this same request schema.
+        name/width/height/pages; story 24 adds the dimension and
+        multi-slot-art style fields below; later stories add notes, preview
+        page, and lock-state fields to this same request schema.
       minProperties: 1
       properties:
         name:
@@ -561,6 +640,20 @@ components:
           type: integer
           minimum: 1
           description: Stored binder-page count. Physical pages range from 1 through 2 * pages.
+        widthPerSlot:
+          $ref: '#/components/schemas/BinderWidthPerSlot'
+        widthBase:
+          $ref: '#/components/schemas/BinderWidthBase'
+        heightPerSlot:
+          $ref: '#/components/schemas/BinderHeightPerSlot'
+        heightBase:
+          $ref: '#/components/schemas/BinderHeightBase'
+        borderColor:
+          $ref: '#/components/schemas/BinderBorderColor'
+        borderRadius:
+          $ref: '#/components/schemas/BinderBorderRadius'
+        borderWidth:
+          $ref: '#/components/schemas/BinderBorderWidth'
     Binder:
       type: object
       additionalProperties: false
@@ -570,6 +663,13 @@ components:
         - width
         - height
         - pages
+        - widthPerSlot
+        - widthBase
+        - heightPerSlot
+        - heightBase
+        - borderColor
+        - borderRadius
+        - borderWidth
         - createdAt
         - updatedAt
       properties:
@@ -591,6 +691,20 @@ components:
         pages:
           type: integer
           minimum: 1
+        widthPerSlot:
+          $ref: '#/components/schemas/BinderWidthPerSlot'
+        widthBase:
+          $ref: '#/components/schemas/BinderWidthBase'
+        heightPerSlot:
+          $ref: '#/components/schemas/BinderHeightPerSlot'
+        heightBase:
+          $ref: '#/components/schemas/BinderHeightBase'
+        borderColor:
+          $ref: '#/components/schemas/BinderBorderColor'
+        borderRadius:
+          $ref: '#/components/schemas/BinderBorderRadius'
+        borderWidth:
+          $ref: '#/components/schemas/BinderBorderWidth'
         createdAt:
           type: string
           format: date-time

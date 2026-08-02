@@ -20,6 +20,7 @@ export function UnplacedCard({
   isPendingCreate,
   isMovePending,
   onRemoveCard,
+  slotAspectRatio,
 }: {
   card: Card;
   // True while this card's own removal is in flight (story 13).
@@ -33,6 +34,9 @@ export function UnplacedCard({
   // settles.
   isMovePending: boolean;
   onRemoveCard: (cardId: string) => void;
+  // Story 24: the binder's configured single-slot width-to-height ratio,
+  // threaded down from `BinderLayoutView` through `UnplacedCardsPanel`.
+  slotAspectRatio: number;
 }) {
   const {
     attributes,
@@ -55,6 +59,7 @@ export function UnplacedCard({
       tileRef={setDraggableRef}
       dragAttributes={attributes}
       dragListeners={listeners}
+      slotAspectRatio={slotAspectRatio}
     />
   );
 }

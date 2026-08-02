@@ -48,6 +48,7 @@ export function UnplacedCardsPanel({
   isMovePending,
   onRemoveCard,
   onAddCard,
+  slotAspectRatio,
 }: {
   // Every card in the binder; filtered internally to the unplaced subset
   // (all-null placement), mirroring `BinderSide`'s own "pass the full list,
@@ -58,6 +59,9 @@ export function UnplacedCardsPanel({
   isMovePending: boolean;
   onRemoveCard: (cardId: string) => void;
   onAddCard: () => void;
+  // Story 24: the binder's configured single-slot width-to-height ratio,
+  // threaded down from `BinderLayoutView` to each `UnplacedCard` tile.
+  slotAspectRatio: number;
 }) {
   const unplacedCards = useMemo(
     () => sortUnplacedCards(cards.filter((card) => card.placement.physicalPage === null)),
@@ -175,6 +179,7 @@ export function UnplacedCardsPanel({
                     isPendingCreate={pendingUnplacedCardIds.has(card.id)}
                     isMovePending={isMovePending}
                     onRemoveCard={onRemoveCard}
+                    slotAspectRatio={slotAspectRatio}
                   />
                 ))}
               </div>

@@ -36,6 +36,13 @@ export default function BinderDetailsPage() {
       width: binder.width,
       height: binder.height,
       pages: binder.pages,
+      widthPerSlot: binder.widthPerSlot,
+      widthBase: binder.widthBase,
+      heightPerSlot: binder.heightPerSlot,
+      heightBase: binder.heightBase,
+      borderColor: binder.borderColor,
+      borderRadius: binder.borderRadius,
+      borderWidth: binder.borderWidth,
     },
   });
 

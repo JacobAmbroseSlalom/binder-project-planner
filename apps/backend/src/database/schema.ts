@@ -21,6 +21,20 @@ export const binders = sqliteTable(
     width: integer().notNull(),
     height: integer().notNull(),
     pages: integer().notNull(),
+    // Card/multi-slot-art dimension and style settings (story 24). REST
+    // contracts expose these as decimal centimeters/percentages, but the
+    // database stores them as integer hundredths (e.g. 6.85 cm ->
+    // `685`, 38% -> `3800`) to avoid floating-point drift, per
+    // planning.md's "Technical requirements".
+    widthPerSlotHundredths: integer().notNull(),
+    widthBaseHundredths: integer().notNull(),
+    heightPerSlotHundredths: integer().notNull(),
+    heightBaseHundredths: integer().notNull(),
+    // Six-digit uppercase `#RRGGBB` hex color; normalized to uppercase by
+    // the backend before saving.
+    borderColor: text().notNull(),
+    borderRadiusHundredths: integer().notNull(),
+    borderWidthHundredths: integer().notNull(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
   },
@@ -34,6 +48,37 @@ export const binders = sqliteTable(
     // already guaranteed by the `integer().notNull()` columns above plus
     // OpenAPI/Zod validation, so only the upper bound needs a DB check.
     check('binder_dimension_max', sql`${table.width} <= 8 AND ${table.height} <= 8`),
+    // Story 24: width/height-per-slot must be positive, and the one-slot
+    // formula (`perSlot + base`) must stay positive even when its base is
+    // negative - belt-and-suspenders alongside the application-level
+    // cross-field validation in routes/binders.ts.
+    check('binder_width_per_slot_positive', sql`${table.widthPerSlotHundredths} > 0`),
+    check('binder_height_per_slot_positive', sql`${table.heightPerSlotHundredths} > 0`),
+    check(
+      'binder_width_one_slot_positive',
+      sql`(${table.widthPerSlotHundredths} + ${table.widthBaseHundredths}) > 0`,
+    ),
+    check(
+      'binder_height_one_slot_positive',
+      sql`(${table.heightPerSlotHundredths} + ${table.heightBaseHundredths}) > 0`,
+    ),
+    // Border radius/width are percentages from 0 to 100 inclusive (0 to
+    // 10000 hundredths).
+    check(
+      'binder_border_radius_range',
+      sql`${table.borderRadiusHundredths} >= 0 AND ${table.borderRadiusHundredths} <= 10000`,
+    ),
+    check(
+      'binder_border_width_range',
+      sql`${table.borderWidthHundredths} >= 0 AND ${table.borderWidthHundredths} <= 10000`,
+    ),
+    // Six uppercase hex digits after the `#`; SQLite's GLOB uses UNIX
+    // glob-style bracket character classes, which support ranges like
+    // `[0-9A-F]`.
+    check(
+      'binder_border_color_format',
+      sql`${table.borderColor} GLOB '#[0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F]'`,
+    ),
   ],
 );
 

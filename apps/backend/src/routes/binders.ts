@@ -1,6 +1,15 @@
 import { randomUUID } from 'node:crypto';
 
-import { BINDER_NAME_MAX_LENGTH } from '@binder-project-planner/shared';
+import {
+  BINDER_NAME_MAX_LENGTH,
+  DEFAULT_BORDER_COLOR,
+  DEFAULT_BORDER_RADIUS_PERCENT,
+  DEFAULT_BORDER_WIDTH_PERCENT,
+  DEFAULT_HEIGHT_BASE_CM,
+  DEFAULT_HEIGHT_PER_SLOT_CM,
+  DEFAULT_WIDTH_BASE_CM,
+  DEFAULT_WIDTH_PER_SLOT_CM,
+} from '@binder-project-planner/shared';
 import { asc, desc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 
@@ -10,27 +19,45 @@ import { listCardsForBinder } from './cards.js';
 
 // The validated, OpenAPI-typed shape of a create-binder request body. The
 // OpenAPI validation middleware (mounted in app.ts) already rejects requests
-// that don't match this shape before this router runs.
+// that don't match this shape before this router runs. Story 24's
+// dimension/style fields are optional here and default to the canonical
+// shared values when omitted (see `applyDimensionDefaults` below).
 interface CreateBinderRequestBody {
   name: string;
   width: number;
   height: number;
   pages: number;
+  widthPerSlot?: number;
+  widthBase?: number;
+  heightPerSlot?: number;
+  heightBase?: number;
+  borderColor?: string;
+  borderRadius?: number;
+  borderWidth?: number;
 }
 
 // The validated, OpenAPI-typed shape of an update-binder request body
-// (story 7). Every field is optional since it's a partial update; the
-// OpenAPI schema already guarantees at least one field is present and that
-// no undocumented field slipped through.
+// (story 7; story 24 adds the dimension/style fields). Every field is
+// optional since it's a partial update; the OpenAPI schema already
+// guarantees at least one field is present and that no undocumented field
+// slipped through.
 interface UpdateBinderRequestBody {
   name?: string;
   width?: number;
   height?: number;
   pages?: number;
+  widthPerSlot?: number;
+  widthBase?: number;
+  heightPerSlot?: number;
+  heightBase?: number;
+  borderColor?: string;
+  borderRadius?: number;
+  borderWidth?: number;
 }
 
 // The raw database row shape (includes the internal `normalizedName`
-// uniqueness column, which is never exposed to clients).
+// uniqueness column and the integer-hundredths dimension/style columns,
+// neither of which are ever exposed to clients as-is).
 interface BinderRow {
   id: string;
   name: string;
@@ -38,12 +65,33 @@ interface BinderRow {
   width: number;
   height: number;
   pages: number;
+  widthPerSlotHundredths: number;
+  widthBaseHundredths: number;
+  heightPerSlotHundredths: number;
+  heightBaseHundredths: number;
+  borderColor: string;
+  borderRadiusHundredths: number;
+  borderWidthHundredths: number;
   createdAt: string;
   updatedAt: string;
 }
 
-// Strips internal-only columns (`normalizedName`) before a binder row is
-// serialized as an OpenAPI `Binder`, shared by every route that returns one.
+// Story 24: REST contracts expose centimeters/percentages as decimals to
+// two decimal places, but the database stores them as integer hundredths
+// to avoid floating-point drift (per planning.md). These two helpers
+// convert between the two representations at the API boundary.
+function toHundredths(value: number): number {
+  return Math.round(value * 100);
+}
+
+function fromHundredths(value: number): number {
+  return value / 100;
+}
+
+// Strips internal-only columns (`normalizedName`, the `*Hundredths` storage
+// columns) and converts stored hundredths back to their documented decimal
+// units before a binder row is serialized as an OpenAPI `Binder`, shared by
+// every route that returns one.
 function serializeBinder(row: BinderRow) {
   return {
     id: row.id,
@@ -51,8 +99,58 @@ function serializeBinder(row: BinderRow) {
     width: row.width,
     height: row.height,
     pages: row.pages,
+    widthPerSlot: fromHundredths(row.widthPerSlotHundredths),
+    widthBase: fromHundredths(row.widthBaseHundredths),
+    heightPerSlot: fromHundredths(row.heightPerSlotHundredths),
+    heightBase: fromHundredths(row.heightBaseHundredths),
+    borderColor: row.borderColor,
+    borderRadius: fromHundredths(row.borderRadiusHundredths),
+    borderWidth: fromHundredths(row.borderWidthHundredths),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+  };
+}
+
+// A validated `#RRGGBB` hex color (case-insensitive input; OpenAPI's
+// `pattern` already enforces this shape, this is a defense-in-depth
+// re-check before normalizing to uppercase for storage).
+const HEX_COLOR_PATTERN = /^#[0-9A-Fa-f]{6}$/;
+
+// Story 24's cross-field dimension/style validation, applied on both
+// create and update: OpenAPI's schema already enforces each field's own
+// range, but "base may be negative only when the one-slot formula stays
+// positive" spans two fields and can't be expressed as a JSON Schema
+// constraint, so it's re-checked here (and, belt-and-suspenders, by a
+// database check constraint). Returns a Problem Details `detail` message
+// describing the first violation found, or `null` when the combination is
+// valid.
+function validateDimensionFields(fields: {
+  widthPerSlot: number;
+  widthBase: number;
+  heightPerSlot: number;
+  heightBase: number;
+}): string | null {
+  if (fields.widthPerSlot <= 0) {
+    return 'widthPerSlot must be greater than zero.';
+  }
+  if (fields.heightPerSlot <= 0) {
+    return 'heightPerSlot must be greater than zero.';
+  }
+  if (fields.widthPerSlot + fields.widthBase <= 0) {
+    return 'The one-slot width (widthPerSlot + widthBase) must be greater than zero.';
+  }
+  if (fields.heightPerSlot + fields.heightBase <= 0) {
+    return 'The one-slot height (heightPerSlot + heightBase) must be greater than zero.';
+  }
+  return null;
+}
+
+function badRequestProblem(detail: string) {
+  return {
+    type: 'about:blank',
+    title: 'Bad Request',
+    status: 400,
+    detail,
   };
 }
 
@@ -126,6 +224,35 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
       return;
     }
 
+    // Story 24's dimension/style fields are optional on create; an omitted
+    // field falls back to its canonical shared default (per planning.md's
+    // "Width per slot defaults to 6.85 cm" and similar defaults). The
+    // reusable frontend form always sends all of them, so this fallback
+    // only matters for a request that bypasses the form.
+    const dimensionFields = {
+      widthPerSlot: body.widthPerSlot ?? DEFAULT_WIDTH_PER_SLOT_CM,
+      widthBase: body.widthBase ?? DEFAULT_WIDTH_BASE_CM,
+      heightPerSlot: body.heightPerSlot ?? DEFAULT_HEIGHT_PER_SLOT_CM,
+      heightBase: body.heightBase ?? DEFAULT_HEIGHT_BASE_CM,
+    };
+    const borderColor = body.borderColor ?? DEFAULT_BORDER_COLOR;
+    const borderRadius = body.borderRadius ?? DEFAULT_BORDER_RADIUS_PERCENT;
+    const borderWidth = body.borderWidth ?? DEFAULT_BORDER_WIDTH_PERCENT;
+
+    const dimensionError = validateDimensionFields(dimensionFields);
+    if (dimensionError) {
+      response.status(400).type('application/problem+json').json(badRequestProblem(dimensionError));
+      return;
+    }
+
+    if (!HEX_COLOR_PATTERN.test(borderColor)) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(badRequestProblem('borderColor must be a six-digit #RRGGBB hexadecimal color.'));
+      return;
+    }
+
     const now = new Date().toISOString();
     const binder = {
       id: randomUUID(),
@@ -134,6 +261,15 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
       width: body.width,
       height: body.height,
       pages: body.pages,
+      widthPerSlotHundredths: toHundredths(dimensionFields.widthPerSlot),
+      widthBaseHundredths: toHundredths(dimensionFields.widthBase),
+      heightPerSlotHundredths: toHundredths(dimensionFields.heightPerSlot),
+      heightBaseHundredths: toHundredths(dimensionFields.heightBase),
+      // Normalizes hexadecimal letters to uppercase before saving, per
+      // planning.md.
+      borderColor: borderColor.toUpperCase(),
+      borderRadiusHundredths: toHundredths(borderRadius),
+      borderWidthHundredths: toHundredths(borderWidth),
       createdAt: now,
       updatedAt: now,
     };
@@ -210,6 +346,61 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
     if (body.width !== undefined) updates.width = body.width;
     if (body.height !== undefined) updates.height = body.height;
     if (body.pages !== undefined) updates.pages = body.pages;
+
+    // Cross-field dimension validation (story 24) runs against the
+    // *effective* values - existing persisted values overridden by any
+    // fields included in this patch - since e.g. changing only `widthBase`
+    // must still be checked against the binder's current (or
+    // simultaneously updated) `widthPerSlot`.
+    const dimensionFieldsIncluded =
+      body.widthPerSlot !== undefined ||
+      body.widthBase !== undefined ||
+      body.heightPerSlot !== undefined ||
+      body.heightBase !== undefined;
+    if (dimensionFieldsIncluded) {
+      const effective = {
+        widthPerSlot: body.widthPerSlot ?? fromHundredths(existing.widthPerSlotHundredths),
+        widthBase: body.widthBase ?? fromHundredths(existing.widthBaseHundredths),
+        heightPerSlot: body.heightPerSlot ?? fromHundredths(existing.heightPerSlotHundredths),
+        heightBase: body.heightBase ?? fromHundredths(existing.heightBaseHundredths),
+      };
+      const dimensionError = validateDimensionFields(effective);
+      if (dimensionError) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(badRequestProblem(dimensionError));
+        return;
+      }
+    }
+    if (body.widthPerSlot !== undefined) {
+      updates.widthPerSlotHundredths = toHundredths(body.widthPerSlot);
+    }
+    if (body.widthBase !== undefined) {
+      updates.widthBaseHundredths = toHundredths(body.widthBase);
+    }
+    if (body.heightPerSlot !== undefined) {
+      updates.heightPerSlotHundredths = toHundredths(body.heightPerSlot);
+    }
+    if (body.heightBase !== undefined) {
+      updates.heightBaseHundredths = toHundredths(body.heightBase);
+    }
+    if (body.borderColor !== undefined) {
+      if (!HEX_COLOR_PATTERN.test(body.borderColor)) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(badRequestProblem('borderColor must be a six-digit #RRGGBB hexadecimal color.'));
+        return;
+      }
+      updates.borderColor = body.borderColor.toUpperCase();
+    }
+    if (body.borderRadius !== undefined) {
+      updates.borderRadiusHundredths = toHundredths(body.borderRadius);
+    }
+    if (body.borderWidth !== undefined) {
+      updates.borderWidthHundredths = toHundredths(body.borderWidth);
+    }
     updates.updatedAt = new Date().toISOString();
 
     let updated: BinderRow;

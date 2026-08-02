@@ -98,3 +98,20 @@ export const CUSTOM_CARD_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 // pixels, so an ordinary click (e.g. a future card-details action) doesn't
 // get mistaken for a drag attempt.
 export const CARD_DRAG_ACTIVATION_DISTANCE_PX = 8;
+
+// Story 24: "Configure card and multi-slot art dimensions". Per-binder
+// configurable formulas replace the fixed `SLOT_WIDTH_CM`/`SLOT_HEIGHT_CM`
+// one-slot dimensions above: displayed width is
+// `(slots * widthPerSlot) + widthBase`, and displayed height is
+// `(slots * heightPerSlot) + heightBase`. The defaults below reproduce the
+// same 6.35 cm x 9 cm one-slot ratio those fixed constants used.
+export const DEFAULT_WIDTH_PER_SLOT_CM = 6.85;
+export const DEFAULT_WIDTH_BASE_CM = -0.5;
+export const DEFAULT_HEIGHT_PER_SLOT_CM = 9;
+export const DEFAULT_HEIGHT_BASE_CM = 0;
+
+// Multi-slot art style defaults, also configured per binder by story 24 and
+// overridable per art item (story 25).
+export const DEFAULT_BORDER_COLOR = '#FFCB05';
+export const DEFAULT_BORDER_RADIUS_PERCENT = 38;
+export const DEFAULT_BORDER_WIDTH_PERCENT = 11;

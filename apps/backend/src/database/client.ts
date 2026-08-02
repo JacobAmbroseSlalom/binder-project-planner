@@ -1,10 +1,43 @@
 import Database from 'better-sqlite3';
 import { drizzle, type BetterSQLite3Database } from 'drizzle-orm/better-sqlite3';
 import { migrate } from 'drizzle-orm/better-sqlite3/migrator';
-import { dirname } from 'node:path';
-import { mkdirSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, unlinkSync } from 'node:fs';
 
 import { migrationsDirectory } from '../paths.js';
+
+// How many timestamped pre-migration backups to retain per database file
+// (see `backupDatabaseFile` below) before pruning the oldest ones, so the
+// backups directory doesn't grow without bound across many restarts.
+const MAX_RETAINED_MIGRATION_BACKUPS = 10;
+
+// Copies the database file into a sibling `migration-backups` directory,
+// timestamped, immediately before migrations run. This is a safety net in
+// case a future migration has an unanticipated destructive side effect
+// (see the `foreign_keys` handling below for one such bug that already
+// bit this project twice) - restoring is just copying the newest backup
+// back over the live file. A no-op for `:memory:` databases and for the
+// very first run (nothing to back up yet).
+function backupDatabaseFile(databaseFile: string): void {
+  if (databaseFile === ':memory:' || !existsSync(databaseFile)) {
+    return;
+  }
+
+  const backupsDirectory = join(dirname(databaseFile), 'migration-backups');
+  mkdirSync(backupsDirectory, { recursive: true });
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const backupFilename = `${timestamp}.sqlite`;
+  copyFileSync(databaseFile, join(backupsDirectory, backupFilename));
+
+  // Prunes oldest-first once over the retention limit; sorting filenames
+  // works here because the ISO timestamp format sorts chronologically.
+  const backups = readdirSync(backupsDirectory).sort();
+  const excess = backups.length - MAX_RETAINED_MIGRATION_BACKUPS;
+  for (const staleBackup of backups.slice(0, Math.max(excess, 0))) {
+    unlinkSync(join(backupsDirectory, staleBackup));
+  }
+}
 
 export interface DatabaseConnection {
   close: () => void;
@@ -16,14 +49,34 @@ export function createDatabase(databaseFile: string): DatabaseConnection {
     mkdirSync(dirname(databaseFile), { recursive: true });
   }
 
+  backupDatabaseFile(databaseFile);
+
   const sqlite = new Database(databaseFile);
-  sqlite.pragma('foreign_keys = ON');
   if (databaseFile !== ':memory:') {
     sqlite.pragma('journal_mode = WAL');
   }
 
+  // Foreign key enforcement is deliberately left OFF for the duration of
+  // `migrate()` below, then turned ON afterward for normal app operation.
+  // Reasoning: drizzle-kit's generated "recreate table" migrations (used
+  // whenever a column change can't be applied in place, e.g. adding a
+  // NOT NULL column - see drizzle/0003_bumpy_black_knight.sql and
+  // drizzle/0005_naive_shotgun.sql) bracket themselves with
+  // `PRAGMA foreign_keys=OFF` / `=ON`, but those statements are silently
+  // ignored: SQLite refuses to toggle this pragma while a transaction is
+  // open, and drizzle's migrator wraps every pending migration in one
+  // `BEGIN`/`COMMIT`. Left ON, each migration's `DROP TABLE <parent>`
+  // performs SQLite's documented implicit `DELETE FROM <parent>` before
+  // dropping it, which fires any `ON DELETE CASCADE` action on tables that
+  // reference it - e.g. `cards.binderId` - deleting every card in the
+  // database as an unintended side effect of only touching the `binders`
+  // table's shape. This exact bug deleted all cards twice (migrations
+  // 0003 and 0005) before this fix; toggling the pragma here, outside any
+  // transaction, actually takes effect for the migration's whole run.
   const database = drizzle(sqlite);
+  sqlite.pragma('foreign_keys = OFF');
   migrate(database, { migrationsFolder: migrationsDirectory });
+  sqlite.pragma('foreign_keys = ON');
 
   return {
     close: () => sqlite.close(),

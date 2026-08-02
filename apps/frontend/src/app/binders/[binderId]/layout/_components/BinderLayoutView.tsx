@@ -10,11 +10,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import {
-  CARD_DRAG_ACTIVATION_DISTANCE_PX,
-  SLOT_HEIGHT_CM,
-  SLOT_WIDTH_CM,
-} from '@binder-project-planner/shared';
+import { CARD_DRAG_ACTIVATION_DISTANCE_PX } from '@binder-project-planner/shared';
 import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -97,6 +93,15 @@ export function BinderLayoutView() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { start } = useSaveStatusToast();
+
+  // Story 24: the binder's configured one-slot width/height (per-slot cm
+  // formulas resolved to a single slot's actual size) define the on-screen
+  // slot/card aspect ratio everywhere in this tab, replacing the old fixed
+  // `SLOT_WIDTH_CM`/`SLOT_HEIGHT_CM` ratio. CSS `aspect-ratio` accepts a
+  // unitless number directly, so this is computed once here and threaded
+  // down as a single prop rather than each component re-deriving it.
+  const slotAspectRatio =
+    (binder.widthPerSlot + binder.widthBase) / (binder.heightPerSlot + binder.heightBase);
 
   // The slot (if any) currently targeted by an open card-selection modal
   // (story 11).
@@ -364,6 +369,7 @@ export function BinderLayoutView() {
           isMovePending={isMovePending}
           onRemoveCard={removeCard}
           onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
+          slotAspectRatio={slotAspectRatio}
         />
 
         <div className="flex h-full min-h-0 flex-col gap-4">
@@ -472,6 +478,7 @@ export function BinderLayoutView() {
                     pendingCardDeletionIds={pendingCardDeletionIds}
                     isMovePending={isMovePending}
                     michiIndicatorsVisible={michiIndicatorsVisible}
+                    slotAspectRatio={slotAspectRatio}
                   />
                 ) : (
                   <div className="w-full min-w-0 flex-1" aria-hidden="true" />
@@ -491,6 +498,7 @@ export function BinderLayoutView() {
                     pendingCardDeletionIds={pendingCardDeletionIds}
                     isMovePending={isMovePending}
                     michiIndicatorsVisible={michiIndicatorsVisible}
+                    slotAspectRatio={slotAspectRatio}
                   />
                 ) : (
                   <div className="w-full min-w-0 flex-1" aria-hidden="true" />
@@ -523,7 +531,7 @@ export function BinderLayoutView() {
         {activeDragCard && (
           <div
             className="flex h-full w-full items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800"
-            style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
+            style={{ aspectRatio: slotAspectRatio }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- mirrors
                 the same arbitrary-origin image handling as `BinderSlot`. */}

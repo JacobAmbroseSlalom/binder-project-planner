@@ -203,6 +203,20 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** @description Centimeters, to two decimal places. Must be greater than zero. Used with widthBase to compute displayed width: (slots * widthPerSlot) + widthBase. */
+        BinderWidthPerSlot: number;
+        /** @description Centimeters, to two decimal places. May be negative only when the one-slot computed width (widthPerSlot + widthBase) remains greater than zero; the backend rejects combinations that don't. */
+        BinderWidthBase: number;
+        /** @description Centimeters, to two decimal places. Must be greater than zero. Used with heightBase to compute displayed height: (slots * heightPerSlot) + heightBase. */
+        BinderHeightPerSlot: number;
+        /** @description Centimeters, to two decimal places. May be negative only when the one-slot computed height (heightPerSlot + heightBase) remains greater than zero; the backend rejects combinations that don't. */
+        BinderHeightBase: number;
+        /** @description Six-digit `#RRGGBB` hexadecimal color. The backend normalizes hexadecimal letters to uppercase before saving. */
+        BinderBorderColor: string;
+        /** @description Percentage, to two decimal places, from 0 through 100 inclusive. */
+        BinderBorderRadius: number;
+        /** @description Percentage, to two decimal places, from 0 through 100 inclusive. */
+        BinderBorderWidth: number;
         CreateBinderRequest: {
             /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
             name: string;
@@ -212,8 +226,22 @@ export interface components {
             height: number;
             /** @description Stored binder-page count. Physical pages range from 1 through 2 * pages. */
             pages: number;
+            /** @description Defaults to the shared DEFAULT_WIDTH_PER_SLOT_CM value when omitted. */
+            widthPerSlot?: components["schemas"]["BinderWidthPerSlot"];
+            /** @description Defaults to the shared DEFAULT_WIDTH_BASE_CM value when omitted. */
+            widthBase?: components["schemas"]["BinderWidthBase"];
+            /** @description Defaults to the shared DEFAULT_HEIGHT_PER_SLOT_CM value when omitted. */
+            heightPerSlot?: components["schemas"]["BinderHeightPerSlot"];
+            /** @description Defaults to the shared DEFAULT_HEIGHT_BASE_CM value when omitted. */
+            heightBase?: components["schemas"]["BinderHeightBase"];
+            /** @description Defaults to the shared DEFAULT_BORDER_COLOR value when omitted. */
+            borderColor?: components["schemas"]["BinderBorderColor"];
+            /** @description Defaults to the shared DEFAULT_BORDER_RADIUS_PERCENT value when omitted. */
+            borderRadius?: components["schemas"]["BinderBorderRadius"];
+            /** @description Defaults to the shared DEFAULT_BORDER_WIDTH_PERCENT value when omitted. */
+            borderWidth?: components["schemas"]["BinderBorderWidth"];
         };
-        /** @description A partial update; only supplied fields are changed. Story 7 covers name/width/height/pages; later stories (20-24) add notes, preview page, dimension, and lock-state fields to this same request schema. */
+        /** @description A partial update; only supplied fields are changed. Story 7 covers name/width/height/pages; story 24 adds the dimension and multi-slot-art style fields below; later stories add notes, preview page, and lock-state fields to this same request schema. */
         UpdateBinderRequest: {
             /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
             name?: string;
@@ -223,6 +251,13 @@ export interface components {
             height?: number;
             /** @description Stored binder-page count. Physical pages range from 1 through 2 * pages. */
             pages?: number;
+            widthPerSlot?: components["schemas"]["BinderWidthPerSlot"];
+            widthBase?: components["schemas"]["BinderWidthBase"];
+            heightPerSlot?: components["schemas"]["BinderHeightPerSlot"];
+            heightBase?: components["schemas"]["BinderHeightBase"];
+            borderColor?: components["schemas"]["BinderBorderColor"];
+            borderRadius?: components["schemas"]["BinderBorderRadius"];
+            borderWidth?: components["schemas"]["BinderBorderWidth"];
         };
         Binder: {
             /** Format: uuid */
@@ -231,6 +266,13 @@ export interface components {
             width: number;
             height: number;
             pages: number;
+            widthPerSlot: components["schemas"]["BinderWidthPerSlot"];
+            widthBase: components["schemas"]["BinderWidthBase"];
+            heightPerSlot: components["schemas"]["BinderHeightPerSlot"];
+            heightBase: components["schemas"]["BinderHeightBase"];
+            borderColor: components["schemas"]["BinderBorderColor"];
+            borderRadius: components["schemas"]["BinderBorderRadius"];
+            borderWidth: components["schemas"]["BinderBorderWidth"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

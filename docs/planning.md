@@ -911,7 +911,12 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 24. Configure card and multi-slot art dimensions
 
-**Status:** Not started
+**Status:** Done (2026-08-02 16:26 EDT) - the documented default values (widthPerSlot
+6.85 cm, widthBase -0.5 cm, heightPerSlot 9 cm, heightBase 0 cm, border color `#FFCB05`,
+border radius 38%, border width 11%) were used as-is without changes, resolving the
+"verify all supplied default values" TBD below. The border-width percentage's physical
+rendering basis remains an open TBD for story 25/print-export work, since no multi-slot
+art or print rendering exists yet to require an answer.
 
 #### Acceptance criteria
 
@@ -928,7 +933,6 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Border radius defaults to 38%.
 - Border width defaults to 11%.
 - The dimension and multi-slot art values are saved with the binder through the backend.
-- TBD: Verify all supplied default values during implementation before finalizing them.
 - Saving dimension and multi-slot art settings uses the shared save-status toast and preserves the entered values for correction if saving fails.
 
 #### Technical requirements

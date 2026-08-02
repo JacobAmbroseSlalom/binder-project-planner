@@ -1,5 +1,4 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
-import { SLOT_HEIGHT_CM, SLOT_WIDTH_CM } from '@binder-project-planner/shared';
 import { X } from 'lucide-react';
 
 import { resolveCardImageUrl, type Card } from '@/lib/api';
@@ -23,6 +22,7 @@ export function CardTile({
   tileRef,
   dragAttributes,
   dragListeners,
+  slotAspectRatio,
 }: {
   card: Card;
   // True while this specific card is the one currently being dragged -
@@ -42,13 +42,16 @@ export function CardTile({
   tileRef: (node: HTMLElement | null) => void;
   dragAttributes: DraggableAttributes;
   dragListeners: DraggableSyntheticListeners;
+  // Story 24: the binder's configured single-slot width-to-height ratio,
+  // replacing the old fixed `SLOT_WIDTH_CM`/`SLOT_HEIGHT_CM` ratio.
+  slotAspectRatio: number;
 }) {
   if (isDragging) {
     return (
       <div
         ref={tileRef}
         className={`rounded-standard border border-neutral-700 bg-neutral-800 ${highlightClassName}`}
-        style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
+        style={{ aspectRatio: slotAspectRatio }}
       />
     );
   }
@@ -59,7 +62,7 @@ export function CardTile({
       {...dragAttributes}
       {...dragListeners}
       className={`group relative touch-none ${highlightClassName}`}
-      style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
+      style={{ aspectRatio: slotAspectRatio }}
     >
       <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800">
         {/* eslint-disable-next-line @next/next/no-img-element -- the card

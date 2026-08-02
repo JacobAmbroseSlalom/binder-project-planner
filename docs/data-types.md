@@ -162,12 +162,14 @@ acquisition state, pending-operation feedback, and editing controls are not rend
 
 ### CreateBinderRequest
 
-| Property | Type                         | Required |
-| -------- | ---------------------------- | -------- |
-| `name`   | string                       | Yes      |
-| `width`  | positive integer, `1` to `8` | Yes      |
-| `height` | positive integer, `1` to `8` | Yes      |
-| `pages`  | positive integer             | Yes      |
+| Property                                                   | Type                         | Required                                                    |
+| ---------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------- |
+| `name`                                                     | string                       | Yes                                                         |
+| `width`                                                    | positive integer, `1` to `8` | Yes                                                         |
+| `height`                                                   | positive integer, `1` to `8` | Yes                                                         |
+| `pages`                                                    | positive integer             | Yes                                                         |
+| `widthPerSlot`, `widthBase`, `heightPerSlot`, `heightBase` | corresponding Binder fields  | No; defaults to the shared dimension defaults when omitted. |
+| `borderColor`, `borderRadius`, `borderWidth`               | corresponding Binder fields  | No; defaults to the shared art-style defaults when omitted. |
 
 `POST /binders` returns `201 Created`, a `Location` header, and the complete `Binder`.
 

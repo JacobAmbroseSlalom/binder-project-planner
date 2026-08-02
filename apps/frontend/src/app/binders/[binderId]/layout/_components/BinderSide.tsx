@@ -1,4 +1,3 @@
-import { SLOT_HEIGHT_CM, SLOT_WIDTH_CM } from '@binder-project-planner/shared';
 import { useMemo } from 'react';
 
 import type { Card } from '@/lib/api';
@@ -25,6 +24,7 @@ export function BinderSide({
   pendingCardDeletionIds,
   isMovePending,
   michiIndicatorsVisible = false,
+  slotAspectRatio,
 }: {
   side: 'left' | 'right';
   width: number;
@@ -60,11 +60,14 @@ export function BinderSide({
   // openings face each other (see `michiIndicators.ts`). Defaults to off,
   // matching the toggle's default state.
   michiIndicatorsVisible?: boolean;
+  // Story 24: the binder's configured single-slot width-to-height ratio
+  // (see `BinderLayoutView`), replacing the old fixed 6.35:9 constant.
+  slotAspectRatio: number;
 }) {
   // The grid's overall width-to-height ratio (not just one slot's), used by
   // `.binder-side-grid`'s `min()` width formula in globals.css so the
   // complete grid fits both the available width and height.
-  const slotRatio = (width * SLOT_WIDTH_CM) / (height * SLOT_HEIGHT_CM);
+  const slotRatio = (width / height) * slotAspectRatio;
 
   const gapColumns = michiIndicatorsVisible ? getMichiGapColumns(width, side) : [];
   const hasIndicators = gapColumns.length > 0;
@@ -173,6 +176,7 @@ export function BinderSide({
                 isMovePending={isMovePending}
                 onSlotClick={onSlotClick}
                 onRemoveCard={onRemoveCard}
+                slotAspectRatio={slotAspectRatio}
               />
             );
           })}

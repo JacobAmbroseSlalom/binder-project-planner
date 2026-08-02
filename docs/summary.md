@@ -16,3 +16,9 @@ Very useful for the external api tcg Dex
 Tried to assume I would type a search in japanese
 
 Code review as copilot is coding
+
+Had it delete downstream dependencies with cascade delete while doing database migrations.
+
+Keep Scroll
+Image asset Clean up
+give example of multi-art sizes

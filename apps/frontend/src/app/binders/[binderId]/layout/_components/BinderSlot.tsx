@@ -1,5 +1,4 @@
 import { useDraggable, useDroppable } from '@dnd-kit/core';
-import { SLOT_HEIGHT_CM, SLOT_WIDTH_CM } from '@binder-project-planner/shared';
 import { Plus } from 'lucide-react';
 
 import type { Card } from '@/lib/api';
@@ -21,6 +20,7 @@ export function BinderSlot({
   isMovePending,
   onSlotClick,
   onRemoveCard,
+  slotAspectRatio,
 }: {
   physicalPage: number;
   row: number;
@@ -39,6 +39,9 @@ export function BinderSlot({
   isMovePending: boolean;
   onSlotClick: (row: number, column: number) => void;
   onRemoveCard: (cardId: string) => void;
+  // Story 24: the binder's configured single-slot width-to-height ratio,
+  // threaded down from `BinderLayoutView` through `BinderSide`.
+  slotAspectRatio: number;
 }) {
   // Every slot - occupied or empty - is a drop target (a drop onto an
   // occupied slot swaps the two cards). `id` matches the coordinate shape
@@ -91,6 +94,7 @@ export function BinderSlot({
         }}
         dragAttributes={attributes}
         dragListeners={listeners}
+        slotAspectRatio={slotAspectRatio}
       />
     );
   }
@@ -103,7 +107,7 @@ export function BinderSlot({
       onClick={() => onSlotClick(row, column)}
       aria-label={`Add a card to row ${row}, column ${column}`}
       className={`flex cursor-pointer items-center justify-center rounded-standard border border-neutral-700 bg-neutral-800 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${highlightClassName}`}
-      style={{ aspectRatio: `${SLOT_WIDTH_CM} / ${SLOT_HEIGHT_CM}` }}
+      style={{ aspectRatio: slotAspectRatio }}
     >
       <Plus className="size-6 text-neutral-500" aria-hidden="true" />
     </button>
