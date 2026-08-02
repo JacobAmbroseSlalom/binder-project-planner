@@ -9,6 +9,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import {
   createCard,
+  createCustomCard,
   getBinder,
   listBinderArt,
   listBinderCards,
@@ -34,6 +35,29 @@ import { BinderTabs } from './BinderTabs';
 // null placement.
 function placementKey(placement: { physicalPage: number; row: number; column: number }): string {
   return `${placement.physicalPage}-${placement.row}-${placement.column}`;
+}
+
+// The manual-entry form's text-field values (story 12) - excludes the
+// image file (handled separately as a `File`) and `variation` (not part of
+// the manual-entry form; set later through the same later-story flow used
+// for TCGdex cards).
+export interface CustomCardFormValues {
+  name: string;
+  setName: string | null;
+  localNumber: string | null;
+}
+
+// A one-shot signal set by `assignCustomCard` when a custom-card submission
+// fails (story 12: "the manual-entry view reopens ... with the entered
+// values and selected file preserved"). `BinderLayoutView` consumes this
+// exactly once (reopening the card-selection modal pre-filled, then
+// clearing it via `clearManualEntryRestore`) rather than it living as
+// persistent state, so a later unrelated modal open never accidentally
+// restores a stale failed attempt.
+export interface ManualEntryRestore {
+  placement: { physicalPage: number; row: number; column: number } | null;
+  values: CustomCardFormValues;
+  file: File;
 }
 
 // Fixed (not per-attempt-random) toast id, matching the pattern established
@@ -73,6 +97,22 @@ interface BinderRouteContextValue {
   // authoritative representation on success, or removes it (restoring the
   // empty slot) and surfaces the shared failed toast on failure.
   assignCard: (request: CreateCardRequest) => void;
+  // Assigns a manually-entered custom card to a binder slot (story 12),
+  // mirroring `assignCard`'s optimistic-insert/replace-or-remove lifecycle.
+  // `placement` is `null` only for the (currently unreachable in the UI -
+  // see story 15) unplaced-card case; the backend fully supports it either
+  // way.
+  assignCustomCard: (
+    values: CustomCardFormValues,
+    file: File,
+    placement: { physicalPage: number; row: number; column: number } | null,
+  ) => void;
+  // Set once by `assignCustomCard` when a submission fails, so the layout
+  // tab can reopen the card-selection modal pre-filled with the failed
+  // attempt's values/file rather than losing them. Consumed exactly once
+  // via `clearManualEntryRestore`.
+  manualEntryRestore: ManualEntryRestore | null;
+  clearManualEntryRestore: () => void;
   // The set of `placementKey`-formatted slots with an assignment currently
   // in flight, so the layout tab can disable those slots against further
   // clicks until the request settles.
@@ -148,6 +188,10 @@ export function BinderRouteProvider({
   const [includeTcgPocket, setIncludeTcgPocket] = useState<boolean>(
     CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
   );
+  // Story 12's one-shot restore signal (see the context value type's doc
+  // comment above) - `null` whenever there's no failed custom-card
+  // submission awaiting correction.
+  const [manualEntryRestore, setManualEntryRestore] = useState<ManualEntryRestore | null>(null);
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -273,6 +317,84 @@ export function BinderRouteProvider({
     [binderId, start],
   );
 
+  // Assigns a manually-entered custom card to a binder slot (story 12).
+  // Mirrors `assignCard`'s optimistic lifecycle, but creates its own
+  // object-URL preview from the uploaded `file` for the optimistic card's
+  // `imageUrl` (independent of the card-selection modal's own preview
+  // object URL - each owns and revokes its own). Revoking it
+  // unconditionally in `.finally()` is safe either way: by the time
+  // `.finally()` runs, the `.then()`/`.catch()` above has already replaced
+  // or removed the optimistic card from `cards`, so nothing continues to
+  // reference this URL regardless of outcome.
+  const assignCustomCard = useCallback(
+    (
+      values: CustomCardFormValues,
+      file: File,
+      placement: { physicalPage: number; row: number; column: number } | null,
+    ) => {
+      const key = placement ? placementKey(placement) : `unplaced-${crypto.randomUUID()}`;
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const previewUrl = URL.createObjectURL(file);
+      const now = new Date().toISOString();
+      const optimisticCard: Card = {
+        id: optimisticId,
+        binderId,
+        name: values.name,
+        setName: values.setName,
+        localNumber: values.localNumber,
+        source: 'custom',
+        providerCardId: null,
+        providerSetId: null,
+        variation: null,
+        placement: placement ?? { physicalPage: null, row: null, column: null },
+        imageUrl: previewUrl,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      setCards((previous) => [...previous, optimisticCard]);
+      if (placement) {
+        setPendingPlacementKeys((previous) => new Set(previous).add(key));
+      }
+
+      const toast = start(`assign-custom-card-${key}`);
+
+      createCustomCard(binderId, { ...values, placement, image: file })
+        .then((created) => {
+          setCards((previous) =>
+            previous.map((card) => (card.id === optimisticId ? created : card)),
+          );
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setCards((previous) => previous.filter((card) => card.id !== optimisticId));
+          // Preserves the failed attempt's values/file so the layout tab
+          // can reopen the modal pre-filled (see `ManualEntryRestore`'s doc
+          // comment above) instead of the user having to re-enter
+          // everything.
+          setManualEntryRestore({ placement, values, file });
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          URL.revokeObjectURL(previewUrl);
+          if (placement) {
+            setPendingPlacementKeys((previous) => {
+              const next = new Set(previous);
+              next.delete(key);
+              return next;
+            });
+          }
+        });
+    },
+    [binderId, start],
+  );
+
+  // Clears the one-shot restore signal once `BinderLayoutView` has consumed
+  // it (copied it into its own local state and reopened the modal).
+  const clearManualEntryRestore = useCallback(() => {
+    setManualEntryRestore(null);
+  }, []);
+
   // Only meaningful once `status === 'success'`; computed unconditionally
   // (rather than after an early return) so hook call order stays stable
   // across renders.
@@ -287,6 +409,9 @@ export function BinderRouteProvider({
       setLayoutFocalPage,
       assignCard,
       pendingPlacementKeys,
+      assignCustomCard,
+      manualEntryRestore,
+      clearManualEntryRestore,
       cardSearchLanguage,
       setCardSearchLanguage,
       includeTcgPocket,
@@ -300,6 +425,9 @@ export function BinderRouteProvider({
     layoutFocalPage,
     assignCard,
     pendingPlacementKeys,
+    assignCustomCard,
+    manualEntryRestore,
+    clearManualEntryRestore,
     cardSearchLanguage,
     includeTcgPocket,
   ]);

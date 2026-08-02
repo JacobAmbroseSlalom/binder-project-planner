@@ -11,6 +11,7 @@ import type { DatabaseConnection } from './database/client.js';
 import { openApiSpecificationPath } from './paths.js';
 import { createBindersRouter } from './routes/binders.js';
 import { createCardsRouter } from './routes/cards.js';
+import { createDigestDiskStorage } from './uploads/digestDiskStorage.js';
 
 interface CreateAppOptions {
   database: DatabaseConnection['database'];
@@ -38,8 +39,28 @@ export function createApp({
   app.use(
     OpenApiValidator.middleware({
       apiSpec: openApiSpecificationPath,
-      validateRequests: true,
+      validateRequests: {
+        // Body validation's ajv instance leaves `coerceTypes` off by
+        // default (unlike the always-coerced query/path parameter
+        // instance - see routes/cards.ts's `includeTcgPocket` comment).
+        // Story 12's multipart custom-card fields (e.g. `physicalPage`)
+        // arrive as strings from the multipart form, so coercion needs to
+        // be enabled here for them to validate against their `integer`
+        // schema; it's a no-op for the JSON bodies used elsewhere, whose
+        // values are already correctly typed.
+        coerceTypes: true,
+        allowUnknownQueryParameters: false,
+      },
       validateResponses: true,
+      // Enables express-openapi-validator's built-in multer integration
+      // for any operation whose request body schema has a `format: binary`
+      // property (story 12's `CreateCustomCardRequest.image`). A custom
+      // disk-storage engine (rather than the default in-memory buffering)
+      // streams the upload straight to a temporary file under
+      // `imagesDirectory` while computing its SHA-256 digest, per the
+      // story's "no application-level byte-size limit"/streaming
+      // requirement.
+      fileUploader: { storage: createDigestDiskStorage(imagesDirectory) },
     }),
   );
 

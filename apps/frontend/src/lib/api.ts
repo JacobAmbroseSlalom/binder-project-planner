@@ -162,6 +162,55 @@ export async function createCard(binderId: string, request: CreateCardRequest): 
   return data;
 }
 
+// A manually-entered custom card's creation request (story 12) - built into
+// a `multipart/form-data` body below rather than JSON, since it carries the
+// uploaded image file itself.
+export interface CreateCustomCardRequest {
+  name: string;
+  setName: string | null;
+  localNumber: string | null;
+  placement: { physicalPage: number; row: number; column: number } | null;
+  image: File;
+}
+
+// Assigns a manually-entered custom card to a binder slot through
+// `POST /binders/{binderId}/cards` (story 12's multipart variant of the
+// same endpoint `createCard` above uses for TCGdex cards). Blank
+// setName/localNumber are omitted from the form data entirely (rather than
+// sent as empty strings) so the backend stores them as `null`, matching
+// `createCard`'s JSON request shape.
+export async function createCustomCard(
+  binderId: string,
+  request: CreateCustomCardRequest,
+): Promise<Card> {
+  const formData = new FormData();
+  formData.append('name', request.name);
+  if (request.setName) formData.append('setName', request.setName);
+  if (request.localNumber) formData.append('localNumber', request.localNumber);
+  if (request.placement) {
+    formData.append('physicalPage', String(request.placement.physicalPage));
+    formData.append('row', String(request.placement.row));
+    formData.append('column', String(request.placement.column));
+  }
+  formData.append('image', request.image);
+
+  const { data, error } = await apiClient.POST('/binders/{binderId}/cards', {
+    params: { path: { binderId } },
+    // openapi-fetch's default body serializer passes a `FormData` instance
+    // through untouched (letting the browser set the multipart
+    // `Content-Type` boundary itself); the generated request-body type only
+    // models the multipart schema's field shapes rather than a runtime
+    // `FormData` instance, so this cast is required.
+    body: formData as never,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 // Resolves a `Card.imageUrl` into a full URL for an `<img>` tag (story 11).
 // The backend's persisted representation returns a backend-relative path
 // (`/cards/{cardId}/image`), which needs the backend origin prefixed; the

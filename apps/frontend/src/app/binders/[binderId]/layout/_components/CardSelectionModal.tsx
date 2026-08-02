@@ -4,9 +4,11 @@ import {
   CARD_SEARCH_DEBOUNCE_MS,
   CARD_SEARCH_MIN_QUERY_LENGTH,
 } from '@binder-project-planner/shared';
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { Check, X } from 'lucide-react';
+import { ArrowLeft, Check, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useForm } from 'react-hook-form';
 
 import { resolveCardImageUrl, searchCardCatalog, type TcgDexCatalogCard } from '@/lib/api';
 import {
@@ -16,7 +18,13 @@ import {
   useToastContext,
 } from '@/shared/feedback';
 
-import { useBinderRouteContext } from '../../BinderRouteContext';
+import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
+import { ManualCardForm } from './ManualCardForm';
+import {
+  defaultManualCardFormValues,
+  manualCardSchema,
+  type ManualCardFormValues,
+} from './manualCardSchema';
 
 // The number of results per virtualized row. Not a shared/application
 // default (per coding-conventions.instructions.md, `defaults.ts` only holds
@@ -49,15 +57,18 @@ let lastSearchQuery = '';
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
-// The custom card-selection modal (story 11): searches the TCGdex catalog
-// through a debounced, cancellable search box, and lets the user pick one
-// result to assign to the binder slot that opened it. Rendered by
-// `BinderLayoutView` only while a slot is selected; unmounting it (on close
-// or successful selection) is what restores focus to the triggering slot
-// button below.
+// The custom card-selection modal (stories 11 and 12): searches the TCGdex
+// catalog through a debounced, cancellable search box and lets the user
+// pick one result, or switches to a manual-entry view for a custom card -
+// either way assigning the result to the binder slot that opened it.
+// Rendered by `BinderLayoutView` only while a slot is selected; unmounting
+// it (on close or successful selection) is what restores focus to the
+// triggering slot button below.
 export function CardSelectionModal({
   onClose,
   onSelectCard,
+  onSubmitCustomCard,
+  initialManualEntry,
 }: {
   onClose: () => void;
   // Called with the chosen catalog card immediately on "Add Card" - the
@@ -65,6 +76,16 @@ export function CardSelectionModal({
   // the actual optimistic-update/request lifecycle from that point on, so
   // this modal closes right away rather than waiting on the assignment.
   onSelectCard: (card: TcgDexCatalogCard) => void;
+  // Called with the manual-entry form's values and selected file
+  // immediately on submit (story 12) - like `onSelectCard`, the caller owns
+  // the optimistic-update/request lifecycle from here, closing this modal
+  // right away rather than waiting on the multipart request.
+  onSubmitCustomCard: (values: CustomCardFormValues, file: File) => void;
+  // Set only when this modal is being reopened to let the user correct a
+  // custom card whose submission just failed (story 12): seeds the
+  // manual-entry view (rather than the search view) with the previously
+  // entered text values and selected file, instead of starting blank.
+  initialManualEntry?: { values: CustomCardFormValues; file: File };
 }) {
   const { markFailed, dismiss } = useToastContext();
   // Story 41's language toggle lives in the route context (rather than as
@@ -94,6 +115,49 @@ export function CardSelectionModal({
   // state or an empty in-flight state never renders it.
   const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
   const [selectedCard, setSelectedCard] = useState<TcgDexCatalogCard | null>(null);
+
+  // Story 12's manual-entry view: replaces the search content in place
+  // (never a nested modal) rather than being a separate component
+  // instance, so switching back to search (the Back action) preserves the
+  // query/results state above instead of losing it to an unmount.
+  // Defaults to the manual view, pre-filled, only when this modal is being
+  // reopened to correct a failed custom-card submission.
+  const [viewMode, setViewMode] = useState<'search' | 'manual'>(
+    initialManualEntry ? 'manual' : 'search',
+  );
+  const [customCardFile, setCustomCardFile] = useState<File | null>(
+    initialManualEntry?.file ?? null,
+  );
+  // Shown only after a submit attempt without a file selected yet
+  // (planning.md: "An image is required before a custom card can be
+  // added").
+  const [fileError, setFileError] = useState<string | undefined>(undefined);
+  const manualForm = useForm<ManualCardFormValues>({
+    resolver: zodResolver(manualCardSchema),
+    defaultValues: initialManualEntry
+      ? {
+          name: initialManualEntry.values.name,
+          setName: initialManualEntry.values.setName ?? '',
+          localNumber: initialManualEntry.values.localNumber ?? '',
+        }
+      : defaultManualCardFormValues,
+  });
+
+  // A local object-URL preview of the selected file (decoupled from the
+  // separate object URL the route context creates for the optimistic
+  // card's `imageUrl` once submitted) - created whenever `customCardFile`
+  // changes and revoked on the next change or on unmount, so this modal's
+  // own preview never leaks a blob URL.
+  const [customCardPreviewUrl, setCustomCardPreviewUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!customCardFile) {
+      setCustomCardPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(customCardFile);
+    setCustomCardPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [customCardFile]);
 
   const showLoading = useDelayedLoading(isSearching);
 
@@ -231,6 +295,67 @@ export function CardSelectionModal({
     onSelectCard(selectedCard);
   }
 
+  // Switches from the search view to the manual-entry view in place
+  // (planning.md: "replaces the search content within the existing
+  // card-selection modal ... it does not open a nested modal"). The query
+  // and results state above are untouched, so the Back action below can
+  // restore them exactly.
+  function handleSwitchToManual() {
+    setViewMode('manual');
+  }
+
+  function handleBackToSearch() {
+    setViewMode('search');
+  }
+
+  function handleCustomCardFileChange(nextFile: File | null) {
+    setCustomCardFile(nextFile);
+    if (nextFile) setFileError(undefined);
+  }
+
+  // Lets the user paste a copied image directly into the manual-entry
+  // view's image field (e.g. Cmd/Ctrl+V after copying an image from
+  // another app or browser tab), as an alternative to browsing for a file.
+  // Attached to the dialog's outer div (rather than one specific input) so
+  // it fires regardless of which control inside the modal currently has
+  // focus - the paste event still bubbles up to it either way.
+  function handlePaste(event: React.ClipboardEvent<HTMLDivElement>) {
+    if (viewMode !== 'manual') return;
+
+    const items = event.clipboardData?.items;
+    if (!items) return;
+
+    for (const item of items) {
+      if (item.kind !== 'file' || !item.type.startsWith('image/')) continue;
+      const file = item.getAsFile();
+      if (!file) continue;
+      // Prevents the browser from also trying to paste the image (or its
+      // filename) as text into whichever field happens to be focused.
+      event.preventDefault();
+      handleCustomCardFileChange(file);
+      return;
+    }
+  }
+
+  // Submits the manual-entry form (story 12). A file is required
+  // independently of the RHF/Zod-validated text fields (see
+  // `manualCardSchema.ts`'s comment), so it's checked here rather than
+  // through the form's own validation.
+  const handleManualSubmit = manualForm.handleSubmit((values) => {
+    if (!customCardFile) {
+      setFileError('An image is required.');
+      return;
+    }
+    onSubmitCustomCard(
+      {
+        name: values.name,
+        setName: values.setName.trim() || null,
+        localNumber: values.localNumber.trim() || null,
+      },
+      customCardFile,
+    );
+  });
+
   return (
     // The dimmed backdrop (styling.instructions.md's "Elevation & surfaces"
     // section): clicking it closes the modal, but clicking the panel itself
@@ -246,6 +371,7 @@ export function CardSelectionModal({
         aria-labelledby="card-selection-modal-title"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={handleKeyDown}
+        onPaste={handlePaste}
         className="flex h-full max-h-[40rem] w-full max-w-3xl flex-col gap-4 rounded-standard bg-surface p-6 shadow-modal"
       >
         {/* A 3-column grid (rather than `justify-between`) so the heading
@@ -256,7 +382,7 @@ export function CardSelectionModal({
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
           <span aria-hidden="true" />
           <h2 id="card-selection-modal-title" className="text-center">
-            Add a card
+            {viewMode === 'search' ? 'Add a card' : 'Add a custom card'}
           </h2>
           <button
             type="button"
@@ -268,174 +394,225 @@ export function CardSelectionModal({
           </button>
         </div>
 
-        <div className="flex items-center gap-4">
-          <input
-            ref={searchInputRef}
-            type="text"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search for a card by name…"
-            aria-label="Search for a card by name"
-            className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
-          />
+        {viewMode === 'search' ? (
+          <>
+            <div className="flex items-center gap-4">
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search for a card by name…"
+                aria-label="Search for a card by name"
+                className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
+              />
 
-          {/* Story 41's language toggle: matches the Michi-indicator
+              {/* Story 41's language toggle: matches the Michi-indicator
               checkbox convention (styling.instructions.md's "Forms &
               inputs" section). Defaults to English (`cardSearchLanguage`
               starts at `CARD_SEARCH_LANGUAGE_DEFAULT`); checking it
               switches to searching TCGdex's Japanese catalog. */}
-          <label htmlFor="card-search-language-toggle" className="flex shrink-0 items-center gap-2">
-            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-              <input
-                id="card-search-language-toggle"
-                type="checkbox"
-                checked={cardSearchLanguage === 'ja'}
-                onChange={(event) => setCardSearchLanguage(event.target.checked ? 'ja' : 'en')}
-                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-              />
-              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-            </span>
-            <span className="text-caption text-neutral-500">Japanese</span>
-          </label>
+              <label
+                htmlFor="card-search-language-toggle"
+                className="flex shrink-0 items-center gap-2"
+              >
+                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                  <input
+                    id="card-search-language-toggle"
+                    type="checkbox"
+                    checked={cardSearchLanguage === 'ja'}
+                    onChange={(event) => setCardSearchLanguage(event.target.checked ? 'ja' : 'en')}
+                    className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                  />
+                  <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+                </span>
+                <span className="text-caption text-neutral-500">Japanese</span>
+              </label>
 
-          {/* Story 41's TCG Pocket inclusion toggle: same checkbox
+              {/* Story 41's TCG Pocket inclusion toggle: same checkbox
               convention as the language toggle above. Defaults to excluded
               (`includeTcgPocket` starts at
               `CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT`); checking it
               includes Pokémon TCG Pocket cards in results. */}
-          <label
-            htmlFor="card-search-include-tcg-pocket-toggle"
-            className="flex shrink-0 items-center gap-2"
-          >
-            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-              <input
-                id="card-search-include-tcg-pocket-toggle"
-                type="checkbox"
-                checked={includeTcgPocket}
-                onChange={(event) => setIncludeTcgPocket(event.target.checked)}
-                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-              />
-              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-            </span>
-            <span className="text-caption text-neutral-500">TCG Pocket</span>
-          </label>
-        </div>
+              <label
+                htmlFor="card-search-include-tcg-pocket-toggle"
+                className="flex shrink-0 items-center gap-2"
+              >
+                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                  <input
+                    id="card-search-include-tcg-pocket-toggle"
+                    type="checkbox"
+                    checked={includeTcgPocket}
+                    onChange={(event) => setIncludeTcgPocket(event.target.checked)}
+                    className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                  />
+                  <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+                </span>
+                <span className="text-caption text-neutral-500">TCG Pocket</span>
+              </label>
+            </div>
 
-        {/* Nonblocking translation-miss warning (story 41): rendered inline
+            {/* Nonblocking translation-miss warning (story 41): rendered inline
             per styling.instructions.md's "Non-blocking warnings" guidance,
             never as a toast, and never in place of the results/loading/
             empty-state content below. */}
-        {translationWarning && (
-          <p className="text-caption text-warning">
-            No Japanese translation was found for “{debouncedQuery.trim()}”; showing results for the
-            entered text instead.
-          </p>
-        )}
+            {translationWarning && (
+              <p className="text-caption text-warning">
+                No Japanese translation was found for “{debouncedQuery.trim()}”; showing results for
+                the entered text instead.
+              </p>
+            )}
 
-        <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
-          {showLoading ? (
-            <LoadingIndicator label="Searching for cards…" size="8" />
-          ) : hasCompletedSearch && results.length === 0 ? (
-            // Only reached once a qualifying search has actually completed
-            // successfully with zero matches (see `hasCompletedSearch`
-            // above) - never shown for the modal's initial empty state or
-            // while a search is still loading.
-            <p className="text-center text-neutral-500">No cards were found.</p>
-          ) : (
-            <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-              {rowVirtualizer.getVirtualItems().map((virtualRow) => (
-                <div
-                  key={virtualRow.key}
-                  data-index={virtualRow.index}
-                  // `measureElement` (rather than a fixed `height`) lets the
-                  // virtualizer read each row's *actual* rendered height via
-                  // ResizeObserver, so row-to-row spacing always matches the
-                  // real card content instead of a guessed pixel constant.
-                  // `pb-3` below supplies the vertical gap itself (there's no
-                  // row-to-row CSS `gap` between these separately positioned
-                  // row divs), matching the `gap-3` used for the horizontal
-                  // gap between cards in the same row.
-                  ref={rowVirtualizer.measureElement}
-                  className="absolute top-0 left-0 grid w-full gap-3 pb-3"
-                  style={{
-                    transform: `translateY(${virtualRow.start}px)`,
-                    gridTemplateColumns: `repeat(${RESULTS_PER_ROW}, 1fr)`,
-                  }}
-                >
-                  {rows[virtualRow.index].map((card) => {
-                    const isSelected = selectedCard?.providerCardId === card.providerCardId;
-                    return (
-                      <button
-                        key={card.providerCardId}
-                        type="button"
-                        onClick={() => setSelectedCard(card)}
-                        aria-pressed={isSelected}
-                        // `self-start` guards against the grid default
-                        // (`stretch`) if a row ever contains cards of
-                        // differing content height, so shorter cards hug
-                        // their own content rather than stretching to match
-                        // the row's tallest item. `min-w-0` overrides the
-                        // grid item's default `min-width: auto`, which
-                        // would otherwise size the column to fit the
-                        // truncated (nowrap) text's full unwrapped width
-                        // and cause horizontal overflow/scrolling.
-                        className={`flex min-w-0 flex-col items-center gap-1 self-start rounded-standard border p-2 text-center hover:brightness-110 ${
-                          isSelected
-                            ? 'border-primary bg-neutral-800'
-                            : 'border-neutral-700 bg-neutral-800'
-                        }`}
-                      >
-                        {/* eslint-disable-next-line @next/next/no-img-element -- an
+            <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
+              {showLoading ? (
+                <LoadingIndicator label="Searching for cards…" size="8" />
+              ) : hasCompletedSearch && results.length === 0 ? (
+                // Only reached once a qualifying search has actually completed
+                // successfully with zero matches (see `hasCompletedSearch`
+                // above) - never shown for the modal's initial empty state or
+                // while a search is still loading.
+                <p className="text-center text-neutral-500">No cards were found.</p>
+              ) : (
+                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+                  {rowVirtualizer.getVirtualItems().map((virtualRow) => (
+                    <div
+                      key={virtualRow.key}
+                      data-index={virtualRow.index}
+                      // `measureElement` (rather than a fixed `height`) lets the
+                      // virtualizer read each row's *actual* rendered height via
+                      // ResizeObserver, so row-to-row spacing always matches the
+                      // real card content instead of a guessed pixel constant.
+                      // `pb-3` below supplies the vertical gap itself (there's no
+                      // row-to-row CSS `gap` between these separately positioned
+                      // row divs), matching the `gap-3` used for the horizontal
+                      // gap between cards in the same row.
+                      ref={rowVirtualizer.measureElement}
+                      className="absolute top-0 left-0 grid w-full gap-3 pb-3"
+                      style={{
+                        transform: `translateY(${virtualRow.start}px)`,
+                        gridTemplateColumns: `repeat(${RESULTS_PER_ROW}, 1fr)`,
+                      }}
+                    >
+                      {rows[virtualRow.index].map((card) => {
+                        const isSelected = selectedCard?.providerCardId === card.providerCardId;
+                        return (
+                          <button
+                            key={card.providerCardId}
+                            type="button"
+                            onClick={() => setSelectedCard(card)}
+                            aria-pressed={isSelected}
+                            // `self-start` guards against the grid default
+                            // (`stretch`) if a row ever contains cards of
+                            // differing content height, so shorter cards hug
+                            // their own content rather than stretching to match
+                            // the row's tallest item. `min-w-0` overrides the
+                            // grid item's default `min-width: auto`, which
+                            // would otherwise size the column to fit the
+                            // truncated (nowrap) text's full unwrapped width
+                            // and cause horizontal overflow/scrolling.
+                            className={`flex min-w-0 flex-col items-center gap-1 self-start rounded-standard border p-2 text-center hover:brightness-110 ${
+                              isSelected
+                                ? 'border-primary bg-neutral-800'
+                                : 'border-neutral-700 bg-neutral-800'
+                            }`}
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element -- an
                             arbitrary provider-hosted image, not eligible for
                             next/image's fixed-domain optimization. */}
-                        <img
-                          src={resolveCardImageUrl(card.imageUrl)}
-                          alt={card.name}
-                          loading="lazy"
-                          className="h-32 w-24 object-contain"
-                        />
-                        {/* `min-w-0` on the name lets it truncate instead of
+                            <img
+                              src={resolveCardImageUrl(card.imageUrl)}
+                              alt={card.name}
+                              loading="lazy"
+                              className="h-32 w-24 object-contain"
+                            />
+                            {/* `min-w-0` on the name lets it truncate instead of
                             forcing the row wider, while the local-number
                             span uses `shrink-0` so it's never itself
                             truncated away. */}
-                        <span className="flex w-full min-w-0 items-baseline justify-center gap-1">
-                          <span className="min-w-0 truncate text-caption">{card.name}</span>
-                          {card.localNumber && (
-                            <span className="shrink-0 text-caption text-neutral-500">
-                              #{card.localNumber}
+                            <span className="flex w-full min-w-0 items-baseline justify-center gap-1">
+                              <span className="min-w-0 truncate text-caption">{card.name}</span>
+                              {card.localNumber && (
+                                <span className="shrink-0 text-caption text-neutral-500">
+                                  #{card.localNumber}
+                                </span>
+                              )}
                             </span>
-                          )}
-                        </span>
-                        {card.setName && (
-                          <span className="w-full truncate text-caption text-neutral-500">
-                            {card.setName}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
+                            {card.setName && (
+                              <span className="w-full truncate text-caption text-neutral-500">
+                                {card.setName}
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
+          </>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <ManualCardForm
+              form={manualForm}
+              previewUrl={customCardPreviewUrl}
+              fileName={customCardFile?.name ?? null}
+              onFileChange={handleCustomCardFileChange}
+              fileError={fileError}
+            />
+          </div>
+        )}
 
-        <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="cursor-pointer rounded-standard px-4 py-2 font-bold hover:brightness-110"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            disabled={!selectedCard}
-            onClick={handleAddCard}
-            className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            Add Card
-          </button>
+        <div className="flex items-center justify-between gap-2">
+          {viewMode === 'search' ? (
+            // Always available regardless of search/result state
+            // (planning.md: "remains available when a TCGdex search
+            // returns no matches or fails").
+            <button
+              type="button"
+              onClick={handleSwitchToManual}
+              className="cursor-pointer rounded-standard px-4 py-2 font-bold text-neutral-500 hover:brightness-110"
+            >
+              Add a custom card
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleBackToSearch}
+              className="flex cursor-pointer items-center gap-1 rounded-standard px-4 py-2 font-bold hover:brightness-110"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" />
+              Back
+            </button>
+          )}
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="cursor-pointer rounded-standard px-4 py-2 font-bold hover:brightness-110"
+            >
+              Cancel
+            </button>
+            {viewMode === 'search' ? (
+              <button
+                type="button"
+                disabled={!selectedCard}
+                onClick={handleAddCard}
+                className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add Card
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={!customCardFile}
+                onClick={handleManualSubmit}
+                className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Add Card
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

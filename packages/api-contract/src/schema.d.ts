@@ -84,8 +84,8 @@ export interface paths {
         get: operations["listBinderCards"];
         put?: never;
         /**
-         * Assign a TCGdex card to a binder slot
-         * @description Creates a binder-owned card from a normalized TCGdex catalog result and its target placement (story 11). The backend assigns the `tcgdex` source, downloads and installs the card's image, and validates placement against the binder's current dimensions.
+         * Assign a TCGdex or custom card to a binder slot
+         * @description Creates a binder-owned card from either a normalized TCGdex catalog result (story 11, `application/json`) or a manually-entered custom card (story 12, `multipart/form-data`) and its target placement. The backend assigns the `source` server-side, installs the card's image, and validates placement against the binder's current dimensions.
          */
         post: operations["createBinderCard"];
         delete?: never;
@@ -264,6 +264,25 @@ export interface components {
             imageUrl: string;
             variation?: string | null;
             placement: components["schemas"]["PlacementCoordinates"];
+        };
+        /** @description Creates a manually-entered custom binder card via `multipart/ form-data` (story 12). The backend assigns `source: 'custom'` server-side, never accepts TCGdex identity fields, and computes a SHA-256 digest of the uploaded image while streaming it to temporary storage so identical uploads share one image asset. Placement is optional: supply `physicalPage`, `row`, and `column` together for a placed card, or omit all three for an unplaced card (story 15's unplaced-cards section) - supplying only some of the three is rejected. */
+        CreateCustomCardRequest: {
+            /** @description Trimmed and required after trimming on the backend. */
+            name: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            setName?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            localNumber?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            variation?: string;
+            physicalPage?: number;
+            row?: number;
+            column?: number;
+            /**
+             * Format: binary
+             * @description Required. Must be a JPEG, PNG, or WebP file; the backend validates the file's signature rather than trusting its name or multipart MIME type.
+             */
+            image: string;
         };
         /** @description The complete persisted representation of a binder-owned card. */
         Card: {
@@ -539,6 +558,7 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["CreateCardRequest"];
+                "multipart/form-data": components["schemas"]["CreateCustomCardRequest"];
             };
         };
         responses: {
@@ -553,7 +573,7 @@ export interface operations {
                     "application/json": components["schemas"]["Card"];
                 };
             };
-            /** @description The binderId path parameter is not a well-formed UUID, or the request body did not match the documented schema or a valid placement within the binder's current dimensions. */
+            /** @description The binderId path parameter is not a well-formed UUID, the request body did not match the documented schema, a placement partially (rather than fully) supplied its physical page, row, and column, or the supplied placement is not valid within the binder's current dimensions. */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -573,6 +593,15 @@ export interface operations {
             };
             /** @description The target placement is already occupied by another card. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description A custom card's uploaded file's signature did not match a supported image format (story 12). */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

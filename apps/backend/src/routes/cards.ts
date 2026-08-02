@@ -11,9 +11,14 @@ import {
 } from 'node:fs';
 import { join } from 'node:path';
 
-import { CARD_SEARCH_MIN_QUERY_LENGTH } from '@binder-project-planner/shared';
+import {
+  CARD_SEARCH_MIN_QUERY_LENGTH,
+  CUSTOM_CARD_NAME_MAX_LENGTH,
+  CUSTOM_CARD_NUMBER_MAX_LENGTH,
+  CUSTOM_CARD_SET_MAX_LENGTH,
+} from '@binder-project-planner/shared';
 import { eq } from 'drizzle-orm';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
 import { binders, cardImageAssets, cards } from '../database/schema.js';
@@ -28,8 +33,7 @@ import {
 } from '../integrations/tcgdex.js';
 
 // The validated, OpenAPI-typed shape of a TCGdex create-card request body
-// (story 11). Custom-card creation (story 12) will add a second,
-// multipart-parsed variant handled by the same route.
+// (story 11, `application/json`).
 interface CreateCardRequestBody {
   name: string;
   setName: string | null;
@@ -39,6 +43,21 @@ interface CreateCardRequestBody {
   imageUrl: string;
   variation?: string | null;
   placement: { physicalPage: number | null; row: number | null; column: number | null };
+}
+
+// The validated, OpenAPI-typed shape of a custom create-card request body
+// (story 12, `multipart/form-data`). Placement fields are optional and
+// arrive pre-coerced to numbers by the request-validation middleware (see
+// app.ts's `coerceTypes` comment); the uploaded image file itself is read
+// from `request.files` rather than this body.
+interface CreateCustomCardRequestBody {
+  name: string;
+  setName?: string;
+  localNumber?: string;
+  variation?: string;
+  physicalPage?: number;
+  row?: number;
+  column?: number;
 }
 
 interface CardRow {
@@ -131,6 +150,75 @@ function validatePlacement(
   return null;
 }
 
+// A relaxed variant of `validatePlacement` for custom-card requests (story
+// 12): unlike TCGdex assignment (always fully placed from a real slot
+// click), a custom card may be created unplaced by omitting all three
+// placement fields from the multipart body (story 15's future
+// unplaced-cards section). Supplying only some of the three is rejected as
+// malformed input rather than silently treated as either state.
+function resolveCustomCardPlacement(
+  body: CreateCustomCardRequestBody,
+  binder: { width: number; height: number; pages: number },
+):
+  | { placement: { physicalPage: number | null; row: number | null; column: number | null } }
+  | { error: string } {
+  const { physicalPage, row, column } = body;
+  const suppliedCount = [physicalPage, row, column].filter((value) => value !== undefined).length;
+
+  if (suppliedCount === 0) {
+    return { placement: { physicalPage: null, row: null, column: null } };
+  }
+  if (suppliedCount < 3) {
+    return {
+      error:
+        'A card placement must include a complete physical page, row, and column, or none of them.',
+    };
+  }
+
+  const placementError = validatePlacement(
+    { physicalPage: physicalPage!, row: row!, column: column! },
+    binder,
+  );
+  if (placementError) {
+    return { error: placementError };
+  }
+  return { placement: { physicalPage: physicalPage!, row: row!, column: column! } };
+}
+
+// Produces a filesystem/metadata-safe copy of an uploaded file's
+// client-claimed original name (story 12): strips any directory components
+// a malicious or unusual multipart request might include, then keeps only
+// a conservative safe character set. This is retained purely as metadata -
+// every actual filesystem operation uses the backend-generated
+// `storageFilename` instead, never this value.
+function sanitizeOriginalFilename(originalFilename: string): string {
+  const basename = originalFilename.split(/[/\\]/).pop() ?? '';
+  const sanitized = basename.replace(/[^a-zA-Z0-9 ._-]/g, '').trim();
+  return sanitized.slice(0, 255) || 'upload';
+}
+
+// Thrown by `resolveCustomImageAsset` when the uploaded file's magic bytes
+// don't match a supported image format; the route handler maps this to a
+// `415 Unsupported Media Type` Problem Details response (story 12).
+class UnsupportedImageFormatError extends Error {
+  constructor() {
+    super('The uploaded file is not a supported image format (JPEG, PNG, or WebP).');
+    this.name = 'UnsupportedImageFormatError';
+  }
+}
+
+// Deletes any files multer already streamed to temporary storage for this
+// request (story 12) - used on every custom-card validation failure that
+// occurs before `resolveCustomImageAsset` takes ownership of the file, so a
+// rejected request never leaves an orphaned temporary file behind.
+function removeTemporaryUploads(files: Express.Multer.File[]): void {
+  for (const file of files) {
+    if (existsSync(file.path)) {
+      unlinkSync(file.path);
+    }
+  }
+}
+
 interface ResolvedImageAsset {
   assetId: string;
   // Set only when this request downloaded and installed a brand-new file
@@ -198,6 +286,83 @@ async function resolveTcgDexImageAsset(
         .select()
         .from(cardImageAssets)
         .where(eq(cardImageAssets.providerCardId, body.providerCardId))
+        .get();
+      if (winner) {
+        return { assetId: winner.id, newlyCreatedFilePath: null };
+      }
+    }
+    unlinkSync(finalPath);
+    throw error;
+  }
+}
+
+// Finds or creates the shared local image asset for a custom-card upload
+// (story 12), mirroring `resolveTcgDexImageAsset`'s dedupe/concurrent-race
+// pattern but keyed by the SHA-256 digest `createDigestDiskStorage` already
+// computed while streaming the upload to temporary storage, rather than a
+// TCGdex provider card ID. `uploadedFile.path` is always consumed by this
+// function - either deleted (a duplicate) or renamed into place - so the
+// caller never needs to remove it itself once this function is called.
+function resolveCustomImageAsset(
+  database: DatabaseConnection['database'],
+  imagesDirectory: string,
+  uploadedFile: Express.Multer.File,
+): ResolvedImageAsset {
+  const digest = uploadedFile.sha256Digest;
+  if (!digest) {
+    // Never expected: `createDigestDiskStorage` always attaches a digest.
+    // Guarded rather than asserted so a storage-engine regression surfaces
+    // as a clear 500 instead of a confusing downstream failure.
+    unlinkSync(uploadedFile.path);
+    throw new Error('The uploaded file was not processed by the digest storage engine.');
+  }
+
+  const existing = database
+    .select()
+    .from(cardImageAssets)
+    .where(eq(cardImageAssets.sha256Digest, digest))
+    .get();
+  if (existing) {
+    // Another card (this request or an earlier one) already has identical
+    // image bytes on file; this request's own copy is redundant.
+    unlinkSync(uploadedFile.path);
+    return { assetId: existing.id, newlyCreatedFilePath: null };
+  }
+
+  const format = detectImageFormat(readFileHeader(uploadedFile.path, 12));
+  if (!format) {
+    unlinkSync(uploadedFile.path);
+    throw new UnsupportedImageFormatError();
+  }
+
+  const assetId = randomUUID();
+  const storageFilename = `${assetId}.${format.fileExtension}`;
+  const finalPath = join(imagesDirectory, storageFilename);
+  renameSync(uploadedFile.path, finalPath);
+
+  try {
+    database
+      .insert(cardImageAssets)
+      .values({
+        id: assetId,
+        sha256Digest: digest,
+        originalFilename: sanitizeOriginalFilename(uploadedFile.originalname),
+        storageFilename,
+        contentType: format.contentType,
+        fileExtension: format.fileExtension,
+        createdAt: new Date().toISOString(),
+      })
+      .run();
+    return { assetId, newlyCreatedFilePath: finalPath };
+  } catch (error) {
+    if (isUniqueConstraintError(error)) {
+      // Lost a concurrent race to upload the same image bytes; discard our
+      // own duplicate file and reuse the winner's asset.
+      unlinkSync(finalPath);
+      const winner = database
+        .select()
+        .from(cardImageAssets)
+        .where(eq(cardImageAssets.sha256Digest, digest))
         .get();
       if (winner) {
         return { assetId: winner.id, newlyCreatedFilePath: null };
@@ -296,20 +461,211 @@ export function createCardsRouter(
     }
   });
 
-  // Story 11's slot-assignment endpoint (TCGdex JSON variant only; story 12
-  // adds a multipart custom-card variant to the same path/method).
+  // Inserts a new card row and responds, sharing the "unique-placement
+  // conflict" (409) handling and unreferenced-asset cleanup between the
+  // TCGdex (story 11) and custom-card (story 12) branches below - both
+  // return the same `201`/Location/serialized-card shape on success.
+  function insertCardAndRespond(
+    response: Response,
+    card: {
+      id: string;
+      binderId: string;
+      name: string;
+      setName: string | null;
+      localNumber: string | null;
+      source: 'tcgdex' | 'custom';
+      providerCardId: string | null;
+      providerSetId: string | null;
+      variation: string | null;
+      physicalPage: number | null;
+      row: number | null;
+      column: number | null;
+      imageAssetId: string;
+      createdAt: string;
+      updatedAt: string;
+    },
+    asset: ResolvedImageAsset,
+  ): void {
+    try {
+      database.insert(cards).values(card).run();
+    } catch (error) {
+      // The image asset row/file this request just created is otherwise
+      // unreferenced once the card insert fails, so it's removed rather
+      // than left orphaned (planning.md).
+      if (asset.newlyCreatedFilePath) {
+        unlinkSync(asset.newlyCreatedFilePath);
+        database.delete(cardImageAssets).where(eq(cardImageAssets.id, asset.assetId)).run();
+      }
+
+      if (isUniqueConstraintError(error)) {
+        response
+          .status(409)
+          .type('application/problem+json')
+          .json(
+            problem(
+              409,
+              'Conflict',
+              'Another card already occupies that binder, physical page, row, and column.',
+            ),
+          );
+        return;
+      }
+      throw error;
+    }
+
+    response.status(201).location(`/cards/${card.id}`).json(serializeCard(card));
+  }
+
+  // Story 11's slot-assignment endpoint (`application/json`, TCGdex cards)
+  // and story 12's manual-entry endpoint (`multipart/form-data`, custom
+  // cards) share this one path/method, branching on whether
+  // express-openapi-validator's multer integration populated
+  // `request.files` (only true for multipart requests - see app.ts's
+  // `fileUploader` comment).
   router.post('/binders/:binderId/cards', async (request, response) => {
     const { binderId } = request.params;
-    const body = request.body as CreateCardRequestBody;
+    const uploadedFiles = Array.isArray(request.files) ? request.files : undefined;
 
     const binder = database.select().from(binders).where(eq(binders.id, binderId)).get();
     if (!binder) {
+      if (uploadedFiles) removeTemporaryUploads(uploadedFiles);
       response
         .status(404)
         .type('application/problem+json')
         .json(problem(404, 'Not Found', `No binder exists with id "${binderId}".`));
       return;
     }
+
+    if (uploadedFiles) {
+      // Story 12's custom-card branch.
+      const body = request.body as CreateCustomCardRequestBody;
+      const uploadedFile = uploadedFiles.find((file) => file.fieldname === 'image');
+      if (!uploadedFile) {
+        // Never expected: the OpenAPI schema requires `image`, so
+        // express-openapi-validator already rejects a request missing it
+        // before this handler runs. Guarded defensively regardless.
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(problem(400, 'Bad Request', 'A custom card requires an image file.'));
+        return;
+      }
+
+      const placementResult = resolveCustomCardPlacement(body, binder);
+      if ('error' in placementResult) {
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(problem(400, 'Bad Request', placementResult.error));
+        return;
+      }
+
+      // Required after trimming (planning.md); the OpenAPI schema's
+      // `minLength: 1` only guards the raw untrimmed value, so a
+      // whitespace-only name still needs this check. The max-length check
+      // below is a backend-validation belt-and-suspenders alongside the
+      // OpenAPI schema's own `maxLength` (planning.md story 12).
+      const name = body.name.trim();
+      if (!name) {
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(problem(400, 'Bad Request', 'name is required.'));
+        return;
+      }
+      if (name.length > CUSTOM_CARD_NAME_MAX_LENGTH) {
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(
+            problem(
+              400,
+              'Bad Request',
+              `name must be ${CUSTOM_CARD_NAME_MAX_LENGTH} characters or fewer.`,
+            ),
+          );
+        return;
+      }
+
+      // Optional fields: trimmed, blank stores as null (planning.md).
+      const setName = body.setName?.trim() || null;
+      const localNumber = body.localNumber?.trim() || null;
+      const variation = body.variation?.trim() || null;
+
+      if (setName && setName.length > CUSTOM_CARD_SET_MAX_LENGTH) {
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(
+            problem(
+              400,
+              'Bad Request',
+              `setName must be ${CUSTOM_CARD_SET_MAX_LENGTH} characters or fewer.`,
+            ),
+          );
+        return;
+      }
+      if (localNumber && localNumber.length > CUSTOM_CARD_NUMBER_MAX_LENGTH) {
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(
+            problem(
+              400,
+              'Bad Request',
+              `localNumber must be ${CUSTOM_CARD_NUMBER_MAX_LENGTH} characters or fewer.`,
+            ),
+          );
+        return;
+      }
+
+      let asset: ResolvedImageAsset;
+      try {
+        asset = resolveCustomImageAsset(database, imagesDirectory, uploadedFile);
+      } catch (error) {
+        if (error instanceof UnsupportedImageFormatError) {
+          response
+            .status(415)
+            .type('application/problem+json')
+            .json(problem(415, 'Unsupported Media Type', error.message));
+          return;
+        }
+        throw error;
+      }
+
+      const now = new Date().toISOString();
+      insertCardAndRespond(
+        response,
+        {
+          id: randomUUID(),
+          binderId,
+          name,
+          setName,
+          localNumber,
+          source: 'custom',
+          providerCardId: null,
+          providerSetId: null,
+          variation,
+          physicalPage: placementResult.placement.physicalPage,
+          row: placementResult.placement.row,
+          column: placementResult.placement.column,
+          imageAssetId: asset.assetId,
+          createdAt: now,
+          updatedAt: now,
+        },
+        asset,
+      );
+      return;
+    }
+
+    // Story 11's TCGdex JSON branch.
+    const body = request.body as CreateCardRequestBody;
 
     const placementError = validatePlacement(body.placement, binder);
     if (placementError) {
@@ -343,52 +699,27 @@ export function createCardsRouter(
     }
 
     const now = new Date().toISOString();
-    const card = {
-      id: randomUUID(),
-      binderId,
-      name: body.name,
-      setName: body.setName,
-      localNumber: body.localNumber,
-      source: 'tcgdex' as const,
-      providerCardId: body.providerCardId,
-      providerSetId: body.providerSetId,
-      variation,
-      physicalPage: body.placement.physicalPage,
-      row: body.placement.row,
-      column: body.placement.column,
-      imageAssetId: asset.assetId,
-      createdAt: now,
-      updatedAt: now,
-    };
-
-    try {
-      database.insert(cards).values(card).run();
-    } catch (error) {
-      // The image asset row/file this request just created is otherwise
-      // unreferenced once the card insert fails, so it's removed rather
-      // than left orphaned (planning.md).
-      if (asset.newlyCreatedFilePath) {
-        unlinkSync(asset.newlyCreatedFilePath);
-        database.delete(cardImageAssets).where(eq(cardImageAssets.id, asset.assetId)).run();
-      }
-
-      if (isUniqueConstraintError(error)) {
-        response
-          .status(409)
-          .type('application/problem+json')
-          .json(
-            problem(
-              409,
-              'Conflict',
-              'Another card already occupies that binder, physical page, row, and column.',
-            ),
-          );
-        return;
-      }
-      throw error;
-    }
-
-    response.status(201).location(`/cards/${card.id}`).json(serializeCard(card));
+    insertCardAndRespond(
+      response,
+      {
+        id: randomUUID(),
+        binderId,
+        name: body.name,
+        setName: body.setName,
+        localNumber: body.localNumber,
+        source: 'tcgdex',
+        providerCardId: body.providerCardId,
+        providerSetId: body.providerSetId,
+        variation,
+        physicalPage: body.placement.physicalPage,
+        row: body.placement.row,
+        column: body.placement.column,
+        imageAssetId: asset.assetId,
+        createdAt: now,
+        updatedAt: now,
+      },
+      asset,
+    );
   });
 
   router.get('/cards/:cardId/image', (request, response) => {

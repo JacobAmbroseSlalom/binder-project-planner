@@ -174,18 +174,23 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
     post:
       operationId: createBinderCard
-      summary: Assign a TCGdex card to a binder slot
+      summary: Assign a TCGdex or custom card to a binder slot
       description: >-
-        Creates a binder-owned card from a normalized TCGdex catalog result
-        and its target placement (story 11). The backend assigns the
-        `tcgdex` source, downloads and installs the card's image, and
-        validates placement against the binder's current dimensions.
+        Creates a binder-owned card from either a normalized TCGdex catalog
+        result (story 11, `application/json`) or a manually-entered custom
+        card (story 12, `multipart/form-data`) and its target placement. The
+        backend assigns the `source` server-side, installs the card's
+        image, and validates placement against the binder's current
+        dimensions.
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/CreateCardRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateCustomCardRequest'
       responses:
         '201':
           description: The card was created and placed.
@@ -201,9 +206,11 @@ paths:
                 $ref: '#/components/schemas/Card'
         '400':
           description: >-
-            The binderId path parameter is not a well-formed UUID, or the
-            request body did not match the documented schema or a valid
-            placement within the binder's current dimensions.
+            The binderId path parameter is not a well-formed UUID, the
+            request body did not match the documented schema, a placement
+            partially (rather than fully) supplied its physical page, row,
+            and column, or the supplied placement is not valid within the
+            binder's current dimensions.
           content:
             application/problem+json:
               schema:
@@ -216,6 +223,14 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         '409':
           description: The target placement is already occupied by another card.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '415':
+          description: >-
+            A custom card's uploaded file's signature did not match a
+            supported image format (story 12).
           content:
             application/problem+json:
               schema:
@@ -661,6 +676,56 @@ components:
           nullable: true
         placement:
           $ref: '#/components/schemas/PlacementCoordinates'
+    CreateCustomCardRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Creates a manually-entered custom binder card via `multipart/
+        form-data` (story 12). The backend assigns `source: 'custom'`
+        server-side, never accepts TCGdex identity fields, and computes a
+        SHA-256 digest of the uploaded image while streaming it to
+        temporary storage so identical uploads share one image asset.
+        Placement is optional: supply `physicalPage`, `row`, and `column`
+        together for a placed card, or omit all three for an unplaced card
+        (story 15's unplaced-cards section) - supplying only some of the
+        three is rejected.
+      required:
+        - name
+        - image
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Trimmed and required after trimming on the backend.
+        setName:
+          type: string
+          maxLength: 100
+          description: Trimmed on the backend; a blank value is stored as null.
+        localNumber:
+          type: string
+          maxLength: 50
+          description: Trimmed on the backend; a blank value is stored as null.
+        variation:
+          type: string
+          maxLength: 50
+          description: Trimmed on the backend; a blank value is stored as null.
+        physicalPage:
+          type: integer
+          minimum: 1
+        row:
+          type: integer
+          minimum: 1
+        column:
+          type: integer
+          minimum: 1
+        image:
+          type: string
+          format: binary
+          description: >-
+            Required. Must be a JPEG, PNG, or WebP file; the backend
+            validates the file's signature rather than trusting its name
+            or multipart MIME type.
     Card:
       type: object
       additionalProperties: false

@@ -79,3 +79,16 @@ export const CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT = false;
 // aborted after this long; a timeout is treated as a translation miss
 // rather than a search failure.
 export const POKEAPI_REQUEST_TIMEOUT_MS = 10_000;
+
+// Story 12: "Add a custom card manually". Maximum trimmed lengths for a
+// custom card's name/set/number, shared by the frontend Zod schema, the
+// OpenAPI multipart request contract, and backend validation. Name is
+// required after trimming; set and number are optional (blank stores as
+// `null`).
+export const CUSTOM_CARD_NAME_MAX_LENGTH = 100;
+export const CUSTOM_CARD_SET_MAX_LENGTH = 100;
+export const CUSTOM_CARD_NUMBER_MAX_LENGTH = 50;
+// The only image formats a custom-card upload may use; the frontend file
+// input's `accept` value and the backend's magic-byte signature check both
+// derive from this same list.
+export const CUSTOM_CARD_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';

@@ -472,7 +472,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 12. Add a custom card manually
 
-**Status:** Not started
+**Status:** Done (2026-08-01 22:41 EDT) - with one known gap: the "opened from the unplaced cards section" acceptance criterion isn't reachable through the UI yet because story 15 ("Manage unplaced cards") hasn't been built, so there's no unplaced-cards-section UI anywhere in the app to open the manual-entry modal from. The backend/contract/context layer fully supports a `null` placement end-to-end (an unplaced custom card can be created and optimistically tracked); only the frontend trigger for that specific entry point is still missing, pending story 15.
 
 #### Acceptance criteria
 
@@ -512,6 +512,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - A database check constraint requires placement coordinates to be either all non-null or all null; sentinel coordinate values are not used.
 - Placed and unplaced custom-card requests return the same `201 Created`, binder-card `Location` header, and complete persisted card representation as TCGdex card creation.
 - Custom image assets retain a sanitized original upload filename as metadata, but the backend-generated storage filename is used for all filesystem operations.
+- Multipart parsing is handled by `express-openapi-validator`'s built-in `fileUploader` option (multer under the hood, added as a new direct backend dependency alongside `@types/multer`) with a custom digest-computing disk `StorageEngine`, rather than its default in-memory buffering, to satisfy the no-byte-limit/streaming/digest-while-streaming requirements above in one pass.
 
 ### 13. Remove a card from a binder slot
 

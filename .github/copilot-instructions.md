@@ -19,6 +19,10 @@ file to match what was actually built.
 - **Frontend drag and drop:** dnd-kit (`@dnd-kit/core`)
 - **Frontend image editing:** Konva (`konva`, `react-konva`)
 - **Backend:** Node.js (Express) with TypeScript
+- **Backend multipart uploads:** multer (`multer`, `@types/multer`), wired through
+  `express-openapi-validator`'s built-in `fileUploader` option with a custom
+  digest-computing disk `StorageEngine` (story 12) rather than its default in-memory
+  buffering
 - **Backend image processing:** Sharp (`sharp`)
 - **Backend PDF generation:** PDFKit (`pdfkit`)
 - **API:** REST with an OpenAPI-first contract

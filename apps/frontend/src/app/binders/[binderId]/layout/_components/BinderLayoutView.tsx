@@ -7,7 +7,7 @@ import { useEffect, useState } from 'react';
 import type { TcgDexCatalogCard } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
-import { useBinderRouteContext } from '../../BinderRouteContext';
+import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
 import {
   getMaxPhysicalPage,
   getNextPhysicalPage,
@@ -52,8 +52,17 @@ const PAGE_INPUT_CLASS_NAME =
 // refreshes and copied URLs retain it; see `layoutSpread.ts` for the
 // physical-page/spread math this component drives.
 export function BinderLayoutView() {
-  const { binder, layoutFocalPage, setLayoutFocalPage, cards, pendingPlacementKeys, assignCard } =
-    useBinderRouteContext();
+  const {
+    binder,
+    layoutFocalPage,
+    setLayoutFocalPage,
+    cards,
+    pendingPlacementKeys,
+    assignCard,
+    assignCustomCard,
+    manualEntryRestore,
+    clearManualEntryRestore,
+  } = useBinderRouteContext();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -62,6 +71,42 @@ export function BinderLayoutView() {
   // The slot (if any) currently targeted by an open card-selection modal
   // (story 11).
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+  // The manual-entry values/file to seed the modal with, only set while
+  // reopening it to correct a failed custom-card submission (story 12) -
+  // `null` for a normal (blank) modal open.
+  const [manualEntryDraft, setManualEntryDraft] = useState<{
+    values: CustomCardFormValues;
+    file: File;
+  } | null>(null);
+
+  // Auto-reopens the card-selection modal, pre-filled, once a custom-card
+  // submission fails (story 12). Derived during render (comparing against
+  // the last-seen restore signal), matching this file's own
+  // `lastSyncedPhysicalPage` convention below, rather than in a `useEffect`
+  // - React's documented "adjusting state when a prop changes" pattern -
+  // since `manualEntryRestore` is an ordinary context value, not a
+  // subscription to an external system. Only handles the placed-slot
+  // case - a `null` placement can currently only originate from an
+  // unplaced-cards section that doesn't exist in the UI yet (story 15), so
+  // there's nowhere to reopen it to.
+  const [lastSeenManualEntryRestore, setLastSeenManualEntryRestore] = useState(manualEntryRestore);
+  if (manualEntryRestore !== lastSeenManualEntryRestore) {
+    setLastSeenManualEntryRestore(manualEntryRestore);
+    if (manualEntryRestore?.placement) {
+      setSelectedSlot(manualEntryRestore.placement);
+      setManualEntryDraft({
+        values: manualEntryRestore.values,
+        file: manualEntryRestore.file,
+      });
+    }
+  }
+
+  // Clears the one-shot restore signal once this component has consumed it
+  // above - a genuine "notify an external owner" side effect (rather than
+  // local state), so it belongs in an effect unlike the derivation above.
+  useEffect(() => {
+    if (manualEntryRestore) clearManualEntryRestore();
+  }, [manualEntryRestore, clearManualEntryRestore]);
 
   // Assigns the chosen catalog card to the currently selected slot and
   // closes the modal immediately - the route context's `assignCard` owns
@@ -79,6 +124,20 @@ export function BinderLayoutView() {
       },
     });
     setSelectedSlot(null);
+  }
+
+  // Submits the manual-entry form's custom card to the currently selected
+  // slot and closes the modal immediately (story 12), mirroring
+  // `handleSelectCard` above.
+  function handleSubmitCustomCard(values: CustomCardFormValues, file: File) {
+    if (!selectedSlot) return;
+    assignCustomCard(values, file, {
+      physicalPage: selectedSlot.physicalPage,
+      row: selectedSlot.row,
+      column: selectedSlot.column,
+    });
+    setSelectedSlot(null);
+    setManualEntryDraft(null);
   }
 
   const maxPhysicalPage = getMaxPhysicalPage(binder.pages);
@@ -309,7 +368,15 @@ export function BinderLayoutView() {
       </div>
 
       {selectedSlot && (
-        <CardSelectionModal onClose={() => setSelectedSlot(null)} onSelectCard={handleSelectCard} />
+        <CardSelectionModal
+          onClose={() => {
+            setSelectedSlot(null);
+            setManualEntryDraft(null);
+          }}
+          onSelectCard={handleSelectCard}
+          onSubmitCustomCard={handleSubmitCustomCard}
+          initialManualEntry={manualEntryDraft ?? undefined}
+        />
       )}
     </div>
   );

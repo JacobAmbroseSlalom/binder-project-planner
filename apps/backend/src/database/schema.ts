@@ -38,21 +38,30 @@ export const binders = sqliteTable(
 );
 
 // A shared, immutable local image asset (story 11: "Select a card for a
-// binder slot"). Only the columns story 11 needs exist so far - story 12's
-// custom-card uploads and story 25's multi-slot art will add the SHA-256
-// digest and orientation-normalized derivative columns their dedupe and
-// EXIF-handling requirements need without changing this initial set.
+// binder slot"). Story 12 adds the SHA-256 digest and sanitized original
+// filename columns its custom-upload dedupe/metadata requirements need;
+// story 25's multi-slot art will add orientation-normalized derivative
+// columns later without changing this set again.
 export const cardImageAssets = sqliteTable(
   'card_image_assets',
   {
     id: text().primaryKey(),
     // Present (and, together, unique) only for TCGdex-sourced assets; used
     // to let concurrent assignments of the same provider card share one
-    // asset instead of downloading duplicates. Left null for future
-    // non-TCGdex asset rows (story 12/25 custom uploads, deduplicated by
-    // SHA-256 digest instead).
+    // asset instead of downloading duplicates. Left null for custom-upload
+    // asset rows (story 12), deduplicated by SHA-256 digest instead.
     providerCardId: text(),
     providerSetId: text(),
+    // Present (and, together, unique) only for custom-upload assets (story
+    // 12); left null for TCGdex-sourced rows. Lets concurrent uploads of
+    // identical image bytes share one asset/file instead of racing to
+    // store duplicates - computed by the backend while streaming the
+    // upload to temporary storage, never trusted from the client.
+    sha256Digest: text(),
+    // A sanitized copy of the uploaded file's original name (story 12),
+    // retained as metadata only; every filesystem operation uses
+    // `storageFilename` below instead. Left null for TCGdex-sourced rows.
+    originalFilename: text(),
     // Backend-generated filename this asset's bytes are stored under in the
     // application data directory's images folder. Never exposed to the
     // frontend; `GET /cards/{cardId}/image` resolves it server-side.
@@ -68,15 +77,19 @@ export const cardImageAssets = sqliteTable(
     // Lets concurrent assignments of the same TCGdex card reuse one shared
     // asset/file instead of racing to download and store duplicates. SQLite
     // unique indexes never treat two NULLs as equal, so this constraint is
-    // inert for future non-TCGdex asset rows (story 12/25) that leave
+    // inert for custom-upload asset rows (story 12) that leave
     // `providerCardId` null.
     uniqueIndex('card_image_assets_provider_card_id_unique').on(table.providerCardId),
+    // Story 12's concurrent-upload dedupe constraint: inert for
+    // TCGdex-sourced rows that leave `sha256Digest` null, for the same
+    // NULL-never-equals-NULL reason as the index above.
+    uniqueIndex('card_image_assets_sha256_digest_unique').on(table.sha256Digest),
   ],
 );
 
-// A binder-owned card (story 11). Custom-card fields (story 12) and
-// acquisition/pricing fields (stories 36/38) aren't modeled yet; only what
-// TCGdex card creation and placement need exists so far.
+// A binder-owned card (stories 11 and 12). Acquisition/pricing fields
+// (stories 36/38) aren't modeled yet; only what TCGdex and custom card
+// creation/placement need exists so far.
 export const cards = sqliteTable(
   'cards',
   {
@@ -87,9 +100,8 @@ export const cards = sqliteTable(
     name: text().notNull(),
     setName: text(),
     localNumber: text(),
-    // Initially only 'tcgdex' is ever written (story 11); 'custom' becomes
-    // reachable once story 12 adds manual-entry card creation. Enforced by
-    // the `card_source_valid` check below rather than a native SQLite enum.
+    // 'tcgdex' (story 11) or 'custom' (story 12), enforced by the
+    // `card_source_valid` check below rather than a native SQLite enum.
     source: text().notNull(),
     providerCardId: text(),
     providerSetId: text(),
