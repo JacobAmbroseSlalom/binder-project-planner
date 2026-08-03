@@ -318,6 +318,8 @@ export interface components {
         BinderBorderRadius: number;
         /** @description Centimeters, to two decimal places, zero or greater. Unlike BinderBorderRadius, this is a physical measurement rather than a percentage - the frontend converts it to pixels at render time using the same cm-to-px scale factor as the art's own image. */
         BinderBorderWidth: number;
+        /** @description Story 20: one-based physical focal page resolved to the same single page or two-page spread as layout navigation. Must be between 1 and twice the binder's stored page count; the backend resets it to the shared DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE value when reducing the stored page count would otherwise make the saved value invalid. */
+        BinderPreviewPhysicalPage: number;
         CreateBinderRequest: {
             /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
             name: string;
@@ -341,6 +343,7 @@ export interface components {
             borderRadius?: components["schemas"]["BinderBorderRadius"];
             /** @description Defaults to the shared DEFAULT_BORDER_WIDTH_CM value when omitted. */
             borderWidth?: components["schemas"]["BinderBorderWidth"];
+            previewPhysicalPage?: components["schemas"]["BinderPreviewPhysicalPage"];
         };
         /** @description A partial update; only supplied fields are changed. Story 7 covers name/width/height/pages; story 24 adds the dimension and multi-slot-art style fields below; later stories add notes, preview page, and lock-state fields to this same request schema. */
         UpdateBinderRequest: {
@@ -359,6 +362,7 @@ export interface components {
             borderColor?: components["schemas"]["BinderBorderColor"];
             borderRadius?: components["schemas"]["BinderBorderRadius"];
             borderWidth?: components["schemas"]["BinderBorderWidth"];
+            previewPhysicalPage?: components["schemas"]["BinderPreviewPhysicalPage"];
         };
         Binder: {
             /** Format: uuid */
@@ -374,12 +378,13 @@ export interface components {
             borderColor: components["schemas"]["BinderBorderColor"];
             borderRadius: components["schemas"]["BinderBorderRadius"];
             borderWidth: components["schemas"]["BinderBorderWidth"];
+            previewPhysicalPage: components["schemas"]["BinderPreviewPhysicalPage"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
         };
-        /** @description The lightweight binder representation used by the home-page binder list (story 5). Later stories (20, 22) extend this schema with only the additional preview and completion-metric data those features require, rather than the complete card and multi-slot-art graph. */
+        /** @description The lightweight binder representation used by the home-page binder list (story 5). Story 20 extends this schema with the dimension/ style fields (needed to render the embedded preview at the right proportions) and the embedded `preview` object itself, rather than the complete card and multi-slot-art graph. Story 22 may add completion-metric data the same way. */
         BinderSummary: {
             /** Format: uuid */
             id: string;
@@ -387,10 +392,54 @@ export interface components {
             width: number;
             height: number;
             pages: number;
+            widthPerSlot: components["schemas"]["BinderWidthPerSlot"];
+            widthBase: components["schemas"]["BinderWidthBase"];
+            heightPerSlot: components["schemas"]["BinderHeightPerSlot"];
+            heightBase: components["schemas"]["BinderHeightBase"];
+            borderColor: components["schemas"]["BinderBorderColor"];
+            borderRadius: components["schemas"]["BinderBorderRadius"];
+            borderWidth: components["schemas"]["BinderBorderWidth"];
+            previewPhysicalPage: components["schemas"]["BinderPreviewPhysicalPage"];
+            preview: components["schemas"]["BinderPreview"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @description Story 20: the single page or two-page spread `previewPhysicalPage` resolves to, matching layout navigation's own spread resolution. */
+        BinderPreviewSpread: {
+            left: number | null;
+            right: number | null;
+        };
+        /** @description Story 20: one placed card within the preview spread - only the placement and image data the miniature layout needs to render it, excluding the card's own name/set/variation/source/timestamps. */
+        BinderPreviewCard: {
+            physicalPage: number;
+            row: number;
+            column: number;
+            imageUrl: string;
+        };
+        /** @description Story 20: one placed multi-slot art item within the preview spread - only the placement, geometry, and image data the miniature layout needs to render it, excluding the art's own title/description/timestamps. */
+        BinderPreviewArt: {
+            physicalPage: number;
+            row: number;
+            column: number;
+            widthSlots: number;
+            heightSlots: number;
+            imageUrl: string;
+            imageRotationDegrees: number;
+            focalX: number;
+            focalY: number;
+            scaleX: number;
+            scaleY: number;
+            borderColor: string | null;
+            borderRadius: number | null;
+            borderWidth: number | null;
+        };
+        /** @description Story 20: the binder's saved `previewPhysicalPage` resolved to a spread plus the cards and multi-slot art placed within it - the complete data the home-page preview needs to render, embedded directly in each `BinderSummary` so the home page issues no separate preview requests. */
+        BinderPreview: {
+            spread: components["schemas"]["BinderPreviewSpread"];
+            cards: components["schemas"]["BinderPreviewCard"][];
+            art: components["schemas"]["BinderPreviewArt"][];
         };
         /** @description One-based physical page, row, and column. All three are populated for a placed item and all three are null for an unplaced item (story 15's unplaced-cards section). */
         PlacementCoordinates: {

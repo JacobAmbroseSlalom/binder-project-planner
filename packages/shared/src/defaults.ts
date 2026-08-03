@@ -141,3 +141,11 @@ export const MIN_ART_PRINT_RESOLUTION_PPI = 300;
 // art duplication) is retained so a retried request replays the original
 // outcome instead of repeating the mutation.
 export const MUTATION_IDEMPOTENCY_RETENTION_MS = 86_400_000; // 24 hours
+
+// Story 20: "Add a binder preview". The reusable binder-details form's
+// `previewPhysicalPage` field defaults to physical page 2 (the binder's
+// first two-page spread) for a newly created binder. The backend also
+// resets a binder's `previewPhysicalPage` back to this value when
+// reducing the stored page count makes the previously saved value
+// invalid for the new page count.
+export const DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE = 2;

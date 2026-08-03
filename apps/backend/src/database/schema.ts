@@ -41,6 +41,11 @@ export const binders = sqliteTable(
     // cm-to-px scale factor as the art's own image, so it stays
     // physically proportional to the art's actual size.
     borderWidthHundredths: integer().notNull(),
+    // Story 20: one-based physical focal page the home-page preview
+    // resolves to a spread (see `@binder-project-planner/shared`'s
+    // `resolveSpread`). Bounded by `pages` (below), so its check
+    // constraint must reference both columns.
+    previewPhysicalPage: integer().notNull(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
   },
@@ -82,6 +87,14 @@ export const binders = sqliteTable(
     check(
       'binder_border_color_format',
       sql`${table.borderColor} GLOB '#[0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F]'`,
+    ),
+    // Story 20: the preview page must be a valid physical page for this
+    // binder's own stored page count (1 through pages * 2), belt-and-
+    // suspenders alongside the application-level validation/auto-reset in
+    // routes/binders.ts.
+    check(
+      'binder_preview_physical_page_range',
+      sql`${table.previewPhysicalPage} >= 1 AND ${table.previewPhysicalPage} <= (${table.pages} * 2)`,
     ),
   ],
 );

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   BINDER_NAME_MAX_LENGTH,
+  DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
   DEFAULT_BORDER_COLOR,
   DEFAULT_BORDER_RADIUS_PERCENT,
   DEFAULT_BORDER_WIDTH_CM,
@@ -9,14 +10,16 @@ import {
   DEFAULT_HEIGHT_PER_SLOT_CM,
   DEFAULT_WIDTH_BASE_CM,
   DEFAULT_WIDTH_PER_SLOT_CM,
+  getMaxPhysicalPage,
+  resolveSpread,
 } from '@binder-project-planner/shared';
 import { asc, desc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
 import { binders } from '../database/schema.js';
-import { listArtForBinder } from './art.js';
-import { listCardsForBinder } from './cards.js';
+import { listArtForBinder, listPlacedArtForPreview } from './art.js';
+import { listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
 
 // The validated, OpenAPI-typed shape of a create-binder request body. The
 // OpenAPI validation middleware (mounted in app.ts) already rejects requests
@@ -35,6 +38,7 @@ interface CreateBinderRequestBody {
   borderColor?: string;
   borderRadius?: number;
   borderWidth?: number;
+  previewPhysicalPage?: number;
 }
 
 // The validated, OpenAPI-typed shape of an update-binder request body
@@ -54,6 +58,7 @@ interface UpdateBinderRequestBody {
   borderColor?: string;
   borderRadius?: number;
   borderWidth?: number;
+  previewPhysicalPage?: number;
 }
 
 // The raw database row shape (includes the internal `normalizedName`
@@ -73,6 +78,7 @@ interface BinderRow {
   borderColor: string;
   borderRadiusHundredths: number;
   borderWidthHundredths: number;
+  previewPhysicalPage: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,6 +113,7 @@ function serializeBinder(row: BinderRow) {
     borderColor: row.borderColor,
     borderRadius: fromHundredths(row.borderRadiusHundredths),
     borderWidth: fromHundredths(row.borderWidthHundredths),
+    previewPhysicalPage: row.previewPhysicalPage,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -185,23 +192,38 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
 
   // Story 5: "List binders". Returns the complete binder-summary collection
   // (no pagination), sorted by `updatedAt` descending and then by binder
-  // UUID ascending as a deterministic tie-breaker per planning.md.
+  // UUID ascending as a deterministic tie-breaker per planning.md. Story 20
+  // embeds each binder's own saved preview spread (cards/art placed within
+  // it) directly in its summary, so the home page needs no separate
+  // preview requests.
   router.get('/binders', (_request, response) => {
     const rows = database
-      .select({
-        id: binders.id,
-        name: binders.name,
-        width: binders.width,
-        height: binders.height,
-        pages: binders.pages,
-        createdAt: binders.createdAt,
-        updatedAt: binders.updatedAt,
-      })
+      .select()
       .from(binders)
       .orderBy(desc(binders.updatedAt), asc(binders.id))
-      .all();
+      .all() as BinderRow[];
 
-    response.status(200).json(rows);
+    const summaries = rows.map((row) => {
+      const maxPhysicalPage = getMaxPhysicalPage(row.pages);
+      const spread = resolveSpread(row.previewPhysicalPage, maxPhysicalPage);
+      // Only the spread's actual page(s) - the first/last spread has only
+      // one side - are queried, matching the OpenAPI `BinderPreviewSpread`
+      // schema's `left`/`right` nullability.
+      const physicalPages = [spread.left, spread.right].filter(
+        (page): page is number => page !== null,
+      );
+
+      return {
+        ...serializeBinder(row),
+        preview: {
+          spread,
+          cards: listPlacedCardsForPreview(database, row.id, physicalPages),
+          art: listPlacedArtForPreview(database, row.id, physicalPages),
+        },
+      };
+    });
+
+    response.status(200).json(summaries);
   });
 
   router.post('/binders', (request, response) => {
@@ -254,6 +276,19 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
       return;
     }
 
+    // Story 20: an omitted previewPhysicalPage falls back to the shared
+    // default (page 2); a supplied value must be a valid physical page for
+    // this binder's own stored page count.
+    const previewPhysicalPage = body.previewPhysicalPage ?? DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE;
+    const maxPhysicalPage = getMaxPhysicalPage(body.pages);
+    if (previewPhysicalPage < 1 || previewPhysicalPage > maxPhysicalPage) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(badRequestProblem(`previewPhysicalPage must be between 1 and ${maxPhysicalPage}.`));
+      return;
+    }
+
     const now = new Date().toISOString();
     const binder = {
       id: randomUUID(),
@@ -271,6 +306,7 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
       borderColor: borderColor.toUpperCase(),
       borderRadiusHundredths: toHundredths(borderRadius),
       borderWidthHundredths: toHundredths(borderWidth),
+      previewPhysicalPage,
       createdAt: now,
       updatedAt: now,
     };
@@ -402,6 +438,32 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
     if (body.borderWidth !== undefined) {
       updates.borderWidthHundredths = toHundredths(body.borderWidth);
     }
+
+    // Story 20: previewPhysicalPage must be a valid physical page for the
+    // *effective* stored page count (an included `pages` change, or the
+    // existing value otherwise) - same "effective values" reasoning as the
+    // dimension fields above.
+    const effectivePages = body.pages ?? existing.pages;
+    const maxPhysicalPage = getMaxPhysicalPage(effectivePages);
+    if (body.previewPhysicalPage !== undefined) {
+      if (body.previewPhysicalPage < 1 || body.previewPhysicalPage > maxPhysicalPage) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(badRequestProblem(`previewPhysicalPage must be between 1 and ${maxPhysicalPage}.`));
+        return;
+      }
+      updates.previewPhysicalPage = body.previewPhysicalPage;
+    } else if (existing.previewPhysicalPage > maxPhysicalPage) {
+      // Reducing the stored page count made the saved preview page
+      // invalid without the request explicitly supplying a replacement -
+      // reset it to the shared default in this same update, per
+      // planning.md's "If reducing stored page count makes the saved
+      // preview page invalid, the frontend and backend reset
+      // previewPhysicalPage to DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE".
+      updates.previewPhysicalPage = DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE;
+    }
+
     updates.updatedAt = new Date().toISOString();
 
     let updated: BinderRow;

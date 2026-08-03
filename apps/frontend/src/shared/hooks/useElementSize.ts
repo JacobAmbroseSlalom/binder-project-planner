@@ -2,10 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 
 // Measures an element's rendered content-box size via `ResizeObserver`,
 // reactively updating whenever the element's own size changes. Shared by
-// `ArtTile` (to recover the same frame-relative geometry math the Konva
-// editor uses without a fixed pixel size passed down from the caller) and
-// `UnplacedArtPanel` (to size art tiles proportionally to the unplaced
-// cards grid's own column width - see its own usage for details).
+// the binder layout tab's `ArtTile` (to recover the same frame-relative
+// geometry math the Konva editor uses without a fixed pixel size passed
+// down from the caller) and the home-page preview's `PreviewArtTile`
+// (story 20, to compute the same cm-to-px border-width scale factor for
+// its own much smaller rendered size). Promoted here from the layout
+// route's private `_components/art/` folder once this second consumer
+// needed it, per styling.instructions.md's "colocate until a second place
+// needs it" rule.
 export function useElementSize<T extends HTMLElement>(): [
   React.RefObject<T | null>,
   { width: number; height: number },

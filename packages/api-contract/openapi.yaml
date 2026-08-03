@@ -817,6 +817,16 @@ components:
         BinderBorderRadius, this is a physical measurement rather than a
         percentage - the frontend converts it to pixels at render time
         using the same cm-to-px scale factor as the art's own image.
+    BinderPreviewPhysicalPage:
+      type: integer
+      minimum: 1
+      description: >-
+        Story 20: one-based physical focal page resolved to the same
+        single page or two-page spread as layout navigation. Must be
+        between 1 and twice the binder's stored page count; the backend
+        resets it to the shared DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE value
+        when reducing the stored page count would otherwise make the
+        saved value invalid.
     CreateBinderRequest:
       type: object
       additionalProperties: false
@@ -881,6 +891,8 @@ components:
           description: >-
             Defaults to the shared DEFAULT_BORDER_WIDTH_CM value when
             omitted.
+        previewPhysicalPage:
+          $ref: '#/components/schemas/BinderPreviewPhysicalPage'
     UpdateBinderRequest:
       type: object
       additionalProperties: false
@@ -924,6 +936,8 @@ components:
           $ref: '#/components/schemas/BinderBorderRadius'
         borderWidth:
           $ref: '#/components/schemas/BinderBorderWidth'
+        previewPhysicalPage:
+          $ref: '#/components/schemas/BinderPreviewPhysicalPage'
     Binder:
       type: object
       additionalProperties: false
@@ -940,6 +954,7 @@ components:
         - borderColor
         - borderRadius
         - borderWidth
+        - previewPhysicalPage
         - createdAt
         - updatedAt
       properties:
@@ -975,6 +990,8 @@ components:
           $ref: '#/components/schemas/BinderBorderRadius'
         borderWidth:
           $ref: '#/components/schemas/BinderBorderWidth'
+        previewPhysicalPage:
+          $ref: '#/components/schemas/BinderPreviewPhysicalPage'
         createdAt:
           type: string
           format: date-time
@@ -986,15 +1003,26 @@ components:
       additionalProperties: false
       description: >-
         The lightweight binder representation used by the home-page binder
-        list (story 5). Later stories (20, 22) extend this schema with only
-        the additional preview and completion-metric data those features
-        require, rather than the complete card and multi-slot-art graph.
+        list (story 5). Story 20 extends this schema with the dimension/
+        style fields (needed to render the embedded preview at the right
+        proportions) and the embedded `preview` object itself, rather than
+        the complete card and multi-slot-art graph. Story 22 may add
+        completion-metric data the same way.
       required:
         - id
         - name
         - width
         - height
         - pages
+        - widthPerSlot
+        - widthBase
+        - heightPerSlot
+        - heightBase
+        - borderColor
+        - borderRadius
+        - borderWidth
+        - previewPhysicalPage
+        - preview
         - createdAt
         - updatedAt
       properties:
@@ -1016,12 +1044,160 @@ components:
         pages:
           type: integer
           minimum: 1
+        widthPerSlot:
+          $ref: '#/components/schemas/BinderWidthPerSlot'
+        widthBase:
+          $ref: '#/components/schemas/BinderWidthBase'
+        heightPerSlot:
+          $ref: '#/components/schemas/BinderHeightPerSlot'
+        heightBase:
+          $ref: '#/components/schemas/BinderHeightBase'
+        borderColor:
+          $ref: '#/components/schemas/BinderBorderColor'
+        borderRadius:
+          $ref: '#/components/schemas/BinderBorderRadius'
+        borderWidth:
+          $ref: '#/components/schemas/BinderBorderWidth'
+        previewPhysicalPage:
+          $ref: '#/components/schemas/BinderPreviewPhysicalPage'
+        preview:
+          $ref: '#/components/schemas/BinderPreview'
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+    BinderPreviewSpread:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 20: the single page or two-page spread `previewPhysicalPage`
+        resolves to, matching layout navigation's own spread resolution.
+      required:
+        - left
+        - right
+      properties:
+        left:
+          type: integer
+          minimum: 1
+          nullable: true
+        right:
+          type: integer
+          minimum: 1
+          nullable: true
+    BinderPreviewCard:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 20: one placed card within the preview spread - only the
+        placement and image data the miniature layout needs to render it,
+        excluding the card's own name/set/variation/source/timestamps.
+      required:
+        - physicalPage
+        - row
+        - column
+        - imageUrl
+      properties:
+        physicalPage:
+          type: integer
+          minimum: 1
+        row:
+          type: integer
+          minimum: 1
+        column:
+          type: integer
+          minimum: 1
+        imageUrl:
+          type: string
+    BinderPreviewArt:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 20: one placed multi-slot art item within the preview
+        spread - only the placement, geometry, and image data the
+        miniature layout needs to render it, excluding the art's own
+        title/description/timestamps.
+      required:
+        - physicalPage
+        - row
+        - column
+        - widthSlots
+        - heightSlots
+        - imageUrl
+        - imageRotationDegrees
+        - focalX
+        - focalY
+        - scaleX
+        - scaleY
+        - borderColor
+        - borderRadius
+        - borderWidth
+      properties:
+        physicalPage:
+          type: integer
+          minimum: 1
+        row:
+          type: integer
+          minimum: 1
+        column:
+          type: integer
+          minimum: 1
+        widthSlots:
+          type: integer
+          minimum: 1
+        heightSlots:
+          type: integer
+          minimum: 1
+        imageUrl:
+          type: string
+        imageRotationDegrees:
+          type: number
+        focalX:
+          type: number
+        focalY:
+          type: number
+        scaleX:
+          type: number
+        scaleY:
+          type: number
+        borderColor:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          nullable: true
+        borderRadius:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+        borderWidth:
+          type: number
+          minimum: 0
+          nullable: true
+    BinderPreview:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 20: the binder's saved `previewPhysicalPage` resolved to a
+        spread plus the cards and multi-slot art placed within it - the
+        complete data the home-page preview needs to render, embedded
+        directly in each `BinderSummary` so the home page issues no
+        separate preview requests.
+      required:
+        - spread
+        - cards
+        - art
+      properties:
+        spread:
+          $ref: '#/components/schemas/BinderPreviewSpread'
+        cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/BinderPreviewCard'
+        art:
+          type: array
+          items:
+            $ref: '#/components/schemas/BinderPreviewArt'
     PlacementCoordinates:
       type: object
       additionalProperties: false

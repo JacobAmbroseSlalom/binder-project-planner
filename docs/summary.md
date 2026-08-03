@@ -26,3 +26,29 @@ ai struggled with the ui aspect, thats where a lot of back and forth happened. U
 agressive use of comments
 
 Story #26 was wayyyyy tooo big
+
+# Title
+
+21 Manage binders from the home page
+29 Export a binder as a PDF
+30 Export multi-slot art for printing
+16 Add card variations
+17 Add more cards
+18 Bulk add cards
+19 Duplicate a card
+42 Preview binder layout and multi-slot art while editing binder settings
+22 Show binder completion metrics
+40 Add summary stats on Binder Layout Page
+31 Search and filter unplaced items
+23 Add binder notes
+27 Handle binder size and page-count changes
+
+28 Undo and redo layout movements
+32 Lock a binder
+33 Export and import all application data
+34 Add custom art finances
+35 Add art production time statistics
+36 Track card acquisition
+37 Add a card checklist
+38 Add card finances
+39 Add Binder Search and Sort functions

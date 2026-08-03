@@ -42,6 +42,10 @@ export type CardSearchResponse = components['schemas']['CardSearchResponse'];
 export type CardPositionUpdate = components['schemas']['CardPositionUpdate'];
 export type Art = components['schemas']['Art'];
 export type PlacementCoordinates = components['schemas']['PlacementCoordinates'];
+export type BinderPreviewSpread = components['schemas']['BinderPreviewSpread'];
+export type BinderPreviewCard = components['schemas']['BinderPreviewCard'];
+export type BinderPreviewArt = components['schemas']['BinderPreviewArt'];
+export type BinderPreview = components['schemas']['BinderPreview'];
 
 // Fetches the complete binder-summary collection through `GET /binders`
 // (story 5). The backend already returns it in the documented sort order

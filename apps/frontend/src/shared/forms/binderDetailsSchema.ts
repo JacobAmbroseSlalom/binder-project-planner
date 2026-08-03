@@ -3,6 +3,7 @@ import {
   BINDER_NAME_MAX_LENGTH,
   DEFAULT_BINDER_HEIGHT,
   DEFAULT_BINDER_PAGE_COUNT,
+  DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
   DEFAULT_BINDER_WIDTH,
   DEFAULT_BORDER_COLOR,
   DEFAULT_BORDER_RADIUS_PERCENT,
@@ -11,6 +12,7 @@ import {
   DEFAULT_HEIGHT_PER_SLOT_CM,
   DEFAULT_WIDTH_BASE_CM,
   DEFAULT_WIDTH_PER_SLOT_CM,
+  getMaxPhysicalPage,
 } from '@binder-project-planner/shared';
 import { z } from 'zod';
 
@@ -114,6 +116,11 @@ export const binderDetailsSchema = z
     borderColor: borderColorField,
     borderRadius: percentageField('Border radius'),
     borderWidth: nonNegativeDecimalField('Border width'),
+    // Story 20: one-based physical focal page the home-page preview
+    // resolves to a spread. Its own upper bound depends on `pages`
+    // (checked below in the cross-field refinement), so only the lower
+    // bound is expressed on the field itself.
+    previewPhysicalPage: positiveIntegerField('Preview page'),
   })
   .superRefine((values, ctx) => {
     // Cross-field validation that can't be expressed on one field alone:
@@ -132,6 +139,16 @@ export const binderDetailsSchema = z
         code: 'custom',
         path: ['heightBase'],
         message: 'The one-slot height (height per slot + height base) must be greater than zero.',
+      });
+    }
+    // Story 20: previewPhysicalPage must be an integer from 1 through
+    // twice the form's current stored page count.
+    const maxPhysicalPage = getMaxPhysicalPage(values.pages);
+    if (values.previewPhysicalPage > maxPhysicalPage) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['previewPhysicalPage'],
+        message: `Preview page must be between 1 and ${maxPhysicalPage}.`,
       });
     }
   });
@@ -162,4 +179,5 @@ export const defaultBinderDetailsFormValues: BinderDetailsFormInput = {
   borderColor: DEFAULT_BORDER_COLOR,
   borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
   borderWidth: DEFAULT_BORDER_WIDTH_CM,
+  previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
 };

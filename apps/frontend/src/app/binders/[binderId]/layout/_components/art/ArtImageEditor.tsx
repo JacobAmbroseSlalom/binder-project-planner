@@ -5,20 +5,19 @@ import { useEffect, useRef, useState } from 'react';
 import { Image as KonvaImage, Layer, Stage } from 'react-konva';
 import type Konva from 'konva';
 
-import { computeArtDisplayGeometry } from './computeArtDisplayGeometry';
+import {
+  computeArtDisplayGeometry,
+  type ArtTransform,
+} from '@/shared/geometry/computeArtDisplayGeometry';
 
 const MAX_SCALE_MULTIPLIER = 3;
 
-// One rotation/focal/scale transform, matching `art`'s stored columns
-// one-to-one (story 25's ten-thousandths-integer columns are just this
-// shape's storage encoding - see schema.ts/art.ts).
-export interface ArtTransform {
-  imageRotationDegrees: 0 | 90 | 180 | 270;
-  focalX: number;
-  focalY: number;
-  scaleX: number;
-  scaleY: number;
-}
+// Re-exported so this module's existing consumers (e.g. CreateArtModal.tsx)
+// keep importing the type from here - its canonical definition now lives in
+// `@/shared/geometry/computeArtDisplayGeometry` alongside the pure geometry
+// function itself (story 20 needed a second, non-Konva consumer for that
+// function, so the shape it operates on moved with it).
+export type { ArtTransform };
 
 // A fresh, untransformed starting point: centered, unrotated, and scaled
 // to exactly the cover-fit minimum (planning.md: "a newly selected image

@@ -1,4 +1,18 @@
-import type { ArtTransform } from './ArtImageEditor';
+// One rotation/focal/scale transform, matching `art`'s stored columns
+// one-to-one (story 25's ten-thousandths-integer columns are just this
+// shape's storage encoding - see schema.ts/art.ts). Defined here (rather
+// than in the Konva-based `ArtImageEditor`) so `computeArtDisplayGeometry`
+// below - and its other, plain-CSS consumers (`ArtTile`, and the home-page
+// preview's `PreviewArtTile`, story 20) - never need to import anything
+// from the heavier editor module just for this shape. `ArtImageEditor.tsx`
+// imports and re-exports this same type for its own existing consumers.
+export interface ArtTransform {
+  imageRotationDegrees: 0 | 90 | 180 | 270;
+  focalX: number;
+  focalY: number;
+  scaleX: number;
+  scaleY: number;
+}
 
 export interface ArtDisplayGeometryInput {
   naturalWidth: number;
@@ -24,8 +38,9 @@ export interface ArtDisplayGeometry {
 // The shared geometry math behind story 25's "editor, layout, preview, and
 // print renderers derive transformed image geometry from the same
 // rotation, focal-point, and scale-multiplier contract" requirement.
-// `ArtImageEditor.tsx` (Konva, while editing) and `ArtTile.tsx` (plain
-// CSS, for read-only display) both call this rather than each
+// `ArtImageEditor.tsx` (Konva, while editing), `ArtTile.tsx` (plain CSS,
+// full layout), and the home-page preview's `PreviewArtTile.tsx` (story
+// 20, plain CSS, read-only miniature) all call this rather than each
 // reimplementing the fit/rotate/focal math independently.
 export function computeArtDisplayGeometry({
   naturalWidth,

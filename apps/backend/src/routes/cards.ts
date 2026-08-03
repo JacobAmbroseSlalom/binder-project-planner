@@ -17,7 +17,7 @@ import {
   CUSTOM_CARD_NUMBER_MAX_LENGTH,
   CUSTOM_CARD_SET_MAX_LENGTH,
 } from '@binder-project-planner/shared';
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { Router, type Response } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
@@ -1098,4 +1098,42 @@ export function listCardsForBinder(database: DatabaseConnection['database'], bin
     .orderBy(desc(cards.createdAt), asc(cards.id))
     .all()
     .map(serializeCard);
+}
+
+// Story 20 ("Add a binder preview"): the cards placed within the binder
+// list's embedded preview spread, narrowed to only the physical pages the
+// resolved spread actually shows (a single page or a two-page spread).
+// Returns the minimal `BinderPreviewCard` placement/image shape rather than
+// the complete `Card` row - the preview data "contains only ... placed card
+// and multi-slot-art geometry, display metadata, and image URLs" per
+// planning.md's technical requirements, deliberately excluding the card's
+// own name/set/variation/source/timestamps.
+export function listPlacedCardsForPreview(
+  database: DatabaseConnection['database'],
+  binderId: string,
+  physicalPages: number[],
+) {
+  if (physicalPages.length === 0) return [];
+
+  return database
+    .select({
+      physicalPage: cards.physicalPage,
+      row: cards.row,
+      column: cards.column,
+      id: cards.id,
+    })
+    .from(cards)
+    .where(and(eq(cards.binderId, binderId), inArray(cards.physicalPage, physicalPages)))
+    .all()
+    .map((row) => ({
+      // `physicalPage`/`row`/`column` are guaranteed non-null here: this
+      // query only matches cards whose `physicalPage` is one of the
+      // resolved spread's pages, and the `card_placement_all_or_none`-style
+      // constraint (see schema.ts) guarantees row/column are set whenever
+      // physicalPage is.
+      physicalPage: row.physicalPage as number,
+      row: row.row as number,
+      column: row.column as number,
+      imageUrl: `/cards/${row.id}/image`,
+    }));
 }

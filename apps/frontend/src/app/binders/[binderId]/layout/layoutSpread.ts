@@ -10,36 +10,17 @@
 // page (the binder's left side), and every spread in between shows an
 // even left page paired with the following odd right page. That's why a
 // binder with `pages` stored pages has `pages + 1` displayed spreads.
-
-// One displayed spread: a `left` and/or `right` one-based physical page.
-// The first spread has `left: null` (right side only) and the last spread
-// has `right: null` (left side only); every other spread has both.
-export interface BinderSpread {
-  left: number | null;
-  right: number | null;
-}
-
-// The highest valid one-based physical page for a binder with
-// `storedPages` stored pages.
-export function getMaxPhysicalPage(storedPages: number): number {
-  return storedPages * 2;
-}
-
-// Resolves which spread a given physical page belongs to. `physicalPage` is
-// expected to already be an integer within `[1, maxPhysicalPage]`;
-// out-of-range input is clamped defensively to the nearest boundary spread
-// rather than throwing.
-export function resolveSpread(physicalPage: number, maxPhysicalPage: number): BinderSpread {
-  if (physicalPage <= 1) return { left: null, right: 1 };
-  if (physicalPage >= maxPhysicalPage) return { left: maxPhysicalPage, right: null };
-
-  // Every intermediate spread pairs an even left page with the following
-  // odd right page, so either physical page number in the pair resolves to
-  // the same spread (story 8's "either page in a two-page spread displays
-  // that spread").
-  const left = physicalPage % 2 === 0 ? physicalPage : physicalPage - 1;
-  return { left, right: left + 1 };
-}
+//
+// `BinderSpread`, `getMaxPhysicalPage`, and `resolveSpread` themselves now
+// live in `@binder-project-planner/shared` (story 20 needs the backend to
+// resolve the same spread for the binder-list preview) and are re-exported
+// here so this route's existing imports keep working unchanged.
+export {
+  type BinderSpread,
+  getMaxPhysicalPage,
+  resolveSpread,
+} from '@binder-project-planner/shared';
+import { resolveSpread, type BinderSpread } from '@binder-project-planner/shared';
 
 // The physical page the right/next arrow navigates to: the left page of
 // the next spread, or the single last physical page at the binder's final

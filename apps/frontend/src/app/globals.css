@@ -162,4 +162,21 @@
     width: min(100cqw, 100cqh * var(--slot-ratio, 1));
     margin: 0 auto;
   }
+
+  /* The home-page binder preview's (story 20) equivalent of
+     `.binder-side-fit` above: the same "contain, don't crop" container-
+     query technique, but sized to the fixed preview-frame's own height
+     (`height: 100%`, resolved against `BinderPreview`'s fixed-size frame
+     div) rather than `.binder-side-fit`'s viewport-relative `min(32rem,
+     60vh)` - the preview frame is always the same small, non-viewport-
+     relative size regardless of binder data (see planning.md's "Every
+     binder-list item uses the same stable preview-frame dimensions,
+     defined by the frontend styling system rather than binder data").
+     Kept as its own class (rather than reusing `.binder-side-fit`
+     directly) so a future change to the full layout tab's viewport-based
+     sizing formula can't accidentally resize every home-page preview too. */
+  .preview-side-fit {
+    container-type: size;
+    height: 100%;
+  }
 }

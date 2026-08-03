@@ -281,6 +281,30 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
             {...register('pages', { valueAsNumber: true })}
           />
         </Field>
+        {/* Story 20: the physical page (1-based, either page of a
+            two-page spread) the home-page preview renders. Validated as
+            an integer from 1 through twice the form's current stored page
+            count (see binderDetailsSchema.ts's cross-field refinement) -
+            there's no fixed `max` here since it depends on the live
+            `pages` value above. Grouped into this row (rather than its
+            own section further down) since it's conceptually just
+            another page-count-derived field alongside `pages` itself. */}
+        <Field
+          label="Preview page"
+          htmlFor="binder-preview-physical-page"
+          error={errors.previewPhysicalPage?.message}
+          className="flex-1"
+        >
+          <input
+            id="binder-preview-physical-page"
+            type="number"
+            min={1}
+            step={1}
+            disabled={disabled}
+            className={errors.previewPhysicalPage ? errorInputClassName : inputClassName}
+            {...register('previewPhysicalPage', { valueAsNumber: true })}
+          />
+        </Field>
       </div>
 
       {/* Separates the original story-4 identity/layout fields above from

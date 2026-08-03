@@ -1,0 +1,793 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "e8473f12-be76-40fe-be92-b766b7901426",
+  "prevId": "650035a7-174c-4842-8191-0eb1a92494d1",
+  "tables": {
+    "app_metadata": {
+      "name": "app_metadata",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "art": {
+      "name": "art",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "binderId": {
+          "name": "binderId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "widthSlots": {
+          "name": "widthSlots",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "heightSlots": {
+          "name": "heightSlots",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "physicalPage": {
+          "name": "physicalPage",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "row": {
+          "name": "row",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "column": {
+          "name": "column",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "imageAssetId": {
+          "name": "imageAssetId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "imageRotationDegrees": {
+          "name": "imageRotationDegrees",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "focalXTenThousandths": {
+          "name": "focalXTenThousandths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "focalYTenThousandths": {
+          "name": "focalYTenThousandths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scaleXTenThousandths": {
+          "name": "scaleXTenThousandths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scaleYTenThousandths": {
+          "name": "scaleYTenThousandths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "borderColor": {
+          "name": "borderColor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "borderRadiusHundredths": {
+          "name": "borderRadiusHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "borderWidthHundredths": {
+          "name": "borderWidthHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "art_binderId_binders_id_fk": {
+          "name": "art_binderId_binders_id_fk",
+          "tableFrom": "art",
+          "tableTo": "binders",
+          "columnsFrom": ["binderId"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "art_imageAssetId_art_image_assets_id_fk": {
+          "name": "art_imageAssetId_art_image_assets_id_fk",
+          "tableFrom": "art",
+          "tableTo": "art_image_assets",
+          "columnsFrom": ["imageAssetId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "art_placement_all_or_none": {
+          "name": "art_placement_all_or_none",
+          "value": "(\"art\".\"physicalPage\" IS NULL AND \"art\".\"row\" IS NULL AND \"art\".\"column\" IS NULL) OR (\"art\".\"physicalPage\" IS NOT NULL AND \"art\".\"row\" IS NOT NULL AND \"art\".\"column\" IS NOT NULL)"
+        },
+        "art_width_slots_positive": {
+          "name": "art_width_slots_positive",
+          "value": "\"art\".\"widthSlots\" > 0"
+        },
+        "art_height_slots_positive": {
+          "name": "art_height_slots_positive",
+          "value": "\"art\".\"heightSlots\" > 0"
+        },
+        "art_rotation_valid": {
+          "name": "art_rotation_valid",
+          "value": "\"art\".\"imageRotationDegrees\" IN (0, 90, 180, 270)"
+        },
+        "art_scale_positive": {
+          "name": "art_scale_positive",
+          "value": "\"art\".\"scaleXTenThousandths\" > 0 AND \"art\".\"scaleYTenThousandths\" > 0"
+        },
+        "art_border_color_format": {
+          "name": "art_border_color_format",
+          "value": "\"art\".\"borderColor\" IS NULL OR \"art\".\"borderColor\" GLOB '#[0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F]'"
+        },
+        "art_border_radius_range": {
+          "name": "art_border_radius_range",
+          "value": "\"art\".\"borderRadiusHundredths\" IS NULL OR (\"art\".\"borderRadiusHundredths\" >= 0 AND \"art\".\"borderRadiusHundredths\" <= 10000)"
+        },
+        "art_border_width_range": {
+          "name": "art_border_width_range",
+          "value": "\"art\".\"borderWidthHundredths\" IS NULL OR \"art\".\"borderWidthHundredths\" >= 0"
+        }
+      }
+    },
+    "art_image_assets": {
+      "name": "art_image_assets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sha256Digest": {
+          "name": "sha256Digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "originalFilename": {
+          "name": "originalFilename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "storageFilename": {
+          "name": "storageFilename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalizedStorageFilename": {
+          "name": "normalizedStorageFilename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contentType": {
+          "name": "contentType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fileExtension": {
+          "name": "fileExtension",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pixelWidth": {
+          "name": "pixelWidth",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pixelHeight": {
+          "name": "pixelHeight",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "art_image_assets_sha256Digest_unique": {
+          "name": "art_image_assets_sha256Digest_unique",
+          "columns": ["sha256Digest"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "binders": {
+      "name": "binders",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "normalizedName": {
+          "name": "normalizedName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "width": {
+          "name": "width",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "height": {
+          "name": "height",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "pages": {
+          "name": "pages",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "widthPerSlotHundredths": {
+          "name": "widthPerSlotHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "widthBaseHundredths": {
+          "name": "widthBaseHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "heightPerSlotHundredths": {
+          "name": "heightPerSlotHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "heightBaseHundredths": {
+          "name": "heightBaseHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "borderColor": {
+          "name": "borderColor",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "borderRadiusHundredths": {
+          "name": "borderRadiusHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "borderWidthHundredths": {
+          "name": "borderWidthHundredths",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "previewPhysicalPage": {
+          "name": "previewPhysicalPage",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "binders_normalizedName_unique": {
+          "name": "binders_normalizedName_unique",
+          "columns": ["normalizedName"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "binder_name_length": {
+          "name": "binder_name_length",
+          "value": "length(\"binders\".\"name\") <= 100"
+        },
+        "binder_dimension_max": {
+          "name": "binder_dimension_max",
+          "value": "\"binders\".\"width\" <= 8 AND \"binders\".\"height\" <= 8"
+        },
+        "binder_width_per_slot_positive": {
+          "name": "binder_width_per_slot_positive",
+          "value": "\"binders\".\"widthPerSlotHundredths\" > 0"
+        },
+        "binder_height_per_slot_positive": {
+          "name": "binder_height_per_slot_positive",
+          "value": "\"binders\".\"heightPerSlotHundredths\" > 0"
+        },
+        "binder_width_one_slot_positive": {
+          "name": "binder_width_one_slot_positive",
+          "value": "(\"binders\".\"widthPerSlotHundredths\" + \"binders\".\"widthBaseHundredths\") > 0"
+        },
+        "binder_height_one_slot_positive": {
+          "name": "binder_height_one_slot_positive",
+          "value": "(\"binders\".\"heightPerSlotHundredths\" + \"binders\".\"heightBaseHundredths\") > 0"
+        },
+        "binder_border_radius_range": {
+          "name": "binder_border_radius_range",
+          "value": "\"binders\".\"borderRadiusHundredths\" >= 0 AND \"binders\".\"borderRadiusHundredths\" <= 10000"
+        },
+        "binder_border_width_range": {
+          "name": "binder_border_width_range",
+          "value": "\"binders\".\"borderWidthHundredths\" >= 0"
+        },
+        "binder_border_color_format": {
+          "name": "binder_border_color_format",
+          "value": "\"binders\".\"borderColor\" GLOB '#[0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F]'"
+        },
+        "binder_preview_physical_page_range": {
+          "name": "binder_preview_physical_page_range",
+          "value": "\"binders\".\"previewPhysicalPage\" >= 1 AND \"binders\".\"previewPhysicalPage\" <= (\"binders\".\"pages\" * 2)"
+        }
+      }
+    },
+    "card_image_assets": {
+      "name": "card_image_assets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerCardId": {
+          "name": "providerCardId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerSetId": {
+          "name": "providerSetId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sha256Digest": {
+          "name": "sha256Digest",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "originalFilename": {
+          "name": "originalFilename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "storageFilename": {
+          "name": "storageFilename",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contentType": {
+          "name": "contentType",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fileExtension": {
+          "name": "fileExtension",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "card_image_assets_provider_card_id_unique": {
+          "name": "card_image_assets_provider_card_id_unique",
+          "columns": ["providerCardId"],
+          "isUnique": true
+        },
+        "card_image_assets_sha256_digest_unique": {
+          "name": "card_image_assets_sha256_digest_unique",
+          "columns": ["sha256Digest"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    },
+    "cards": {
+      "name": "cards",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "binderId": {
+          "name": "binderId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "setName": {
+          "name": "setName",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "localNumber": {
+          "name": "localNumber",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source": {
+          "name": "source",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "providerCardId": {
+          "name": "providerCardId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "providerSetId": {
+          "name": "providerSetId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "variation": {
+          "name": "variation",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "physicalPage": {
+          "name": "physicalPage",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "row": {
+          "name": "row",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "column": {
+          "name": "column",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "imageAssetId": {
+          "name": "imageAssetId",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "cards_binder_placement_unique": {
+          "name": "cards_binder_placement_unique",
+          "columns": ["binderId", "physicalPage", "row", "column"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "cards_binderId_binders_id_fk": {
+          "name": "cards_binderId_binders_id_fk",
+          "tableFrom": "cards",
+          "tableTo": "binders",
+          "columnsFrom": ["binderId"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "cards_imageAssetId_card_image_assets_id_fk": {
+          "name": "cards_imageAssetId_card_image_assets_id_fk",
+          "tableFrom": "cards",
+          "tableTo": "card_image_assets",
+          "columnsFrom": ["imageAssetId"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {
+        "card_placement_all_or_none": {
+          "name": "card_placement_all_or_none",
+          "value": "(\"cards\".\"physicalPage\" IS NULL AND \"cards\".\"row\" IS NULL AND \"cards\".\"column\" IS NULL) OR (\"cards\".\"physicalPage\" IS NOT NULL AND \"cards\".\"row\" IS NOT NULL AND \"cards\".\"column\" IS NOT NULL)"
+        },
+        "card_source_valid": {
+          "name": "card_source_valid",
+          "value": "\"cards\".\"source\" IN ('tcgdex', 'custom')"
+        },
+        "card_tcgdex_identity_required": {
+          "name": "card_tcgdex_identity_required",
+          "value": "(\"cards\".\"source\" != 'tcgdex') OR (\"cards\".\"providerCardId\" IS NOT NULL AND \"cards\".\"providerSetId\" IS NOT NULL)"
+        },
+        "card_custom_identity_absent": {
+          "name": "card_custom_identity_absent",
+          "value": "(\"cards\".\"source\" != 'custom') OR (\"cards\".\"providerCardId\" IS NULL AND \"cards\".\"providerSetId\" IS NULL)"
+        }
+      }
+    },
+    "mutation_idempotency": {
+      "name": "mutation_idempotency",
+      "columns": {
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "scope": {
+          "name": "scope",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "responseStatus": {
+          "name": "responseStatus",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "responseBody": {
+          "name": "responseBody",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "locationHeader": {
+          "name": "locationHeader",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "checkConstraints": {}
+    }
+  },
+  "views": {},
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "indexes": {}
+  }
+}

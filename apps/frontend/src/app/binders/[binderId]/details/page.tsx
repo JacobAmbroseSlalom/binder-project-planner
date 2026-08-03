@@ -43,6 +43,7 @@ export default function BinderDetailsPage() {
       borderColor: binder.borderColor,
       borderRadius: binder.borderRadius,
       borderWidth: binder.borderWidth,
+      previewPhysicalPage: binder.previewPhysicalPage,
     },
   });
 
@@ -95,6 +96,16 @@ export default function BinderDetailsPage() {
         (Object.keys(patch) as (keyof BinderDetailsFormInput)[]).forEach((field) => {
           form.resetField(field, { defaultValue: updated[field] });
         });
+        // Story 20: reducing `pages` can make the previously saved
+        // previewPhysicalPage invalid, causing the backend to reset it to
+        // the shared default in this same response - even when
+        // `previewPhysicalPage` itself wasn't part of this patch. Syncing
+        // the field here (rather than only via the loop above) keeps the
+        // form showing the same value the backend just saved instead of a
+        // stale, now-invalid one until the next reload.
+        if (form.getValues('previewPhysicalPage') !== updated.previewPhysicalPage) {
+          form.resetField('previewPhysicalPage', { defaultValue: updated.previewPhysicalPage });
+        }
         updateBinder(updated);
         toast.markSaved();
       } catch (error) {

@@ -11,6 +11,8 @@ import {
   useToastContext,
 } from '@/shared/feedback';
 
+import { BinderPreview } from './preview/BinderPreview';
+
 // The three states the binder list can be in (story 5). Tracking this as one
 // enum, rather than separate booleans, keeps "loading" and "failed" from
 // ever being true simultaneously and makes the empty-state gating below
@@ -94,15 +96,9 @@ export function BinderList() {
                 href={`/binders/${binder.id}/layout`}
                 className="flex flex-col items-center gap-2 hover:brightness-110"
               >
-                {/* Rectangle placeholder standing in for the binder's actual
-                    preview (story 20) until that story renders the real
-                    miniature page layout. Landscape orientation. */}
-                <div className="flex h-40 w-[16.8rem] flex-col items-center justify-center gap-1 rounded-standard bg-surface p-4 text-center shadow-panel">
-                  <p className="text-caption text-neutral-500">
-                    {binder.width} &times; {binder.height}
-                  </p>
-                  <p className="text-caption text-neutral-500">{binder.pages} pages</p>
-                </div>
+                {/* Story 20: a live miniature of the binder's saved
+                    preview physical page/spread. */}
+                <BinderPreview binder={binder} />
                 <p className="font-bold">{binder.name}</p>
               </Link>
             </li>

@@ -3,9 +3,8 @@
 import { useState } from 'react';
 
 import { resolveArtImageUrl, type Art, type Binder } from '@/lib/api';
-
-import { computeArtDisplayGeometry } from './computeArtDisplayGeometry';
-import { useElementSize } from './useElementSize';
+import { computeArtDisplayGeometry } from '@/shared/geometry/computeArtDisplayGeometry';
+import { useElementSize } from '@/shared/hooks/useElementSize';
 
 // One art item's read-only tile, rendered in the unplaced-art section
 // (story 25). Unlike `CardTile`, this has no dnd-kit wiring at all - art

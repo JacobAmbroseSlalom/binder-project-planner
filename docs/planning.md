@@ -774,7 +774,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 20. Add a binder preview
 
-**Status:** Not started
+**Status:** Done (2026-08-03 00:05 EDT)
 
 #### Acceptance criteria
 
