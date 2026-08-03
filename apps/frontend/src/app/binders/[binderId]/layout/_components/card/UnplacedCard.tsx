@@ -22,6 +22,8 @@ export function UnplacedCard({
   onRemoveCard,
   onEditVariation,
   isVariationEditPending,
+  onDuplicateCard,
+  isDuplicatePending,
   variationsVisible = false,
   slotAspectRatio,
 }: {
@@ -40,6 +42,9 @@ export function UnplacedCard({
   // Opens the edit-variation modal for this card (story 16).
   onEditVariation: (card: Card) => void;
   isVariationEditPending: boolean;
+  // Duplicates this card into the unplaced-cards section (story 19).
+  onDuplicateCard: (cardId: string) => void;
+  isDuplicatePending: boolean;
   // Story 16's layout-wide toggle, threaded down from `UnplacedCardsPanel`.
   variationsVisible?: boolean;
   // Story 24: the binder's configured single-slot width-to-height ratio,
@@ -54,7 +59,13 @@ export function UnplacedCard({
   } = useDraggable({
     id: card.id,
     data: { card },
-    disabled: isMovePending || isRemovalPending || isPendingCreate,
+    // Disabling drag while `isDuplicatePending` (mirroring
+    // `PlacedArtTile`/`UnplacedArt`'s own inclusion of `isDuplicatePending`
+    // here) matters only for this optimistic duplicate copy itself - its
+    // own id is what `pendingCardDuplicateIds` tracks while its create
+    // request is in flight, so it can't be dragged before the backend's
+    // authoritative replacement lands.
+    disabled: isMovePending || isRemovalPending || isPendingCreate || isDuplicatePending,
   });
 
   return (
@@ -67,6 +78,9 @@ export function UnplacedCard({
       onEditVariation={onEditVariation}
       editVariationAriaLabel={`Edit variation for ${card.name}`}
       isVariationEditPending={isVariationEditPending}
+      onDuplicateCard={onDuplicateCard}
+      duplicateAriaLabel={`Duplicate ${card.name}`}
+      isDuplicatePending={isDuplicatePending}
       variationsVisible={variationsVisible}
       tileRef={setDraggableRef}
       dragAttributes={attributes}

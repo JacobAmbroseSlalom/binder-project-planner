@@ -14,6 +14,7 @@ import {
   deleteArt as deleteArtRequest,
   deleteCard,
   duplicateArt as duplicateArtRequest,
+  duplicateCard as duplicateCardRequest,
   getBinder,
   listBinderArt,
   listBinderCards,
@@ -275,6 +276,13 @@ interface BinderRouteContextValue {
   // edit-variation modal/card tile can disable that one card's own actions
   // until the request settles.
   pendingCardVariationEditIds: Set<string>;
+  // Duplicates a card into the unplaced-cards section (story 19): inserts
+  // an optimistic copy immediately, then replaces it with the backend's
+  // authoritative representation on success, or removes it on failure.
+  duplicateCard: (cardId: string) => void;
+  // The set of optimistic card ids currently being duplicated, so the card
+  // tile can disable that one pending item until its request settles.
+  pendingCardDuplicateIds: Set<string>;
   // Moves (or, if `destination` is already occupied, swaps with) a card to
   // another slot on the same binder (story 14): optimistically applies the
   // new placement(s) immediately, then replaces the affected cards with
@@ -470,6 +478,9 @@ export function BinderRouteProvider({
   const [pendingCardVariationEditIds, setPendingCardVariationEditIds] = useState<Set<string>>(
     new Set(),
   );
+  // Story 19's in-flight-card-duplication ids (optimistic ids only),
+  // mirroring `pendingArtDuplicateIds`.
+  const [pendingCardDuplicateIds, setPendingCardDuplicateIds] = useState<Set<string>>(new Set());
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -1223,6 +1234,58 @@ export function BinderRouteProvider({
     [cards, start],
   );
 
+  // Duplicates a card into the unplaced-cards section (story 19),
+  // mirroring `duplicateArt`'s optimistic-insert/replace-or-remove
+  // lifecycle exactly: the copy always lands unplaced (even when the
+  // source card is currently placed), sharing the source's existing image
+  // asset/URL rather than triggering any new upload. A fresh
+  // `crypto.randomUUID()` idempotency key accompanies the request (not
+  // reused across retries within this simple fire-once action) so a
+  // dropped response the backend actually processed is still replayed
+  // rather than silently duplicated if this action is ever retried.
+  const duplicateCard = useCallback(
+    (cardId: string) => {
+      const source = cards.find((card) => card.id === cardId);
+      if (!source) return;
+
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const idempotencyKey = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const optimisticCard: Card = {
+        ...source,
+        id: optimisticId,
+        placement: { physicalPage: null, row: null, column: null },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      setCards((previous) => [...previous, optimisticCard]);
+      setPendingCardDuplicateIds((previous) => new Set(previous).add(optimisticId));
+
+      const toast = start(`duplicate-card-${optimisticId}`);
+
+      duplicateCardRequest(cardId, idempotencyKey)
+        .then((created) => {
+          setCards((previous) =>
+            previous.map((card) => (card.id === optimisticId ? created : card)),
+          );
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setCards((previous) => previous.filter((card) => card.id !== optimisticId));
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingCardDuplicateIds((previous) => {
+            const next = new Set(previous);
+            next.delete(optimisticId);
+            return next;
+          });
+        });
+    },
+    [cards, start],
+  );
+
   // Moves (or swaps) a card to another slot in the same binder, or into the
   // unplaced section if `destination` is all-null (story 14; unplaced
   // destination/source added in story 15). `destination` always identifies
@@ -1345,6 +1408,8 @@ export function BinderRouteProvider({
       pendingCardDeletionIds,
       editCardVariation,
       pendingCardVariationEditIds,
+      duplicateCard,
+      pendingCardDuplicateIds,
       moveCard,
       isMovePending,
       cardSearchLanguage,
@@ -1387,6 +1452,8 @@ export function BinderRouteProvider({
     pendingCardDeletionIds,
     editCardVariation,
     pendingCardVariationEditIds,
+    duplicateCard,
+    pendingCardDuplicateIds,
     moveCard,
     isMovePending,
     cardSearchLanguage,

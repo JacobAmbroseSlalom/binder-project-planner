@@ -57,6 +57,8 @@ export function UnplacedCardsPanel({
   onRemoveCard,
   onEditVariation,
   pendingCardVariationEditIds,
+  onDuplicateCard,
+  pendingCardDuplicateIds,
   variationsVisible = false,
   onAddCard,
   slotAspectRatio,
@@ -74,6 +76,13 @@ export function UnplacedCardsPanel({
   // Card ids with a variation edit currently in flight (story 16), mirrors
   // `pendingCardDeletionIds`.
   pendingCardVariationEditIds: Set<string>;
+  // Duplicates an unplaced card into the unplaced-cards section (story
+  // 19) - the copy lands alongside its source.
+  onDuplicateCard: (cardId: string) => void;
+  // Optimistic card ids with a duplication currently in flight (story 19),
+  // mirroring `pendingCardVariationEditIds` - only ever matches the
+  // optimistic copy itself, never its (still-enabled) source.
+  pendingCardDuplicateIds: Set<string>;
   // Story 16's layout-wide toggle, threaded down from `BinderLayoutView`.
   variationsVisible?: boolean;
   onAddCard: () => void;
@@ -199,6 +208,8 @@ export function UnplacedCardsPanel({
                     onRemoveCard={onRemoveCard}
                     onEditVariation={onEditVariation}
                     isVariationEditPending={pendingCardVariationEditIds.has(card.id)}
+                    onDuplicateCard={onDuplicateCard}
+                    isDuplicatePending={pendingCardDuplicateIds.has(card.id)}
                     variationsVisible={variationsVisible}
                     slotAspectRatio={slotAspectRatio}
                   />

@@ -23,6 +23,8 @@ export function BinderSlot({
   onRemoveCard,
   onEditVariation,
   isVariationEditPending,
+  onDuplicateCard,
+  isDuplicatePending,
   variationsVisible = false,
   slotAspectRatio,
 }: {
@@ -56,6 +58,9 @@ export function BinderSlot({
   // Opens the edit-variation modal for this slot's card (story 16).
   onEditVariation: (card: Card) => void;
   isVariationEditPending: boolean;
+  // Duplicates this slot's card into the unplaced-cards section (story 19).
+  onDuplicateCard: (cardId: string) => void;
+  isDuplicatePending: boolean;
   // Story 16's layout-wide toggle, threaded down from `BinderSide`.
   variationsVisible?: boolean;
   // Story 24: the binder's configured single-slot width-to-height ratio,
@@ -109,6 +114,9 @@ export function BinderSlot({
         onEditVariation={onEditVariation}
         editVariationAriaLabel={`Edit variation for ${card.name} at row ${row}, column ${column}`}
         isVariationEditPending={isVariationEditPending}
+        onDuplicateCard={onDuplicateCard}
+        duplicateAriaLabel={`Duplicate ${card.name} at row ${row}, column ${column}`}
+        isDuplicatePending={isDuplicatePending}
         variationsVisible={variationsVisible}
         highlightClassName={highlightClassName}
         tileRef={(node) => {

@@ -404,6 +404,26 @@ export async function updateCardVariation(cardId: string, variation: string | nu
   return data as Card;
 }
 
+// Duplicates a card into the unplaced-cards section through `POST
+// /cards/{cardId}/duplicate` (story 19), mirroring `duplicateArt` above.
+// `idempotencyKey` is a client-generated UUID sent as the
+// `Idempotency-Key` header; retrying the same key after a dropped response
+// replays the original outcome instead of creating a second copy, matching
+// the backend's 24-hour mutation-idempotency retention. Throws the
+// Problem Details body on failure so the caller can roll back its
+// optimistic insert.
+export async function duplicateCard(cardId: string, idempotencyKey: string): Promise<Card> {
+  const { data, error } = await apiClient.POST('/cards/{cardId}/duplicate', {
+    params: { path: { cardId }, header: { 'Idempotency-Key': idempotencyKey } },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 // Resolves a `Card.imageUrl` into a full URL for an `<img>` tag (story 11).
 // The backend's persisted representation returns a backend-relative path
 // (`/cards/{cardId}/image`), which needs the backend origin prefixed; the

@@ -107,6 +107,8 @@ export function BinderLayoutView() {
     pendingCardDeletionIds,
     editCardVariation,
     pendingCardVariationEditIds,
+    duplicateCard,
+    pendingCardDuplicateIds,
     moveCard,
     isMovePending,
     pendingUnplacedCardIds,
@@ -733,6 +735,8 @@ export function BinderLayoutView() {
           onRemoveCard={removeCard}
           onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
           pendingCardVariationEditIds={pendingCardVariationEditIds}
+          onDuplicateCard={duplicateCard}
+          pendingCardDuplicateIds={pendingCardDuplicateIds}
           variationsVisible={variationsVisible}
           onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
           slotAspectRatio={slotAspectRatio}
@@ -903,6 +907,8 @@ export function BinderLayoutView() {
                     pendingCardDeletionIds={pendingCardDeletionIds}
                     onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
                     pendingCardVariationEditIds={pendingCardVariationEditIds}
+                    onDuplicateCard={duplicateCard}
+                    pendingCardDuplicateIds={pendingCardDuplicateIds}
                     variationsVisible={variationsVisible}
                     pendingArtEditIds={pendingArtEditIds}
                     pendingArtDeletionIds={pendingArtDeletionIds}
@@ -935,6 +941,8 @@ export function BinderLayoutView() {
                     pendingCardDeletionIds={pendingCardDeletionIds}
                     onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
                     pendingCardVariationEditIds={pendingCardVariationEditIds}
+                    onDuplicateCard={duplicateCard}
+                    pendingCardDuplicateIds={pendingCardDuplicateIds}
                     variationsVisible={variationsVisible}
                     pendingArtEditIds={pendingArtEditIds}
                     pendingArtDeletionIds={pendingArtDeletionIds}

@@ -26,6 +26,8 @@ export function BinderSide({
   onRemoveCard,
   onEditVariation,
   pendingCardVariationEditIds,
+  onDuplicateCard,
+  pendingCardDuplicateIds,
   variationsVisible = false,
   pendingCardDeletionIds,
   pendingArtEditIds,
@@ -75,6 +77,15 @@ export function BinderSide({
   // card's own actions are disabled until the request settles - mirrors
   // `pendingCardDeletionIds`.
   pendingCardVariationEditIds: Set<string>;
+  // Duplicates an occupied slot's card into the unplaced-cards section
+  // (story 19), revealed as a third hover action alongside
+  // `onRemoveCard`/`onEditVariation`.
+  onDuplicateCard: (cardId: string) => void;
+  // Card ids with a duplication currently in flight (story 19), mirroring
+  // `pendingCardVariationEditIds` - only ever contains real (non-optimistic)
+  // card ids here, since the optimistic copy itself always renders in the
+  // unplaced section, never in a `BinderSlot`.
+  pendingCardDuplicateIds: Set<string>;
   // Story 16's toggle: when true, every occupied slot with a saved
   // variation overlays it on the bottom edge of its card image (see
   // `CardTile`). An overlay rather than reserved space, so toggling this
@@ -261,6 +272,8 @@ export function BinderSide({
                 onRemoveCard={onRemoveCard}
                 onEditVariation={onEditVariation}
                 isVariationEditPending={card ? pendingCardVariationEditIds.has(card.id) : false}
+                onDuplicateCard={onDuplicateCard}
+                isDuplicatePending={card ? pendingCardDuplicateIds.has(card.id) : false}
                 variationsVisible={variationsVisible}
                 slotAspectRatio={slotAspectRatio}
               />

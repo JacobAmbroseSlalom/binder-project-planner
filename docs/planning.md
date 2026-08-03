@@ -763,7 +763,7 @@ bullet under Technical requirements is superseded by that later refactor.
 
 ### 19. Duplicate a card
 
-**Status:** Not started
+**Status:** Done (2026-08-03 18:07 EDT)
 
 #### Acceptance criteria
 

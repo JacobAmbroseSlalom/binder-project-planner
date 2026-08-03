@@ -679,6 +679,52 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /cards/{cardId}/duplicate:
+    parameters:
+      - $ref: '#/components/parameters/cardId'
+    post:
+      operationId: duplicateCard
+      summary: Duplicate a card into the unplaced-cards section
+      description: >-
+        Creates a new, always-unplaced card copying every card-owned field
+        from the source card and sharing its existing image asset (story
+        19). Requires a client-generated `Idempotency-Key` header; retrying
+        the same key replays the original response instead of creating a
+        second copy, for the shared 24-hour mutation-idempotency retention.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: The duplicate card, created in the unplaced-cards section.
+          headers:
+            Location:
+              description: The path of the newly created card resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          description: >-
+            The cardId path parameter is not a well-formed UUID, or the
+            Idempotency-Key header is missing.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No card exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /cards/{cardId}/image:
     parameters:
       - $ref: '#/components/parameters/cardId'

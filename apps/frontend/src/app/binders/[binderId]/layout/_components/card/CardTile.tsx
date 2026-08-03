@@ -1,14 +1,15 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
-import { Pencil, Trash2 } from 'lucide-react';
+import { Copy, Pencil, Trash2 } from 'lucide-react';
 
 import { resolveCardImageUrl, type Card } from '@/lib/api';
 
 // The shared visual tile both `BinderSlot` (an occupied binder slot) and
 // `UnplacedCard` (a card in the unplaced-cards section, story 15) render
 // for a card: an aspect-ratio-constrained image with hover-revealed
-// top-right actions (remove, and story 16's edit-variation). Extracted
-// here once both call sites' markup turned out to be identical apart from
-// how each attaches its own drag (and, for `BinderSlot` only, drop)
+// top-right actions (remove, story 16's edit-variation, and story 19's
+// duplicate). Extracted here once both call sites' markup turned out to
+// be identical apart from how each attaches its own drag (and, for
+// `BinderSlot` only, drop)
 // ref/handlers and highlight styling - each caller keeps owning its own
 // dnd-kit wiring (`useDraggable`, and for `BinderSlot`, `useDroppable`)
 // and just passes the resulting ref/attributes/listeners straight through
@@ -22,6 +23,9 @@ export function CardTile({
   onEditVariation,
   editVariationAriaLabel,
   isVariationEditPending,
+  onDuplicateCard,
+  duplicateAriaLabel,
+  isDuplicatePending,
   variationsVisible = false,
   highlightClassName = '',
   tileRef,
@@ -47,6 +51,14 @@ export function CardTile({
   onEditVariation: (card: Card) => void;
   editVariationAriaLabel: string;
   isVariationEditPending: boolean;
+  // Duplicates this card into the unplaced-cards section (story 19),
+  // rendered as a third hover action alongside remove/edit-variation -
+  // available on both placed (`BinderSlot`) and unplaced (`UnplacedCard`)
+  // cards, since the duplicate always lands unplaced regardless of where
+  // its source card currently sits.
+  onDuplicateCard: (cardId: string) => void;
+  duplicateAriaLabel: string;
+  isDuplicatePending: boolean;
   // Story 16's layout-wide toggle: when true, shows a semi-transparent
   // label overlaid on the bottom edge of this tile's image with its
   // `variation` (only rendered when this card actually has one) - an
@@ -117,6 +129,16 @@ export function CardTile({
           className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Pencil className="size-3.5" aria-hidden="true" />
+        </button>
+        <button
+          type="button"
+          disabled={isDuplicatePending}
+          onClick={() => onDuplicateCard(card.id)}
+          aria-label={duplicateAriaLabel}
+          title="Duplicate card"
+          className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Copy className="size-3.5" aria-hidden="true" />
         </button>
         <button
           type="button"

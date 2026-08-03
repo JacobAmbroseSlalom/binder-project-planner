@@ -232,6 +232,28 @@ export interface paths {
         patch: operations["updateCard"];
         trace?: never;
     };
+    "/cards/{cardId}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate a card into the unplaced-cards section
+         * @description Creates a new, always-unplaced card copying every card-owned field from the source card and sharing its existing image asset (story 19). Requires a client-generated `Idempotency-Key` header; retrying the same key replays the original response instead of creating a second copy, for the shared 24-hour mutation-idempotency retention.
+         */
+        post: operations["duplicateCard"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/cards/{cardId}/image": {
         parameters: {
             query?: never;
@@ -1449,6 +1471,50 @@ export interface operations {
             };
             /** @description An update's expected placement no longer matches the card's persisted placement, or the destination is occupied by a card not included in `updates`. No card positions are changed. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    duplicateCard: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The duplicate card, created in the unplaced-cards section. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created card resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"];
+                };
+            };
+            /** @description The cardId path parameter is not a well-formed UUID, or the Idempotency-Key header is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No card exists with the given id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
