@@ -5,6 +5,8 @@ import { ImageIcon, Trash2, UploadCloud } from 'lucide-react';
 import { useRef } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { VariationCombobox } from '@/shared/forms';
+
 import type { ManualCardFormValues } from './manualCardSchema';
 
 // The same filled-input treatment used by BinderDetailsForm.tsx
@@ -67,6 +69,12 @@ interface ManualCardFormProps {
   // error-message styling for the text fields even though this isn't an
   // RHF-managed field.
   fileError?: string;
+  // Story 16's shared variation field's value/setter - owned by the
+  // parent (CardSelectionModal) since it's shared with the search view's
+  // own variation field, rather than being an RHF-managed field of this
+  // form.
+  variation: string;
+  onVariationChange: (value: string) => void;
 }
 
 // The card-selection modal's manual-entry form fields (story 12: "Add a
@@ -80,6 +88,8 @@ export function ManualCardForm({
   fileName,
   onFileChange,
   fileError,
+  variation,
+  onVariationChange,
 }: ManualCardFormProps) {
   const {
     register,
@@ -109,7 +119,8 @@ export function ManualCardForm({
       <div className="flex flex-wrap gap-6">
         {/* `flex-1` lets Set grow to fill the row's remaining space; Number
             stays a fixed, content-appropriate width alongside it since
-            local numbers are always short. */}
+            local numbers are always short. Story 16's variation field
+            joins this same row, to the right of both. */}
         <Field
           label="Set"
           htmlFor="custom-card-set-name"
@@ -136,6 +147,14 @@ export function ManualCardForm({
             disabled={disabled}
             className={`w-full ${errors.localNumber ? errorInputClassName : inputClassName}`}
             {...register('localNumber')}
+          />
+        </Field>
+        <Field label="Variation" htmlFor="custom-card-variation" className="w-40 shrink-0">
+          <VariationCombobox
+            id="custom-card-variation"
+            value={variation}
+            onChange={onVariationChange}
+            disabled={disabled}
           />
         </Field>
       </div>

@@ -20,6 +20,9 @@ export function UnplacedCard({
   isPendingCreate,
   isMovePending,
   onRemoveCard,
+  onEditVariation,
+  isVariationEditPending,
+  variationsVisible = false,
   slotAspectRatio,
 }: {
   card: Card;
@@ -34,6 +37,11 @@ export function UnplacedCard({
   // settles.
   isMovePending: boolean;
   onRemoveCard: (cardId: string) => void;
+  // Opens the edit-variation modal for this card (story 16).
+  onEditVariation: (card: Card) => void;
+  isVariationEditPending: boolean;
+  // Story 16's layout-wide toggle, threaded down from `UnplacedCardsPanel`.
+  variationsVisible?: boolean;
   // Story 24: the binder's configured single-slot width-to-height ratio,
   // threaded down from `BinderLayoutView` through `UnplacedCardsPanel`.
   slotAspectRatio: number;
@@ -56,6 +64,10 @@ export function UnplacedCard({
       isRemovalPending={isRemovalPending}
       onRemoveCard={onRemoveCard}
       removeAriaLabel={`Remove ${card.name} from the unplaced section`}
+      onEditVariation={onEditVariation}
+      editVariationAriaLabel={`Edit variation for ${card.name}`}
+      isVariationEditPending={isVariationEditPending}
+      variationsVisible={variationsVisible}
       tileRef={setDraggableRef}
       dragAttributes={attributes}
       dragListeners={listeners}

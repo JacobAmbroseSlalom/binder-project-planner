@@ -21,6 +21,9 @@ export function BinderSlot({
   isCoveredByArt,
   onSlotClick,
   onRemoveCard,
+  onEditVariation,
+  isVariationEditPending,
+  variationsVisible = false,
   slotAspectRatio,
 }: {
   physicalPage: number;
@@ -50,6 +53,11 @@ export function BinderSlot({
   isCoveredByArt: boolean;
   onSlotClick: (row: number, column: number) => void;
   onRemoveCard: (cardId: string) => void;
+  // Opens the edit-variation modal for this slot's card (story 16).
+  onEditVariation: (card: Card) => void;
+  isVariationEditPending: boolean;
+  // Story 16's layout-wide toggle, threaded down from `BinderSide`.
+  variationsVisible?: boolean;
   // Story 24: the binder's configured single-slot width-to-height ratio,
   // threaded down from `BinderLayoutView` through `BinderSide`.
   slotAspectRatio: number;
@@ -98,6 +106,10 @@ export function BinderSlot({
         isRemovalPending={isRemovalPending}
         onRemoveCard={onRemoveCard}
         removeAriaLabel={`Remove ${card.name} from row ${row}, column ${column}`}
+        onEditVariation={onEditVariation}
+        editVariationAriaLabel={`Edit variation for ${card.name} at row ${row}, column ${column}`}
+        isVariationEditPending={isVariationEditPending}
+        variationsVisible={variationsVisible}
         highlightClassName={highlightClassName}
         tileRef={(node) => {
           setDroppableRef(node);

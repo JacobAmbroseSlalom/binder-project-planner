@@ -620,7 +620,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 16. Add card variations
 
-**Status:** Not started
+**Status:** Done (2026-08-03 14:20 EDT)
 
 #### Acceptance criteria
 
@@ -653,10 +653,9 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 - Variation-label visibility is enabled by `variations=true` on the layout route and defaults to hidden when the parameter is absent.
 - Toggling variation labels updates the query using history replacement and preserves the current `page` and `michi` parameters.
 - Any other `variations` value is treated as hidden and removed from the URL using history replacement.
-- When visible, a variation label renders below its card slot without reducing or resizing the slot or card image.
-- Each binder grid row reserves variation-label space below its slots, increasing the rendered binder side's height while preserving every slot's configured aspect ratio and dimensions.
+- When visible, a variation label overlays the bottom edge of its card's own image (rather than reserving space below it), so toggling labels never resizes or repositions any slot, card image, or the binder side's overall dimensions.
+- The overlay is only rendered for an occupied slot whose card has a non-null variation; empty slots and cards without one render nothing extra.
 - Variation labels remain on one line at the slot width, truncate overflow with an ellipsis, and expose the complete value in a hover tooltip.
-- When variation labels are enabled, every slot reserves the same label-row height, including empty slots and cards without a variation, so grid rows remain aligned.
 
 ### 17. Add more cards
 
@@ -1228,7 +1227,7 @@ carried over for a later story to close:
 
 ### 29. Export a binder as a PDF
 
-**Status:** Done (2026-08-03 09:43 EDT) - with two known gaps: (1) the "print-to-PDF button remains available when the binder is locked" acceptance criterion is trivially satisfied rather than deliberately implemented, since story 32 ("Lock a binder") hasn't been built yet - there's no `locked` column on the `binders` table at all, so nothing currently restricts the button or the read-only export endpoint; (2) `includeVariations` is wired end-to-end (an `includeVariations` request field, `POST /binders/{binderId}/exports/pdf`'s variation-label rendering, and the frontend reading a `variations=true` query parameter exactly like the existing `michi=true` toggle), but there's no UI control to set `variations=true` yet because story 16 ("Add card variations") hasn't been built - the parameter will start taking effect automatically once that toggle exists. Every other acceptance criterion and technical requirement is implemented: an icon-only "Print to PDF" toolbar button on the layout tab; `POST /binders/{binderId}/exports/pdf` reading a transactionally consistent snapshot of the binder's placed cards and art, generating a US Letter landscape PDF (0.25" margins) via `pdfkit` with one page per displayed spread (first/last single-sided pages sit in their correct half - right for the first page, left for the last - at the same slot size as an interior spread rather than centered/enlarged; interior spreads are full two-sided with a spine gap), each page scaled to fit and labeled "Page N"/"Pages L\u2013R"; card and multi-slot art images embedded via `sharp`-normalized buffers (EXIF-orientation-corrected, WebP converted to PNG for PDFKit compatibility); only truly empty slots (no card, not covered by art) show the generic gray boundary; multi-slot art renders with its own resolved border color/radius/width (falling back to the binder's setting, matching `ArtTile.tsx`) via a hand-rolled elliptical-corner rounded-rect path (PDFKit's built-in `roundedRect()` only supports a single, non-elliptical radius); multi-slot art's transformed geometry computed by the newly shared `computeArtDisplayGeometry` (relocated to `packages/shared` from the frontend so the editor, on-screen layout/preview, and the PDF renderer share one geometry contract); the exported filename is derived from the binder's name (via a `Content-Disposition` header, now explicitly CORS-exposed so the frontend can read it cross-origin); Problem Details `500` responses for missing/unreadable/unsupported images; and the shared save-status toast triggering a browser download on success.
+**Status:** Done (2026-08-03 09:43 EDT) - with one known gap: the "print-to-PDF button remains available when the binder is locked" acceptance criterion is trivially satisfied rather than deliberately implemented, since story 32 ("Lock a binder") hasn't been built yet - there's no `locked` column on the `binders` table at all, so nothing currently restricts the button or the read-only export endpoint. `includeVariations` is wired end-to-end (an `includeVariations` request field, `POST /binders/{binderId}/exports/pdf`'s variation-overlay rendering, and the frontend reading a `variations=true` query parameter exactly like the existing `michi=true` toggle from its own toolbar toggle control, added by story 16 "Add card variations"). Every other acceptance criterion and technical requirement is implemented: an icon-only "Print to PDF" toolbar button on the layout tab; `POST /binders/{binderId}/exports/pdf` reading a transactionally consistent snapshot of the binder's placed cards and art, generating a US Letter landscape PDF (0.25" margins) via `pdfkit` with one page per displayed spread (first/last single-sided pages sit in their correct half - right for the first page, left for the last - at the same slot size as an interior spread rather than centered/enlarged; interior spreads are full two-sided with a spine gap), each page scaled to fit and labeled "Page N"/"Pages L\u2013R"; card and multi-slot art images embedded via `sharp`-normalized buffers (EXIF-orientation-corrected, WebP converted to PNG for PDFKit compatibility); only truly empty slots (no card, not covered by art) show the generic gray boundary; multi-slot art renders with its own resolved border color/radius/width (falling back to the binder's setting, matching `ArtTile.tsx`) via a hand-rolled elliptical-corner rounded-rect path (PDFKit's built-in `roundedRect()` only supports a single, non-elliptical radius); multi-slot art's transformed geometry computed by the newly shared `computeArtDisplayGeometry` (relocated to `packages/shared` from the frontend so the editor, on-screen layout/preview, and the PDF renderer share one geometry contract); the exported filename is derived from the binder's name (via a `Content-Disposition` header, now explicitly CORS-exposed so the frontend can read it cross-origin); Problem Details `500` responses for missing/unreadable/unsupported images; and the shared save-status toast triggering a browser download on success.
 
 #### Acceptance criteria
 
@@ -1253,13 +1252,13 @@ carried over for a later story to close:
 - Each PDF page reserves a `0.25`-inch margin on every edge and proportionally contains the complete single page or spread within the remaining area without cropping.
 - Each PDF page includes the layout's physical page label, such as `Page 1` or `Pages 4-5`, above the scaled binder view within the page margins.
 - The PDF renders complete binder-side and slot boundaries, including empty slots, along with placed cards and multi-slot art.
-- Binder PDF generation accepts an `includeVariations` option; when true, variation labels render below cards using the layout's label-space behavior without resizing card images.
+- Binder PDF generation accepts an `includeVariations` option; when true, a card's variation overlays the bottom edge of its own rendered image (matching the layout tab's on-screen overlay, story 16) without resizing card images or grid rows.
 - The frontend sets `includeVariations` from the layout route's current `variations=true` toggle state; no separate export-options prompt is displayed.
 - When the layout route omits `variations=true`, the frontend sends `includeVariations: false`.
 - Acquisition indicators, Michi indicators, pending-operation feedback, and editing controls are omitted from binder-layout PDFs.
 - `POST /binders/{binderId}/exports/pdf` accepts a JSON request body containing `includeVariations` and streams the generated binder-layout PDF in the response.
 - The OpenAPI request schema defines `includeVariations` as an optional boolean with a default of `false`.
-- A successful response uses `Content-Type: application/pdf` and `Content-Disposition: attachment` with the sanitized binder name followed by `.pdf` as the download filename.
+- A successful response uses `Content-Type: application/pdf` and `Content-Disposition: attachment` with the sanitized binder name followed by ` Binder.pdf` (e.g. "Umbreon Binder.pdf") as the download filename.
 - The backend finishes binder PDF generation in a request-scoped temporary file before sending response headers, then streams the completed file to the client without persisting it as application data.
 - A generation failure before streaming returns the applicable Problem Details response and removes the temporary file without starting a download.
 - A missing, unreadable, or unsupported local card or art image fails the complete export before download; the backend returns Problem Details rather than generating a PDF with an omitted item or placeholder.

@@ -828,8 +828,12 @@ export function createBindersRouter(
     // (which otherwise allows any character): non-alphanumeric characters
     // (other than space/hyphen/underscore) become underscores, falling
     // back to a generic name for the unlikely case that strips everything.
+    // " Binder" is appended (e.g. "Umbreon Binder.pdf") to distinguish this
+    // full-layout export from the separate art-only export below, which
+    // instead suffixes "-art".
     const sanitizedName =
       snapshot.binderRow.name.replace(/[^A-Za-z0-9 _-]/g, '_').trim() || 'binder';
+    const downloadFilename = `${sanitizedName} Binder`;
     const tempFilePath = join(tmpdir(), `binder-pdf-export-${randomUUID()}.pdf`);
 
     try {
@@ -898,7 +902,7 @@ export function createBindersRouter(
     response
       .status(200)
       .type('application/pdf')
-      .set('Content-Disposition', `attachment; filename="${sanitizedName}.pdf"`);
+      .set('Content-Disposition', `attachment; filename="${downloadFilename}.pdf"`);
 
     const readStream = createReadStream(tempFilePath);
     readStream.pipe(response);

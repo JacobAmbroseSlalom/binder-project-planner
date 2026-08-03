@@ -54,6 +54,11 @@ sections as decided.
   reset): `font-regular` (400) and `font-bold` (700).
 - Bare `h1`/`h2`/`h3`/`small` elements are already styled with these tokens by default
   in `globals.css`; only add explicit utility classes when overriding that default.
+- One narrow, documented exception: the binder grid's card-variation overlay label
+  (story 16, `CardTile.tsx`) uses an arbitrary `text-[0.6rem]` size smaller than
+  `text-caption`, since it's a badge over a card image rendered at the binder's
+  configured slot size - which is frequently too narrow for even `text-caption` to
+  fit the longest built-in suggestion, "Expansion Stamp", without truncating.
 
 ## Spacing
 

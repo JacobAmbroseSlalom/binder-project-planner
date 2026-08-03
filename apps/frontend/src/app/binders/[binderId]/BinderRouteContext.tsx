@@ -20,6 +20,7 @@ import {
   moveArt as moveArtRequest,
   moveCards,
   updateArt as updateArtRequest,
+  updateCardVariation as updateCardVariationRequest,
   type Art,
   type Binder,
   type Card,
@@ -49,13 +50,14 @@ function placementKey(placement: { physicalPage: number; row: number; column: nu
 }
 
 // The manual-entry form's text-field values (story 12) - excludes the
-// image file (handled separately as a `File`) and `variation` (not part of
-// the manual-entry form; set later through the same later-story flow used
-// for TCGdex cards).
+// image file (handled separately as a `File`). `variation` (story 16) is
+// entered through the same shared add-card modal field the TCGdex search
+// view uses, rather than a separate manual-entry-only field.
 export interface CustomCardFormValues {
   name: string;
   setName: string | null;
   localNumber: string | null;
+  variation: string | null;
 }
 
 // A one-shot signal set by `assignCustomCard` when a custom-card submission
@@ -181,6 +183,16 @@ interface BinderRouteContextValue {
   // tab can disable that card's own actions (permitting no further actions
   // on it) until the request settles.
   pendingCardDeletionIds: Set<string>;
+  // Edits an existing card's saved variation (story 16): optimistically
+  // applies the new value immediately, then replaces it with the backend's
+  // authoritative representation on success, or restores the prior value
+  // on failure. Uses last-write-wins semantics (no expected prior value is
+  // sent), matching `PATCH /cards/{cardId}`'s variation-update contract.
+  editCardVariation: (cardId: string, variation: string | null) => void;
+  // The set of card ids with a variation edit currently in flight, so the
+  // edit-variation modal/card tile can disable that one card's own actions
+  // until the request settles.
+  pendingCardVariationEditIds: Set<string>;
   // Moves (or, if `destination` is already occupied, swaps with) a card to
   // another slot on the same binder (story 14): optimistically applies the
   // new placement(s) immediately, then replaces the affected cards with
@@ -360,6 +372,11 @@ export function BinderRouteProvider({
   // `artCreateRestore` - `null` whenever there's no failed art edit
   // awaiting correction.
   const [artEditRestore, setArtEditRestore] = useState<ArtEditRestore | null>(null);
+  // Story 16's in-flight-card-variation-edit ids, mirroring
+  // `pendingCardDeletionIds`.
+  const [pendingCardVariationEditIds, setPendingCardVariationEditIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -527,7 +544,7 @@ export function BinderRouteProvider({
         source: 'custom',
         providerCardId: null,
         providerSetId: null,
-        variation: null,
+        variation: values.variation,
         placement: placement ?? { physicalPage: null, row: null, column: null },
         imageUrl: previewUrl,
         createdAt: now,
@@ -918,6 +935,49 @@ export function BinderRouteProvider({
     [cards, start],
   );
 
+  // Edits an existing card's saved variation (story 16), mirroring
+  // `removeCard`'s optimistic-apply/restore-on-failure lifecycle:
+  // optimistically applies the new value immediately, then either confirms
+  // it with the backend's authoritative representation or restores the
+  // card's prior variation on failure.
+  const editCardVariation = useCallback(
+    (cardId: string, variation: string | null) => {
+      const existing = cards.find((card) => card.id === cardId);
+      if (!existing) return;
+
+      const previousVariation = existing.variation;
+
+      setCards((previous) =>
+        previous.map((card) => (card.id === cardId ? { ...card, variation } : card)),
+      );
+      setPendingCardVariationEditIds((previous) => new Set(previous).add(cardId));
+
+      const toast = start(`edit-card-variation-${cardId}`);
+
+      updateCardVariationRequest(cardId, variation)
+        .then((updated) => {
+          setCards((previous) => previous.map((card) => (card.id === cardId ? updated : card)));
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setCards((previous) =>
+            previous.map((card) =>
+              card.id === cardId ? { ...card, variation: previousVariation } : card,
+            ),
+          );
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingCardVariationEditIds((previous) => {
+            const next = new Set(previous);
+            next.delete(cardId);
+            return next;
+          });
+        });
+    },
+    [cards, start],
+  );
+
   // Moves (or swaps) a card to another slot in the same binder, or into the
   // unplaced section if `destination` is all-null (story 14; unplaced
   // destination/source added in story 15). `destination` always identifies
@@ -1032,6 +1092,8 @@ export function BinderRouteProvider({
       clearManualEntryRestore,
       removeCard,
       pendingCardDeletionIds,
+      editCardVariation,
+      pendingCardVariationEditIds,
       moveCard,
       isMovePending,
       cardSearchLanguage,
@@ -1066,6 +1128,8 @@ export function BinderRouteProvider({
     clearManualEntryRestore,
     removeCard,
     pendingCardDeletionIds,
+    editCardVariation,
+    pendingCardVariationEditIds,
     moveCard,
     isMovePending,
     cardSearchLanguage,

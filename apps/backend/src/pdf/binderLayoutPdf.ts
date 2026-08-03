@@ -46,9 +46,16 @@ const SLOT_GAP_PT = 3;
 // spine), wider than the ordinary slot gap so the two sides read as
 // visually distinct halves.
 const SPINE_GAP_PT = 14;
-// Extra height reserved below each grid row when variation labels are
-// included, without resizing the row's own card-image height.
-const VARIATION_LABEL_HEIGHT_PT = 14;
+// The story 16 variation label, overlaid on the bottom edge of a card's
+// own rendered slot box (matching the on-screen `CardTile`'s overlay,
+// rather than reserving extra space below the slot) - a translucent dark
+// bar with centered white text, drawn only for a slot with a non-null
+// `variation`.
+const VARIATION_OVERLAY_HEIGHT_PT = 16;
+const VARIATION_OVERLAY_FILL_COLOR = '#000000';
+const VARIATION_OVERLAY_FILL_OPACITY = 0.6;
+const VARIATION_OVERLAY_TEXT_COLOR = '#FFFFFF';
+const VARIATION_OVERLAY_FONT_SIZE_PT = 9;
 const SLOT_BORDER_COLOR = '#3B4A59'; // matches --color-neutral-700
 const SLOT_LABEL_TEXT_COLOR = '#28333F'; // matches --color-neutral-800, readable on a white page
 
@@ -214,13 +221,7 @@ interface GridLayout {
   originY: number;
 }
 
-function computeGridLayout({
-  binder,
-  includeVariations,
-}: {
-  binder: BinderPdfBinderInput;
-  includeVariations: boolean;
-}): GridLayout {
+function computeGridLayout({ binder }: { binder: BinderPdfBinderInput }): GridLayout {
   const slotAspectRatio =
     (binder.widthPerSlot + binder.widthBase) / (binder.heightPerSlot + binder.heightBase);
 
@@ -229,7 +230,6 @@ function computeGridLayout({
 
   const horizontalGaps = 2 * (binder.width - 1) * SLOT_GAP_PT + SPINE_GAP_PT;
   const verticalGaps = (binder.height - 1) * SLOT_GAP_PT;
-  const labelRowsHeight = includeVariations ? binder.height * VARIATION_LABEL_HEIGHT_PT : 0;
 
   // The two candidate slot widths a pure "contain" (aspect-preserving,
   // no-crop) fit would produce if constrained by only one axis at a time;
@@ -237,14 +237,14 @@ function computeGridLayout({
   // `min()`-based scaling.
   const availableWidth = contentWidth - horizontalGaps;
   const candidateWidthByWidth = availableWidth / (binder.width * 2);
-  const availableHeightForSlots = contentHeight - verticalGaps - labelRowsHeight;
+  const availableHeightForSlots = contentHeight - verticalGaps;
   const candidateWidthByHeight = (availableHeightForSlots / binder.height) * slotAspectRatio;
 
   const slotWidthPt = Math.min(candidateWidthByWidth, candidateWidthByHeight);
   const slotHeightPt = slotWidthPt / slotAspectRatio;
 
   const totalGridWidth = slotWidthPt * binder.width * 2 + horizontalGaps;
-  const totalGridHeight = slotHeightPt * binder.height + verticalGaps + labelRowsHeight;
+  const totalGridHeight = slotHeightPt * binder.height + verticalGaps;
 
   const gridOriginX = PAGE_MARGIN_PT + (contentWidth - totalGridWidth) / 2;
   const originY = PAGE_MARGIN_PT + LABEL_HEIGHT_PT + (contentHeight - totalGridHeight) / 2;
@@ -267,10 +267,8 @@ function slotOrigin(
   sideOriginX: number,
   row: number,
   column: number,
-  includeVariations: boolean,
 ): { x: number; y: number } {
-  const rowStride =
-    layout.slotHeightPt + SLOT_GAP_PT + (includeVariations ? VARIATION_LABEL_HEIGHT_PT : 0);
+  const rowStride = layout.slotHeightPt + SLOT_GAP_PT;
   return {
     x: sideOriginX + (column - 1) * (layout.slotWidthPt + SLOT_GAP_PT),
     y: layout.originY + (row - 1) * rowStride,
@@ -315,7 +313,7 @@ async function drawSide({
     for (let column = 1; column <= binder.width; column++) {
       if (coveredCells.has(`${row}-${column}`)) continue;
 
-      const { x, y } = slotOrigin(layout, sideOriginX, row, column, includeVariations);
+      const { x, y } = slotOrigin(layout, sideOriginX, row, column);
       const card = cardsByPosition.get(`${row}-${column}`);
 
       // Only a truly empty slot (no card placed in it) shows the generic
@@ -341,35 +339,52 @@ async function drawSide({
         valign: 'center',
       });
 
+      // Story 16's variation label: an overlay bar on the bottom edge of
+      // this slot's own box (not reserved space below it, matching
+      // `CardTile.tsx`'s on-screen overlay treatment) - drawn only when
+      // this card actually has a variation, over a translucent fill so it
+      // stays legible regardless of the card image's own colors beneath
+      // it.
       if (includeVariations && card.variation) {
+        const overlayY = y + layout.slotHeightPt - VARIATION_OVERLAY_HEIGHT_PT;
         doc
-          .fontSize(8)
-          .fillColor(SLOT_LABEL_TEXT_COLOR)
-          .text(card.variation, x, y + layout.slotHeightPt + 2, {
-            width: layout.slotWidthPt,
-            height: VARIATION_LABEL_HEIGHT_PT,
-            align: 'center',
-            ellipsis: true,
-          });
+          .save()
+          .fillOpacity(VARIATION_OVERLAY_FILL_OPACITY)
+          .rect(x, overlayY, layout.slotWidthPt, VARIATION_OVERLAY_HEIGHT_PT)
+          .fill(VARIATION_OVERLAY_FILL_COLOR)
+          .restore();
+        doc
+          .fontSize(VARIATION_OVERLAY_FONT_SIZE_PT)
+          .fillColor(VARIATION_OVERLAY_TEXT_COLOR)
+          .text(
+            card.variation,
+            x + 2,
+            overlayY + (VARIATION_OVERLAY_HEIGHT_PT - VARIATION_OVERLAY_FONT_SIZE_PT) / 2,
+            {
+              width: layout.slotWidthPt - 4,
+              align: 'center',
+              ellipsis: true,
+              lineBreak: false,
+            },
+          );
       }
     }
   }
 
   for (const item of artOnPage) {
-    const { x, y } = slotOrigin(layout, sideOriginX, item.row, item.column, includeVariations);
+    const { x, y } = slotOrigin(layout, sideOriginX, item.row, item.column);
     // The art's full span, including the internal gaps between the slots
     // it covers - matching a CSS Grid item's own box, which extends from
     // the start of its first spanned track to the end of its last one.
-    // The gap between spanned rows is `SLOT_GAP_PT` plus a variation-label
-    // row's height when included; each spanned row otherwise contributes
-    // its own `slotHeightPt` exactly once (mirroring `frameWidth`'s own
-    // `slots * slotSize + (slots - 1) * gap` shape - a previous version of
-    // this formula double-counted an extra `slotHeightPt` per spanned row
-    // by multiplying the *whole* row-to-row stride, rather than just the
-    // gap portion of it, producing frames far taller than their slots).
+    // Each spanned row otherwise contributes its own `slotHeightPt` exactly
+    // once (mirroring `frameWidth`'s own `slots * slotSize + (slots - 1) *
+    // gap` shape - a previous version of this formula double-counted an
+    // extra `slotHeightPt` per spanned row by multiplying the *whole*
+    // row-to-row stride, rather than just the gap portion of it, producing
+    // frames far taller than their slots).
     const frameWidth = item.widthSlots * layout.slotWidthPt + (item.widthSlots - 1) * SLOT_GAP_PT;
-    const rowGapPt = SLOT_GAP_PT + (includeVariations ? VARIATION_LABEL_HEIGHT_PT : 0);
-    const frameHeight = item.heightSlots * layout.slotHeightPt + (item.heightSlots - 1) * rowGapPt;
+    const frameHeight =
+      item.heightSlots * layout.slotHeightPt + (item.heightSlots - 1) * SLOT_GAP_PT;
 
     // The art's own physical size (story 25: derived from its
     // widthSlots/heightSlots footprint), used only to recover the same
@@ -489,10 +504,7 @@ export async function generateBinderLayoutPdf({
         align: 'center',
       });
 
-    const layout = computeGridLayout({
-      binder,
-      includeVariations,
-    });
+    const layout = computeGridLayout({ binder });
 
     if (spread.left !== null) {
       await drawSide({

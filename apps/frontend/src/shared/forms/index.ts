@@ -8,3 +8,6 @@ export {
   type BinderDetailsFormInput,
   type BinderDetailsFormValues,
 } from './binderDetailsSchema';
+// Story 16's card variation combobox, shared by the add-card modal and the
+// edit-variation modal.
+export { VariationCombobox } from './VariationCombobox';

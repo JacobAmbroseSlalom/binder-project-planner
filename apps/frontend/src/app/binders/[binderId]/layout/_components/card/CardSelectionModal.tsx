@@ -17,6 +17,7 @@ import {
   useDelayedLoading,
   useToastContext,
 } from '@/shared/feedback';
+import { VariationCombobox } from '@/shared/forms';
 
 import { useBinderRouteContext, type CustomCardFormValues } from '../../../BinderRouteContext';
 import { ManualCardForm } from './ManualCardForm';
@@ -81,7 +82,9 @@ export function CardSelectionModal({
   // caller (BinderLayoutView, via the route context's `assignCard`) owns
   // the actual optimistic-update/request lifecycle from that point on, so
   // this modal closes right away rather than waiting on the assignment.
-  onSelectCard: (card: TcgDexCatalogCard) => void;
+  // `variation` (story 16) is the trimmed value of this modal's shared
+  // variation field, or `null` if left blank.
+  onSelectCard: (card: TcgDexCatalogCard, variation: string | null) => void;
   // Called with the manual-entry form's values and selected file
   // immediately on submit (story 12) - like `onSelectCard`, the caller owns
   // the optimistic-update/request lifecycle from here, closing this modal
@@ -121,6 +124,14 @@ export function CardSelectionModal({
   // state or an empty in-flight state never renders it.
   const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
   const [selectedCard, setSelectedCard] = useState<TcgDexCatalogCard | null>(null);
+  // Story 16: a single shared field for the selected/created card's
+  // variation, used by both the search view (TCGdex selection) and the
+  // manual-entry view - the story's acceptance criteria describe one
+  // variation field on the add-card modal, not two per-view ones. Local
+  // `useState` (not React Hook Form-managed like the manual form's other
+  // fields) since it applies identically regardless of which view is
+  // showing.
+  const [variation, setVariation] = useState(initialManualEntry?.values.variation ?? '');
 
   // Story 12's manual-entry view: replaces the search content in place
   // (never a nested modal) rather than being a separate component
@@ -326,7 +337,7 @@ export function CardSelectionModal({
 
   function handleAddCard() {
     if (!selectedCard) return;
-    onSelectCard(selectedCard);
+    onSelectCard(selectedCard, variation.trim() || null);
   }
 
   // Switches from the search view to the manual-entry view in place
@@ -385,6 +396,7 @@ export function CardSelectionModal({
         name: values.name,
         setName: values.setName.trim() || null,
         localNumber: values.localNumber.trim() || null,
+        variation: variation.trim() || null,
       },
       customCardFile,
     );
@@ -599,7 +611,24 @@ export function CardSelectionModal({
               fileName={customCardFile?.name ?? null}
               onFileChange={handleCustomCardFileChange}
               fileError={fileError}
+              variation={variation}
+              onVariationChange={setVariation}
             />
+          </div>
+        )}
+
+        {/* Story 16's shared variation field: the manual-entry view gets
+            its own inline copy in `ManualCardForm`'s Set/Number row
+            instead, so this standalone block only renders for the search
+            view (see the `variation` state comment above). Label stacked
+            above the input, styled like every other form field's label in
+            this codebase (e.g. `ManualCardForm`'s `Field` wrapper). */}
+        {viewMode === 'search' && (
+          <div className="flex max-w-56 flex-col gap-1">
+            <label htmlFor="card-variation" className="text-caption text-neutral-500">
+              Variation
+            </label>
+            <VariationCombobox id="card-variation" value={variation} onChange={setVariation} />
           </div>
         )}
 

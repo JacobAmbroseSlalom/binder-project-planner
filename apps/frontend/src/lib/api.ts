@@ -277,11 +277,13 @@ export async function createCard(binderId: string, request: CreateCardRequest): 
 
 // A manually-entered custom card's creation request (story 12) - built into
 // a `multipart/form-data` body below rather than JSON, since it carries the
-// uploaded image file itself.
+// uploaded image file itself. `variation` (story 16) is optional/nullable,
+// matching the TCGdex `CreateCardRequest`'s own optional variation field.
 export interface CreateCustomCardRequest {
   name: string;
   setName: string | null;
   localNumber: string | null;
+  variation?: string | null;
   placement: { physicalPage: number; row: number; column: number } | null;
   image: File;
 }
@@ -289,9 +291,9 @@ export interface CreateCustomCardRequest {
 // Assigns a manually-entered custom card to a binder slot through
 // `POST /binders/{binderId}/cards` (story 12's multipart variant of the
 // same endpoint `createCard` above uses for TCGdex cards). Blank
-// setName/localNumber are omitted from the form data entirely (rather than
-// sent as empty strings) so the backend stores them as `null`, matching
-// `createCard`'s JSON request shape.
+// setName/localNumber/variation are omitted from the form data entirely
+// (rather than sent as empty strings) so the backend stores them as
+// `null`, matching `createCard`'s JSON request shape.
 export async function createCustomCard(
   binderId: string,
   request: CreateCustomCardRequest,
@@ -300,6 +302,7 @@ export async function createCustomCard(
   formData.append('name', request.name);
   if (request.setName) formData.append('setName', request.setName);
   if (request.localNumber) formData.append('localNumber', request.localNumber);
+  if (request.variation) formData.append('variation', request.variation);
   if (request.placement) {
     formData.append('physicalPage', String(request.placement.physicalPage));
     formData.append('row', String(request.placement.row));
@@ -347,7 +350,10 @@ export async function deleteCard(cardId: string): Promise<void> {
 // ones. Throws the Problem Details body on failure (e.g. `409 Conflict` for
 // a stale expected position or an occupied destination) so the caller can
 // roll back its optimistic move/swap and surface the error via
-// `toProblemDetailsInfo`.
+// `toProblemDetailsInfo`. `PATCH /cards/{cardId}` also accepts story 16's
+// variation-only request shape (see `updateCardVariation` below), so the
+// generated response type is a union - this call site always supplies
+// `updates`, so the response is always the array branch.
 export async function moveCards(cardId: string, updates: CardPositionUpdate[]): Promise<Card[]> {
   const { data, error } = await apiClient.PATCH('/cards/{cardId}', {
     params: { path: { cardId } },
@@ -358,7 +364,27 @@ export async function moveCards(cardId: string, updates: CardPositionUpdate[]): 
     throw error;
   }
 
-  return data;
+  return data as Card[];
+}
+
+// Updates a card's saved variation through `PATCH /cards/{cardId}` (story
+// 16), sharing the same path/method as `moveCards` above but with a
+// `variation`-only request body instead of `updates` - the backend
+// branches on which shape the body is. Returns the complete persisted
+// card, using last-write-wins semantics (no expected prior value is sent).
+// Throws the Problem Details body on failure so the caller can roll back
+// its optimistic variation update.
+export async function updateCardVariation(cardId: string, variation: string | null): Promise<Card> {
+  const { data, error } = await apiClient.PATCH('/cards/{cardId}', {
+    params: { path: { cardId } },
+    body: { variation },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data as Card;
 }
 
 // Resolves a `Card.imageUrl` into a full URL for an `<img>` tag (story 11).

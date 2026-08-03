@@ -523,37 +523,47 @@ paths:
     parameters:
       - $ref: '#/components/parameters/cardId'
     patch:
-      operationId: moveCards
-      summary: Move or swap one or two cards' binder positions
+      operationId: updateCard
+      summary: Move/swap one or two cards' binder positions, or update a card's variation
       description: >-
-        Applies a simple move (one update) or a swap (two updates) of card
-        placement coordinates in one database transaction (story 14). The
-        path `cardId` must identify the dragged card included among
-        `updates`. Each update supplies the affected card's currently
-        expected placement plus its final placement; the backend compares
-        every expected placement against the persisted row before applying
-        any change, so a stale client never silently overwrites a position
+        Either applies a simple move (one update) or a swap (two updates) of
+        card placement coordinates in one database transaction (story 14),
+        or updates the path card's `variation` field (story 16) - the
+        request body's shape determines which. For a move/swap, the path
+        `cardId` must identify the dragged card included among `updates`.
+        Each update supplies the affected card's currently expected
+        placement plus its final placement; the backend compares every
+        expected placement against the persisted row before applying any
+        change, so a stale client never silently overwrites a position
         another request already changed. A destination occupied by a card
         not included in `updates` is rejected as a conflict rather than
-        applied. Nullable placement triples are accepted (story 15's future
-        unplaced-cards section) alongside populated ones.
+        applied. Nullable placement triples are accepted (story 15's
+        unplaced-cards section) alongside populated ones. For a variation
+        update, the trimmed value replaces the card's existing variation
+        using last-write-wins semantics (no expected prior value or
+        timestamp is compared).
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/MoveCardsRequest'
+              oneOf:
+                - $ref: '#/components/schemas/MoveCardsRequest'
+                - $ref: '#/components/schemas/UpdateCardVariationRequest'
       responses:
         '200':
           description: >-
-            The complete persisted representation of every card updated by
-            the move or swap.
+            For a move/swap, the complete persisted representation of every
+            card updated by the move or swap. For a variation update, the
+            complete persisted representation of the path card.
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Card'
+                oneOf:
+                  - type: array
+                    items:
+                      $ref: '#/components/schemas/Card'
+                  - $ref: '#/components/schemas/Card'
         '400':
           description: >-
             The cardId path parameter is not a well-formed UUID, the path
@@ -1493,6 +1503,21 @@ components:
           maxItems: 2
           items:
             $ref: '#/components/schemas/CardPositionUpdate'
+    UpdateCardVariationRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `PATCH /cards/{cardId}`'s variation-update request body (story 16):
+        replaces the path card's saved variation using last-write-wins
+        semantics. Trimmed on the backend; a blank value is stored as
+        `null`, and one value replaces the previous value.
+      required:
+        - variation
+      properties:
+        variation:
+          type: string
+          maxLength: 50
+          nullable: true
     TcgDexCatalogCard:
       type: object
       additionalProperties: false

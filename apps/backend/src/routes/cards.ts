@@ -13,6 +13,7 @@ import { join } from 'node:path';
 
 import {
   CARD_SEARCH_MIN_QUERY_LENGTH,
+  CARD_VARIATION_MAX_LENGTH,
   CUSTOM_CARD_NAME_MAX_LENGTH,
   CUSTOM_CARD_NUMBER_MAX_LENGTH,
   CUSTOM_CARD_SET_MAX_LENGTH,
@@ -82,6 +83,15 @@ interface CardPositionUpdateBody {
 // body (story 14): one update for a simple move, two for a swap.
 interface MoveCardsRequestBody {
   updates: CardPositionUpdateBody[];
+}
+
+// The validated, OpenAPI-typed shape of `PATCH /cards/{cardId}`'s
+// variation-update request body (story 16): replaces the path card's
+// variation instead of moving/swapping placement. The route handler below
+// branches on which of these two shapes (this one, or
+// `MoveCardsRequestBody` above) the request body actually is.
+interface UpdateCardVariationRequestBody {
+  variation: string | null;
 }
 
 interface CardRow {
@@ -706,6 +716,20 @@ export function createCardsRouter(
           );
         return;
       }
+      if (variation && variation.length > CARD_VARIATION_MAX_LENGTH) {
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(
+            problem(
+              400,
+              'Bad Request',
+              `variation must be ${CARD_VARIATION_MAX_LENGTH} characters or fewer.`,
+            ),
+          );
+        return;
+      }
 
       let asset: ResolvedImageAsset;
       try {
@@ -776,6 +800,19 @@ export function createCardsRouter(
     // Blank variation input normalizes to null; a nonblank value is trimmed
     // (planning.md).
     const variation = body.variation?.trim() || null;
+    if (variation && variation.length > CARD_VARIATION_MAX_LENGTH) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          problem(
+            400,
+            'Bad Request',
+            `variation must be ${CARD_VARIATION_MAX_LENGTH} characters or fewer.`,
+          ),
+        );
+      return;
+    }
 
     const controller = new AbortController();
     request.on('close', () => controller.abort());
@@ -819,11 +856,12 @@ export function createCardsRouter(
     );
   });
 
-  // Story 14's card move/swap endpoint: applies one update (a simple move)
-  // or two updates (a swap) in a single transaction. Each update's
-  // `expectedPlacement` is compared against the card's currently persisted
-  // placement before anything changes, so a stale client can never
-  // silently clobber a position another request already moved; any
+  // Story 14's card move/swap endpoint (and story 16's variation-update
+  // endpoint, which shares this same path/method): applies one update (a
+  // simple move) or two updates (a swap) in a single transaction. Each
+  // update's `expectedPlacement` is compared against the card's currently
+  // persisted placement before anything changes, so a stale client can
+  // never silently clobber a position another request already moved; any
   // mismatch throws `MoveConflictError`, rolling back the transaction and
   // mapping to `409 Conflict`. Every card is first nulled out and only then
   // set to its `finalPlacement` (rather than applying each update in one
@@ -836,6 +874,50 @@ export function createCardsRouter(
   // constraint, which is likewise caught and mapped to `409 Conflict`.
   router.patch('/cards/:cardId', (request, response) => {
     const { cardId } = request.params;
+
+    // Story 16: a variation-update request body has `variation` (and no
+    // `updates`) instead of a move/swap's `updates` array - the OpenAPI
+    // `oneOf` request schema guarantees the body is exactly one of the two
+    // shapes, so checking for `updates`' absence is enough to distinguish
+    // them. Handled as an independent, simpler branch (no expected-position
+    // comparison, no transaction, last-write-wins) rather than folding it
+    // into the move/swap transaction below, since the two operations don't
+    // share any of that logic.
+    if (!('updates' in request.body)) {
+      const body = request.body as UpdateCardVariationRequestBody;
+      const existing = database.select().from(cards).where(eq(cards.id, cardId)).get();
+      if (!existing) {
+        response
+          .status(404)
+          .type('application/problem+json')
+          .json(problem(404, 'Not Found', `No card exists with id "${cardId}".`));
+        return;
+      }
+
+      // Blank input normalizes to null; a nonblank value is trimmed
+      // (planning.md), mirroring card creation's own variation handling.
+      const variation = body.variation?.trim() || null;
+      if (variation && variation.length > CARD_VARIATION_MAX_LENGTH) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(
+            problem(
+              400,
+              'Bad Request',
+              `variation must be ${CARD_VARIATION_MAX_LENGTH} characters or fewer.`,
+            ),
+          );
+        return;
+      }
+
+      const updatedAt = new Date().toISOString();
+      database.update(cards).set({ variation, updatedAt }).where(eq(cards.id, cardId)).run();
+
+      response.status(200).json(serializeCard({ ...existing, variation, updatedAt }));
+      return;
+    }
+
     const body = request.body as MoveCardsRequestBody;
 
     if (!body.updates.some((update) => update.cardId === cardId)) {

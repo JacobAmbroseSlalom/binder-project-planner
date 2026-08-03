@@ -136,6 +136,20 @@ export const ART_DESCRIPTION_MAX_LENGTH = 10_000;
 // warning (story 25).
 export const MIN_ART_PRINT_RESOLUTION_PPI = 300;
 
+// Story 16: "Add card variations". The variation combobox's suggested
+// values - the user may also type an unmatched custom value in the same
+// field, which is stored as-is rather than being restricted to this list.
+export const CARD_VARIATION_SUGGESTIONS = [
+  'Reverse Holo',
+  'Non-Holo',
+  '1st Edition',
+  'Expansion Stamp',
+] as const;
+// Maximum trimmed variation length, shared by the frontend schema, the
+// OpenAPI contract, and backend validation; blank input is stored as
+// `null` rather than an empty string.
+export const CARD_VARIATION_MAX_LENGTH = 50;
+
 // Story 26: "Move and manage multi-slot art". How long a completed
 // mutation's outcome (keyed by a client-generated idempotency key, e.g.
 // art duplication) is retained so a retried request replays the original

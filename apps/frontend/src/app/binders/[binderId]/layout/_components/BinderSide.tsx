@@ -24,6 +24,9 @@ export function BinderSide({
   pendingPlacementKeys,
   onSlotClick,
   onRemoveCard,
+  onEditVariation,
+  pendingCardVariationEditIds,
+  variationsVisible = false,
   pendingCardDeletionIds,
   pendingArtEditIds,
   pendingArtDeletionIds,
@@ -65,6 +68,19 @@ export function BinderSide({
   // Permanently removes an occupied slot's card (story 13), revealed as a
   // hover action over the card's top-right corner.
   onRemoveCard: (cardId: string) => void;
+  // Opens the edit-variation modal for an occupied slot's card (story 16),
+  // revealed as a second hover action alongside `onRemoveCard`.
+  onEditVariation: (card: Card) => void;
+  // Card ids with a variation edit currently in flight (story 16), so that
+  // card's own actions are disabled until the request settles - mirrors
+  // `pendingCardDeletionIds`.
+  pendingCardVariationEditIds: Set<string>;
+  // Story 16's toggle: when true, every occupied slot with a saved
+  // variation overlays it on the bottom edge of its card image (see
+  // `CardTile`). An overlay rather than reserved space, so toggling this
+  // never changes any slot's size or the binder side's overall
+  // dimensions. Defaults to off, matching the toggle's default state.
+  variationsVisible?: boolean;
   // Card ids with a removal currently in flight (story 13), so that card's
   // own actions are disabled - and no further actions permitted on it -
   // until the request settles.
@@ -243,6 +259,9 @@ export function BinderSide({
                 isCoveredByArt={coveredByArt.has(`${row}-${column}`)}
                 onSlotClick={onSlotClick}
                 onRemoveCard={onRemoveCard}
+                onEditVariation={onEditVariation}
+                isVariationEditPending={card ? pendingCardVariationEditIds.has(card.id) : false}
+                variationsVisible={variationsVisible}
                 slotAspectRatio={slotAspectRatio}
               />
             );

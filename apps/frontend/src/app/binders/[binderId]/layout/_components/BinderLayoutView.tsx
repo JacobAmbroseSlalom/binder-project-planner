@@ -42,6 +42,7 @@ import { PrintArtModal } from './art/PrintArtModal';
 import { UnplacedArtPanel } from './art/UnplacedArtPanel';
 import { BinderSide } from './BinderSide';
 import { CardSelectionModal } from './card/CardSelectionModal';
+import { EditCardVariationModal } from './card/EditCardVariationModal';
 import { UnplacedCardsPanel } from './card/UnplacedCardsPanel';
 
 // The slot (or unplaced-panel target) currently targeted by an open
@@ -97,6 +98,8 @@ export function BinderLayoutView() {
     clearManualEntryRestore,
     removeCard,
     pendingCardDeletionIds,
+    editCardVariation,
+    pendingCardVariationEditIds,
     moveCard,
     isMovePending,
     pendingUnplacedCardIds,
@@ -168,6 +171,21 @@ export function BinderLayoutView() {
   function handleCloseEditArtModal() {
     setEditingArtId(null);
     clearArtEditRestore();
+  }
+
+  // The card currently targeted by an open edit-variation modal (story
+  // 16), set by a `CardTile`'s hover-revealed Pencil action; `null` while
+  // no such modal is open. Looked up from `cards` by id (rather than
+  // stored as a full record) so the modal always reflects the card's
+  // latest optimistic state.
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const editingCard = editingCardId
+    ? (cards.find((item) => item.id === editingCardId) ?? null)
+    : null;
+
+  function handleSaveCardVariation(variation: string | null) {
+    if (!editingCard) return;
+    editCardVariation(editingCard.id, variation);
   }
 
   // Story 26's nested "Save and Move to Unplaced" conflict check, passed
@@ -441,12 +459,13 @@ export function BinderLayoutView() {
   // `selectedSlot` already matches `CreateCardRequest['placement']`'s
   // nullable-triple shape either way - the route context's `assignCard`
   // owns the optimistic-update/request lifecycle from here (see
-  // `BinderRouteContext.tsx`).
-  function handleSelectCard(card: TcgDexCatalogCard) {
+  // `BinderRouteContext.tsx`). `variation` (story 16) is the modal's
+  // shared variation field's trimmed value, or `null` if left blank.
+  function handleSelectCard(card: TcgDexCatalogCard, variation: string | null) {
     if (!selectedSlot) return;
     assignCard({
       ...card,
-      variation: null,
+      variation,
       placement: selectedSlot,
     });
     setSelectedSlot(null);
@@ -586,12 +605,27 @@ export function BinderLayoutView() {
   // and is never included in the PDF").
   const placedArt = art.filter((item) => item.placement.physicalPage !== null);
 
-  // Story 29: "The frontend sets `includeVariations` from the layout
-  // route's current `variations=true` toggle state" - read defensively
-  // now (mirroring the `michi=true` toggle above) even though story 16
-  // hasn't added the actual toggle control yet, so this starts working
-  // automatically once it does.
-  const includeVariations = searchParams.get('variations') === 'true';
+  // Story 16's variations-visibility toggle: `variations=true` shows each
+  // card's variation overlaid on its image (see `CardTile`); any other
+  // value (or its absence) hides it, matching the acceptance criteria's
+  // "hidden by default". Story 29's PDF export also reads this same flag
+  // ("the frontend sets `includeVariations` from the layout route's
+  // current `variations=true` toggle state") so the printed layout matches
+  // whatever's currently visible on screen.
+  const variationsVisible = searchParams.get('variations') === 'true';
+
+  // Flips the variations toggle (story 16): mirrors `toggleMichiIndicators`
+  // above - history replacement (never a push) and copying the current
+  // `searchParams` as the base preserves every other query parameter.
+  function toggleVariationsVisible() {
+    const params = new URLSearchParams(searchParams);
+    if (variationsVisible) {
+      params.delete('variations');
+    } else {
+      params.set('variations', 'true');
+    }
+    router.replace(`${pathname}?${params.toString()}`);
+  }
 
   // Generates and downloads the binder's layout PDF (story 29): drives the
   // shared save-status toast exactly like every other mutation (a
@@ -603,7 +637,7 @@ export function BinderLayoutView() {
     setIsExportingPdf(true);
     const toast = start();
     try {
-      const { blob, filename } = await exportBinderLayoutPdf(binder.id, includeVariations);
+      const { blob, filename } = await exportBinderLayoutPdf(binder.id, variationsVisible);
       const objectUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = objectUrl;
@@ -651,6 +685,9 @@ export function BinderLayoutView() {
           pendingUnplacedCardIds={pendingUnplacedCardIds}
           isMovePending={isMovePending}
           onRemoveCard={removeCard}
+          onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
+          pendingCardVariationEditIds={pendingCardVariationEditIds}
+          variationsVisible={variationsVisible}
           onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
           slotAspectRatio={slotAspectRatio}
         />
@@ -680,6 +717,27 @@ export function BinderLayoutView() {
               <span className="flex flex-col text-caption leading-tight text-neutral-500">
                 <span>Show Michi</span>
                 <span>slot indicators</span>
+              </span>
+            </label>
+
+            {/* Story 16's toggle: same custom-styled checkbox as the Michi
+                toggle above. Defaults to off (hidden), per the acceptance
+                criteria - `variationsVisible` is only true when the URL
+                explicitly has `variations=true`. */}
+            <label htmlFor="variations-visible-toggle" className="flex items-center gap-2">
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                <input
+                  id="variations-visible-toggle"
+                  type="checkbox"
+                  checked={variationsVisible}
+                  onChange={toggleVariationsVisible}
+                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                />
+                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+              </span>
+              <span className="flex flex-col text-caption leading-tight text-neutral-500">
+                <span>Show card</span>
+                <span>variations</span>
               </span>
             </label>
 
@@ -797,6 +855,9 @@ export function BinderLayoutView() {
                     }
                     onRemoveCard={removeCard}
                     pendingCardDeletionIds={pendingCardDeletionIds}
+                    onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
+                    pendingCardVariationEditIds={pendingCardVariationEditIds}
+                    variationsVisible={variationsVisible}
                     pendingArtEditIds={pendingArtEditIds}
                     pendingArtDeletionIds={pendingArtDeletionIds}
                     pendingArtDuplicateIds={pendingArtDuplicateIds}
@@ -826,6 +887,9 @@ export function BinderLayoutView() {
                     }
                     onRemoveCard={removeCard}
                     pendingCardDeletionIds={pendingCardDeletionIds}
+                    onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
+                    pendingCardVariationEditIds={pendingCardVariationEditIds}
+                    variationsVisible={variationsVisible}
                     pendingArtEditIds={pendingArtEditIds}
                     pendingArtDeletionIds={pendingArtDeletionIds}
                     pendingArtDuplicateIds={pendingArtDuplicateIds}
@@ -950,6 +1014,15 @@ export function BinderLayoutView() {
           binder={binder}
           placedArt={placedArt}
           onClose={() => setIsPrintArtModalOpen(false)}
+        />
+      )}
+
+      {editingCard && (
+        <EditCardVariationModal
+          card={editingCard}
+          isSaving={pendingCardVariationEditIds.has(editingCard.id)}
+          onSave={handleSaveCardVariation}
+          onClose={() => setEditingCardId(null)}
         />
       )}
     </DndContext>
