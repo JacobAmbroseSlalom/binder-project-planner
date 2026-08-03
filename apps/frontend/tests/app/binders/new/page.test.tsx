@@ -1,9 +1,36 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRouter } from 'next/navigation';
 
+import {
+  DEFAULT_BORDER_COLOR,
+  DEFAULT_BORDER_RADIUS_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
+  DEFAULT_HEIGHT_BASE_CM,
+  DEFAULT_HEIGHT_PER_SLOT_CM,
+  DEFAULT_WIDTH_BASE_CM,
+  DEFAULT_WIDTH_PER_SLOT_CM,
+  DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+} from '@binder-project-planner/shared';
+
 import { createBinder } from '@/lib/api';
 import { ToastProvider } from '@/shared/feedback';
 import NewBinderPage from '@/app/binders/new/page';
+
+// Story 24's dimension/style fields are now required by the binder-details
+// form; every test that submits the form or asserts on a created binder's
+// shape spreads this so each test only overrides the field(s) it's
+// actually exercising, using the same canonical shared defaults the form
+// itself falls back to.
+const dimensionFields = {
+  widthPerSlot: DEFAULT_WIDTH_PER_SLOT_CM,
+  widthBase: DEFAULT_WIDTH_BASE_CM,
+  heightPerSlot: DEFAULT_HEIGHT_PER_SLOT_CM,
+  heightBase: DEFAULT_HEIGHT_BASE_CM,
+  borderColor: DEFAULT_BORDER_COLOR,
+  borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
+  borderWidth: DEFAULT_BORDER_WIDTH_CM,
+  previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+};
 
 // The API client is mocked so these tests exercise the page's own submit
 // handling (disabling Create, navigating, showing toasts) without making a
@@ -64,6 +91,7 @@ describe('NewBinderPage', () => {
       width: 3,
       height: 3,
       pages: 20,
+      ...dimensionFields,
       createdAt: '2026-01-01T00:00:00.000Z',
       updatedAt: '2026-01-01T00:00:00.000Z',
     });
@@ -80,6 +108,7 @@ describe('NewBinderPage', () => {
         width: 3,
         height: 3,
         pages: 20,
+        ...dimensionFields,
       }),
     );
     // Story 7: a newly created binder opens its view/edit page with the

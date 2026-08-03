@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react';
+import { useRouter } from 'next/navigation';
 
 import { listBinders } from '@/lib/api';
 import Home from '@/app/page';
@@ -11,7 +12,19 @@ jest.mock('@/lib/api', () => ({
   listBinders: jest.fn(),
 }));
 
+// BinderList (rendered by Home) calls useRouter (story 21's optimistic-copy
+// navigation), which has no real implementation outside the Next.js router
+// context, so it's mocked the same way the new-binder page's tests do.
+jest.mock('next/navigation', () => ({
+  useRouter: jest.fn(),
+}));
+
 const mockedListBinders = jest.mocked(listBinders);
+const mockedUseRouter = jest.mocked(useRouter);
+
+beforeEach(() => {
+  mockedUseRouter.mockReturnValue({ push: jest.fn() } as unknown as ReturnType<typeof useRouter>);
+});
 
 describe('Home', () => {
   it('shows a link to create a new binder', () => {

@@ -1,9 +1,26 @@
+import {
+  DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  DEFAULT_BORDER_COLOR,
+  DEFAULT_BORDER_RADIUS_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
+  DEFAULT_HEIGHT_BASE_CM,
+  DEFAULT_HEIGHT_PER_SLOT_CM,
+  DEFAULT_WIDTH_BASE_CM,
+  DEFAULT_WIDTH_PER_SLOT_CM,
+} from '@binder-project-planner/shared';
 import type { Express } from 'express';
 import request from 'supertest';
 
 import { createApp } from '../src/app.js';
 import { createDatabase, type DatabaseConnection } from '../src/database/client.js';
 import { binders } from '../src/database/schema.js';
+
+// Mirrors `toHundredths` in `src/routes/binders.ts` so directly inserted
+// rows (bypassing POST /binders) use the same integer-hundredths storage
+// representation the schema's NOT NULL columns require.
+function toHundredths(value: number): number {
+  return Math.round(value * 100);
+}
 
 describe('GET /health', () => {
   let connection: DatabaseConnection;
@@ -61,6 +78,18 @@ describe('GET /binders', () => {
         width: 3,
         height: 3,
         pages: 20,
+        // Story 24 dimension/style columns are NOT NULL; use the same
+        // application defaults POST /binders falls back to so these
+        // directly inserted rows satisfy the schema without asserting on
+        // story 24 behavior (out of scope for these story 5 sort tests).
+        widthPerSlotHundredths: toHundredths(DEFAULT_WIDTH_PER_SLOT_CM),
+        widthBaseHundredths: toHundredths(DEFAULT_WIDTH_BASE_CM),
+        heightPerSlotHundredths: toHundredths(DEFAULT_HEIGHT_PER_SLOT_CM),
+        heightBaseHundredths: toHundredths(DEFAULT_HEIGHT_BASE_CM),
+        borderColor: DEFAULT_BORDER_COLOR,
+        borderRadiusHundredths: toHundredths(DEFAULT_BORDER_RADIUS_PERCENT),
+        borderWidthHundredths: toHundredths(DEFAULT_BORDER_WIDTH_CM),
+        previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
         createdAt: overrides.createdAt ?? overrides.updatedAt,
         updatedAt: overrides.updatedAt,
       })
@@ -139,8 +168,24 @@ describe('GET /binders', () => {
         width: 3,
         height: 3,
         pages: 20,
+        widthPerSlot: DEFAULT_WIDTH_PER_SLOT_CM,
+        widthBase: DEFAULT_WIDTH_BASE_CM,
+        heightPerSlot: DEFAULT_HEIGHT_PER_SLOT_CM,
+        heightBase: DEFAULT_HEIGHT_BASE_CM,
+        borderColor: DEFAULT_BORDER_COLOR,
+        borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
+        borderWidth: DEFAULT_BORDER_WIDTH_CM,
+        previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
+        // Story 20's embedded preview spread for `previewPhysicalPage: 2`
+        // out of 20 stored pages (40 physical pages): a two-sided spread
+        // pairing physical pages 2 and 3, with no cards/art placed yet.
+        preview: {
+          spread: { left: 2, right: 3 },
+          cards: [],
+          art: [],
+        },
       },
     ]);
   });

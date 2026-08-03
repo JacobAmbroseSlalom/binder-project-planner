@@ -1,8 +1,25 @@
-import { LOADING_INDICATOR_DELAY_MS } from '@binder-project-planner/shared';
+import {
+  DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  DEFAULT_BORDER_COLOR,
+  DEFAULT_BORDER_RADIUS_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
+  DEFAULT_HEIGHT_BASE_CM,
+  DEFAULT_HEIGHT_PER_SLOT_CM,
+  DEFAULT_WIDTH_BASE_CM,
+  DEFAULT_WIDTH_PER_SLOT_CM,
+  LOADING_INDICATOR_DELAY_MS,
+} from '@binder-project-planner/shared';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRouter, usePathname } from 'next/navigation';
 
-import { getBinder, listBinderArt, listBinderCards, type Binder, type Card } from '@/lib/api';
+import {
+  getBinder,
+  listBinderArt,
+  listBinderCards,
+  type Art,
+  type Binder,
+  type Card,
+} from '@/lib/api';
 import {
   BinderRouteProvider,
   useBinderRouteContext,
@@ -41,6 +58,16 @@ function makeBinder(overrides: Partial<Binder> = {}): Binder {
     width: 3,
     height: 3,
     pages: 20,
+    // Story 24's dimension/style fields are required by `Binder`; using the
+    // same canonical shared defaults `binderDetailsSchema` falls back to.
+    widthPerSlot: DEFAULT_WIDTH_PER_SLOT_CM,
+    widthBase: DEFAULT_WIDTH_BASE_CM,
+    heightPerSlot: DEFAULT_HEIGHT_PER_SLOT_CM,
+    heightBase: DEFAULT_HEIGHT_BASE_CM,
+    borderColor: DEFAULT_BORDER_COLOR,
+    borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
+    borderWidth: DEFAULT_BORDER_WIDTH_CM,
+    previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -63,6 +90,33 @@ function makeCard(overrides: Partial<Card> = {}): Card {
     variation: null,
     placement: { physicalPage: 1, row: 0, column: 0 },
     imageUrl: '/cards/card-1/image',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+// A minimal placed multi-slot art item, matching the `Art` schema, used to
+// verify the provider forwards whatever `listBinderArt` resolves with
+// without needing every test to restate every field.
+function makeArt(overrides: Partial<Art> = {}): Art {
+  return {
+    id: 'art-1',
+    binderId: BINDER_ID,
+    title: 'My Art',
+    description: null,
+    widthSlots: 1,
+    heightSlots: 1,
+    placement: { physicalPage: 1, row: 0, column: 0 },
+    imageUrl: '/art/art-1/image',
+    imageRotationDegrees: 0,
+    focalX: 0.5,
+    focalY: 0.5,
+    scaleX: 1,
+    scaleY: 1,
+    borderColor: null,
+    borderRadius: null,
+    borderWidth: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     ...overrides,
@@ -128,7 +182,7 @@ describe('BinderRouteProvider', () => {
   it('loads binder, cards, and art in parallel and publishes them together to nested tabs', async () => {
     mockedGetBinder.mockResolvedValue(makeBinder());
     mockedListBinderCards.mockResolvedValue([makeCard()]);
-    mockedListBinderArt.mockResolvedValue([{ id: 'art-1' }, { id: 'art-2' }]);
+    mockedListBinderArt.mockResolvedValue([makeArt({ id: 'art-1' }), makeArt({ id: 'art-2' })]);
 
     renderProvider();
 

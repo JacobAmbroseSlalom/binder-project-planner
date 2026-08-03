@@ -1,5 +1,16 @@
-import { LOADING_INDICATOR_DELAY_MS } from '@binder-project-planner/shared';
+import {
+  DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  DEFAULT_BORDER_COLOR,
+  DEFAULT_BORDER_RADIUS_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
+  DEFAULT_HEIGHT_BASE_CM,
+  DEFAULT_HEIGHT_PER_SLOT_CM,
+  DEFAULT_WIDTH_BASE_CM,
+  DEFAULT_WIDTH_PER_SLOT_CM,
+  LOADING_INDICATOR_DELAY_MS,
+} from '@binder-project-planner/shared';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { useRouter } from 'next/navigation';
 
 import { listBinders, type BinderSummary } from '@/lib/api';
 import { BinderList } from '@/app/_components/BinderList';
@@ -11,7 +22,19 @@ jest.mock('@/lib/api', () => ({
   listBinders: jest.fn(),
 }));
 
+// BinderList calls useRouter (story 21's optimistic-copy navigation), which
+// has no real implementation outside the Next.js router context, so it's
+// mocked the same way the new-binder page's tests do.
+jest.mock('next/navigation', () => ({
+  useRouter: jest.fn(),
+}));
+
 const mockedListBinders = jest.mocked(listBinders);
+const mockedUseRouter = jest.mocked(useRouter);
+
+beforeEach(() => {
+  mockedUseRouter.mockReturnValue({ push: jest.fn() } as unknown as ReturnType<typeof useRouter>);
+});
 
 // markFailed reads the failed toast through the real ToastProvider (as the
 // component does via useToastContext), matching how other tests exercise
@@ -31,8 +54,24 @@ function makeBinderSummary(overrides: Partial<BinderSummary>): BinderSummary {
     width: 3,
     height: 3,
     pages: 20,
+    // Story 24's dimension/style fields; BinderPreview reads widthPerSlot/
+    // widthBase/heightPerSlot/heightBase for its slot aspect ratio, so
+    // every summary needs valid values even when a test isn't exercising
+    // story 24 behavior itself.
+    widthPerSlot: DEFAULT_WIDTH_PER_SLOT_CM,
+    widthBase: DEFAULT_WIDTH_BASE_CM,
+    heightPerSlot: DEFAULT_HEIGHT_PER_SLOT_CM,
+    heightBase: DEFAULT_HEIGHT_BASE_CM,
+    borderColor: DEFAULT_BORDER_COLOR,
+    borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
+    borderWidth: DEFAULT_BORDER_WIDTH_CM,
+    previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
+    // Story 20's embedded preview spread; BinderPreview destructures this
+    // unconditionally, so every summary needs one even when a test isn't
+    // exercising preview content itself.
+    preview: { spread: { left: null, right: 1 }, cards: [], art: [] },
     ...overrides,
   };
 }

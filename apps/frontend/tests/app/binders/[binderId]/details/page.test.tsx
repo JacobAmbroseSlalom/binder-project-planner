@@ -1,3 +1,13 @@
+import {
+  DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  DEFAULT_BORDER_COLOR,
+  DEFAULT_BORDER_RADIUS_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
+  DEFAULT_HEIGHT_BASE_CM,
+  DEFAULT_HEIGHT_PER_SLOT_CM,
+  DEFAULT_WIDTH_BASE_CM,
+  DEFAULT_WIDTH_PER_SLOT_CM,
+} from '@binder-project-planner/shared';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { useBinderRouteContext } from '@/app/binders/[binderId]/BinderRouteContext';
@@ -27,6 +37,18 @@ const BINDER: Binder = {
   width: 3,
   height: 3,
   pages: 20,
+  // Story 24's dimension/style fields are required by `Binder`; using the
+  // same canonical shared defaults `binderDetailsSchema` falls back to
+  // keeps this seed value populating the form without triggering its
+  // "required" validation.
+  widthPerSlot: DEFAULT_WIDTH_PER_SLOT_CM,
+  widthBase: DEFAULT_WIDTH_BASE_CM,
+  heightPerSlot: DEFAULT_HEIGHT_PER_SLOT_CM,
+  heightBase: DEFAULT_HEIGHT_BASE_CM,
+  borderColor: DEFAULT_BORDER_COLOR,
+  borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
+  borderWidth: DEFAULT_BORDER_WIDTH_CM,
+  previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -39,12 +61,43 @@ function renderPage(updateBinderContext: jest.Mock = jest.fn()) {
     updateBinder: updateBinderContext,
     layoutFocalPage: null,
     setLayoutFocalPage: jest.fn(),
-    assignCard: jest.fn(),
+    assignCards: jest.fn(),
+    isBulkAddPending: false,
+    bulkAddFailure: null,
+    clearBulkAddFailure: jest.fn(),
+    retryFailedBulkCards: jest.fn(),
+    bulkSelectionRestore: null,
+    clearBulkSelectionRestore: jest.fn(),
+    assignCustomCard: jest.fn(),
+    pendingUnplacedCardIds: new Set(),
+    manualEntryRestore: null,
+    clearManualEntryRestore: jest.fn(),
     pendingPlacementKeys: new Set(),
+    removeCard: jest.fn(),
+    pendingCardDeletionIds: new Set(),
+    editCardVariation: jest.fn(),
+    pendingCardVariationEditIds: new Set(),
+    duplicateCard: jest.fn(),
+    pendingCardDuplicateIds: new Set(),
+    moveCard: jest.fn(),
+    isMovePending: false,
     cardSearchLanguage: 'en',
     setCardSearchLanguage: jest.fn(),
     includeTcgPocket: false,
     setIncludeTcgPocket: jest.fn(),
+    createArt: jest.fn(),
+    pendingUnplacedArtIds: new Set(),
+    artCreateRestore: null,
+    clearArtCreateRestore: jest.fn(),
+    moveArt: jest.fn(),
+    editArt: jest.fn(),
+    pendingArtEditIds: new Set(),
+    artEditRestore: null,
+    clearArtEditRestore: jest.fn(),
+    removeArt: jest.fn(),
+    pendingArtDeletionIds: new Set(),
+    duplicateArt: jest.fn(),
+    pendingArtDuplicateIds: new Set(),
   });
 
   return render(
@@ -73,7 +126,10 @@ describe('BinderDetailsPage (Edit Details tab)', () => {
   });
 
   it('saves only the changed, valid field on blur and syncs the context and form from the response', async () => {
-    mockedUpdateBinder.mockResolvedValue({ ...BINDER, name: 'New Name' });
+    // `mockResolvedValueOnce` (rather than `mockResolvedValue`) so this
+    // resolved value doesn't leak into later tests - `clearMocks` (jest
+    // config) only clears call history between tests, not implementations.
+    mockedUpdateBinder.mockResolvedValueOnce({ ...BINDER, name: 'New Name' });
     const updateBinderContext = jest.fn();
     renderPage(updateBinderContext);
 

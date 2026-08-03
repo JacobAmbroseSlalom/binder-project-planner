@@ -66,18 +66,28 @@ export default function BinderDetailsPage() {
     savingRef.current = true;
 
     try {
-      // Re-validates every field so `formState.errors` reflects the latest
-      // values before deciding which dirty fields are safe to submit.
+      // Re-validates every field so each field's post-validation errors are
+      // current before deciding which dirty fields are safe to submit.
       await form.trigger();
-      const { dirtyFields, errors } = form.formState;
+      const { dirtyFields } = form.formState;
       const values = form.getValues();
 
       // Only dirty *and* currently-valid fields are included; an invalid
       // dirty field is simply left out (and left dirty) rather than
-      // blocking the other valid fields from saving.
+      // blocking the other valid fields from saving. `dirtyFields` (above)
+      // reflects the current render because it's read during render too
+      // (the `void form.formState.dirtyFields;` line above), but validity
+      // can only change here, inside this async callback, as a *result* of
+      // the `trigger()` call just above - there's no guaranteed render in
+      // between for the exposed `form.formState` Proxy snapshot to have
+      // picked it up. `getFieldState(field)` (called without a `formState`
+      // argument) reads directly from RHF's live internal state instead of
+      // that render-synced snapshot, so it reflects `trigger()`'s results
+      // immediately, avoiding a race where a field that just failed
+      // validation (e.g. `width: 0`) is incorrectly still treated as valid.
       const patch: UpdateBinderRequest = {};
       (Object.keys(dirtyFields) as (keyof BinderDetailsFormInput)[]).forEach((field) => {
-        if (dirtyFields[field] && !errors[field]) {
+        if (dirtyFields[field] && !form.getFieldState(field).invalid) {
           (patch as Record<string, unknown>)[field] = values[field];
         }
       });
