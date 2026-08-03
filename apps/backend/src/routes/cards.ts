@@ -12,6 +12,7 @@ import {
 import { join } from 'node:path';
 
 import {
+  BULK_CARD_CREATE_CONCURRENCY,
   CARD_SEARCH_MIN_QUERY_LENGTH,
   CARD_VARIATION_MAX_LENGTH,
   CUSTOM_CARD_NAME_MAX_LENGTH,
@@ -24,6 +25,10 @@ import { Router, type Response } from 'express';
 import type { DatabaseConnection } from '../database/client.js';
 import { binders, cardImageAssets, cards } from '../database/schema.js';
 import { detectImageFormat } from '../images/imageFormat.js';
+import {
+  findIdempotentOutcome,
+  saveIdempotentOutcome,
+} from '../idempotency/mutationIdempotency.js';
 import { translateEnglishNameToJapanese } from '../integrations/pokeapi.js';
 import { getOccupiedCells } from '../placement/occupancy.js';
 import {
@@ -34,17 +39,27 @@ import {
   type CardSearchLanguage,
 } from '../integrations/tcgdex.js';
 
-// The validated, OpenAPI-typed shape of a TCGdex create-card request body
-// (story 11, `application/json`).
-interface CreateCardRequestBody {
+// One normalized TCGdex catalog result within a bulk create-cards request
+// (stories 17/18, `POST /binders/{binderId}/cards/bulk`) - the sole
+// TCGdex-card creation path; there is no single-card JSON variant of
+// `POST /binders/{binderId}/cards` anymore.
+interface BulkCardItem {
   name: string;
   setName: string | null;
   localNumber: string | null;
   providerCardId: string;
   providerSetId: string;
   imageUrl: string;
+}
+
+// The validated, OpenAPI-typed shape of `POST /binders/{binderId}/cards/
+// bulk`'s request body (stories 17/18): the checked selection, one shared
+// optional variation applied to every created card, and one optional
+// target placement applied only to the first array element.
+interface BulkCreateCardsRequestBody {
+  cards: BulkCardItem[];
   variation?: string | null;
-  placement: { physicalPage: number | null; row: number | null; column: number | null };
+  targetPlacement?: { physicalPage: number; row: number; column: number };
 }
 
 // The validated, OpenAPI-typed shape of a custom create-card request body
@@ -163,7 +178,7 @@ function readFileHeader(path: string, length: number): Buffer {
 }
 
 function validatePlacement(
-  placement: CreateCardRequestBody['placement'],
+  placement: { physicalPage: number | null; row: number | null; column: number | null },
   binder: { width: number; height: number; pages: number },
 ): string | null {
   const { physicalPage, row, column } = placement;
@@ -314,11 +329,13 @@ interface ResolvedImageAsset {
 // (planning.md: "TCGdex card instances with the same provider card ID share
 // one local image-asset record and file"). Downloads only happen when no
 // existing asset is found; a concurrent duplicate download that loses the
-// database race is discarded in favor of the winner's asset.
+// database race is discarded in favor of the winner's asset. Only the
+// identity/image fields a TCGdex card's shared asset actually keys on are
+// needed here (used by the bulk create-cards endpoint, stories 17/18).
 async function resolveTcgDexImageAsset(
   database: DatabaseConnection['database'],
   imagesDirectory: string,
-  body: CreateCardRequestBody,
+  body: { providerCardId: string; providerSetId: string; imageUrl: string },
   signal: AbortSignal,
 ): Promise<ResolvedImageAsset> {
   const existing = database
@@ -598,12 +615,11 @@ export function createCardsRouter(
     response.status(201).location(`/cards/${card.id}`).json(serializeCard(card));
   }
 
-  // Story 11's slot-assignment endpoint (`application/json`, TCGdex cards)
-  // and story 12's manual-entry endpoint (`multipart/form-data`, custom
-  // cards) share this one path/method, branching on whether
-  // express-openapi-validator's multer integration populated
-  // `request.files` (only true for multipart requests - see app.ts's
-  // `fileUploader` comment).
+  // Story 12's manual-entry endpoint (`multipart/form-data`, custom cards).
+  // TCGdex-card creation, including a single selected card, instead uses
+  // `POST /binders/{binderId}/cards/bulk` below (stories 11, 17, and 18) -
+  // this endpoint's single-card JSON TCGdex variant was removed when that
+  // bulk endpoint became the sole TCGdex-card creation path.
   router.post('/binders/:binderId/cards', async (request, response) => {
     const { binderId } = request.params;
     const uploadedFiles = Array.isArray(request.files) ? request.files : undefined;
@@ -618,178 +634,45 @@ export function createCardsRouter(
       return;
     }
 
-    if (uploadedFiles) {
-      // Story 12's custom-card branch.
-      const body = request.body as CreateCustomCardRequestBody;
-      const uploadedFile = uploadedFiles.find((file) => file.fieldname === 'image');
-      if (!uploadedFile) {
-        // Never expected: the OpenAPI schema requires `image`, so
-        // express-openapi-validator already rejects a request missing it
-        // before this handler runs. Guarded defensively regardless.
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(400)
-          .type('application/problem+json')
-          .json(problem(400, 'Bad Request', 'A custom card requires an image file.'));
-        return;
-      }
-
-      const placementResult = resolveCustomCardPlacement(body, binder);
-      if ('error' in placementResult) {
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(400)
-          .type('application/problem+json')
-          .json(problem(400, 'Bad Request', placementResult.error));
-        return;
-      }
-
-      const artConflict = findArtOccupancyConflict(database, binderId, placementResult.placement);
-      if (artConflict) {
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(409)
-          .type('application/problem+json')
-          .json(problem(409, 'Conflict', artConflict));
-        return;
-      }
-
-      // Required after trimming (planning.md); the OpenAPI schema's
-      // `minLength: 1` only guards the raw untrimmed value, so a
-      // whitespace-only name still needs this check. The max-length check
-      // below is a backend-validation belt-and-suspenders alongside the
-      // OpenAPI schema's own `maxLength` (planning.md story 12).
-      const name = body.name.trim();
-      if (!name) {
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(400)
-          .type('application/problem+json')
-          .json(problem(400, 'Bad Request', 'name is required.'));
-        return;
-      }
-      if (name.length > CUSTOM_CARD_NAME_MAX_LENGTH) {
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(400)
-          .type('application/problem+json')
-          .json(
-            problem(
-              400,
-              'Bad Request',
-              `name must be ${CUSTOM_CARD_NAME_MAX_LENGTH} characters or fewer.`,
-            ),
-          );
-        return;
-      }
-
-      // Optional fields: trimmed, blank stores as null (planning.md).
-      const setName = body.setName?.trim() || null;
-      const localNumber = body.localNumber?.trim() || null;
-      const variation = body.variation?.trim() || null;
-
-      if (setName && setName.length > CUSTOM_CARD_SET_MAX_LENGTH) {
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(400)
-          .type('application/problem+json')
-          .json(
-            problem(
-              400,
-              'Bad Request',
-              `setName must be ${CUSTOM_CARD_SET_MAX_LENGTH} characters or fewer.`,
-            ),
-          );
-        return;
-      }
-      if (localNumber && localNumber.length > CUSTOM_CARD_NUMBER_MAX_LENGTH) {
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(400)
-          .type('application/problem+json')
-          .json(
-            problem(
-              400,
-              'Bad Request',
-              `localNumber must be ${CUSTOM_CARD_NUMBER_MAX_LENGTH} characters or fewer.`,
-            ),
-          );
-        return;
-      }
-      if (variation && variation.length > CARD_VARIATION_MAX_LENGTH) {
-        removeTemporaryUploads(uploadedFiles);
-        response
-          .status(400)
-          .type('application/problem+json')
-          .json(
-            problem(
-              400,
-              'Bad Request',
-              `variation must be ${CARD_VARIATION_MAX_LENGTH} characters or fewer.`,
-            ),
-          );
-        return;
-      }
-
-      let asset: ResolvedImageAsset;
-      try {
-        asset = resolveCustomImageAsset(database, imagesDirectory, uploadedFile);
-      } catch (error) {
-        if (error instanceof UnsupportedImageFormatError) {
-          response
-            .status(415)
-            .type('application/problem+json')
-            .json(problem(415, 'Unsupported Media Type', error.message));
-          return;
-        }
-        throw error;
-      }
-
-      const now = new Date().toISOString();
-      insertCardAndRespond(
-        response,
-        {
-          id: randomUUID(),
-          binderId,
-          name,
-          setName,
-          localNumber,
-          source: 'custom',
-          providerCardId: null,
-          providerSetId: null,
-          variation,
-          physicalPage: placementResult.placement.physicalPage,
-          row: placementResult.placement.row,
-          column: placementResult.placement.column,
-          imageAssetId: asset.assetId,
-          createdAt: now,
-          updatedAt: now,
-        },
-        asset,
-      );
-      return;
-    }
-
-    // Story 11's TCGdex JSON branch. Story 15 added the unplaced-cards
-    // section's own add button, which reuses this same endpoint but
-    // targets a fully-null placement rather than a real slot - so a
-    // fully-null triple is valid here too (not just a fully-populated
-    // one), matching `resolveCustomCardPlacement`/`validateMovePlacement`'s
-    // existing all-or-none rule instead of `validatePlacement`'s
-    // always-fully-populated one.
-    const body = request.body as CreateCardRequestBody;
-
-    const placementError = validateMovePlacement(body.placement, binder);
-    if (placementError) {
+    if (!uploadedFiles) {
+      // Never expected: the OpenAPI schema only documents a
+      // `multipart/form-data` request body for this endpoint now, so
+      // express-openapi-validator already rejects any other content type
+      // before this handler runs. Guarded defensively regardless.
       response
         .status(400)
         .type('application/problem+json')
-        .json(problem(400, 'Bad Request', placementError));
+        .json(problem(400, 'Bad Request', 'This endpoint requires a multipart/form-data body.'));
       return;
     }
 
-    const artConflict = findArtOccupancyConflict(database, binderId, body.placement);
+    const body = request.body as CreateCustomCardRequestBody;
+    const uploadedFile = uploadedFiles.find((file) => file.fieldname === 'image');
+    if (!uploadedFile) {
+      // Never expected: the OpenAPI schema requires `image`, so
+      // express-openapi-validator already rejects a request missing it
+      // before this handler runs. Guarded defensively regardless.
+      removeTemporaryUploads(uploadedFiles);
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(problem(400, 'Bad Request', 'A custom card requires an image file.'));
+      return;
+    }
+
+    const placementResult = resolveCustomCardPlacement(body, binder);
+    if ('error' in placementResult) {
+      removeTemporaryUploads(uploadedFiles);
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(problem(400, 'Bad Request', placementResult.error));
+      return;
+    }
+
+    const artConflict = findArtOccupancyConflict(database, binderId, placementResult.placement);
     if (artConflict) {
+      removeTemporaryUploads(uploadedFiles);
       response
         .status(409)
         .type('application/problem+json')
@@ -797,8 +680,217 @@ export function createCardsRouter(
       return;
     }
 
-    // Blank variation input normalizes to null; a nonblank value is trimmed
-    // (planning.md).
+    // Required after trimming (planning.md); the OpenAPI schema's
+    // `minLength: 1` only guards the raw untrimmed value, so a
+    // whitespace-only name still needs this check. The max-length check
+    // below is a backend-validation belt-and-suspenders alongside the
+    // OpenAPI schema's own `maxLength` (planning.md story 12).
+    const name = body.name.trim();
+    if (!name) {
+      removeTemporaryUploads(uploadedFiles);
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(problem(400, 'Bad Request', 'name is required.'));
+      return;
+    }
+    if (name.length > CUSTOM_CARD_NAME_MAX_LENGTH) {
+      removeTemporaryUploads(uploadedFiles);
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          problem(
+            400,
+            'Bad Request',
+            `name must be ${CUSTOM_CARD_NAME_MAX_LENGTH} characters or fewer.`,
+          ),
+        );
+      return;
+    }
+
+    // Optional fields: trimmed, blank stores as null (planning.md).
+    const setName = body.setName?.trim() || null;
+    const localNumber = body.localNumber?.trim() || null;
+    const variation = body.variation?.trim() || null;
+
+    if (setName && setName.length > CUSTOM_CARD_SET_MAX_LENGTH) {
+      removeTemporaryUploads(uploadedFiles);
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          problem(
+            400,
+            'Bad Request',
+            `setName must be ${CUSTOM_CARD_SET_MAX_LENGTH} characters or fewer.`,
+          ),
+        );
+      return;
+    }
+    if (localNumber && localNumber.length > CUSTOM_CARD_NUMBER_MAX_LENGTH) {
+      removeTemporaryUploads(uploadedFiles);
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          problem(
+            400,
+            'Bad Request',
+            `localNumber must be ${CUSTOM_CARD_NUMBER_MAX_LENGTH} characters or fewer.`,
+          ),
+        );
+      return;
+    }
+    if (variation && variation.length > CARD_VARIATION_MAX_LENGTH) {
+      removeTemporaryUploads(uploadedFiles);
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          problem(
+            400,
+            'Bad Request',
+            `variation must be ${CARD_VARIATION_MAX_LENGTH} characters or fewer.`,
+          ),
+        );
+      return;
+    }
+
+    let asset: ResolvedImageAsset;
+    try {
+      asset = resolveCustomImageAsset(database, imagesDirectory, uploadedFile);
+    } catch (error) {
+      if (error instanceof UnsupportedImageFormatError) {
+        response
+          .status(415)
+          .type('application/problem+json')
+          .json(problem(415, 'Unsupported Media Type', error.message));
+        return;
+      }
+      throw error;
+    }
+
+    const now = new Date().toISOString();
+    insertCardAndRespond(
+      response,
+      {
+        id: randomUUID(),
+        binderId,
+        name,
+        setName,
+        localNumber,
+        source: 'custom',
+        providerCardId: null,
+        providerSetId: null,
+        variation,
+        physicalPage: placementResult.placement.physicalPage,
+        row: placementResult.placement.row,
+        column: placementResult.placement.column,
+        imageAssetId: asset.assetId,
+        createdAt: now,
+        updatedAt: now,
+      },
+      asset,
+    );
+  });
+
+  // Per-binder in-flight bulk-request guard (stories 17/18): the frontend
+  // keeps its own Add Card/Add More buttons disabled while a batch is in
+  // flight, but this in-memory set also rejects a genuinely overlapping
+  // request (e.g. a second browser tab targeting the same binder) with
+  // `409 Conflict` instead of racing two batches against the same binder.
+  // Scoped to this router's module-level closure - fine for a local
+  // single-process application with no horizontal scaling.
+  const activeBulkRequestBinderIds = new Set<string>();
+
+  // Runs `task` for every item in `items` with at most `limit` tasks in
+  // flight at once, resolving with results in the same order as `items`
+  // regardless of completion order (planning.md: "Bulk outcome entries
+  // preserve submitted array order regardless of processing completion
+  // order"). A small worker-pool loop over a shared index cursor rather
+  // than an external concurrency-limiting dependency.
+  async function mapWithConcurrencyLimit<T, R>(
+    items: T[],
+    limit: number,
+    task: (item: T, index: number) => Promise<R>,
+  ): Promise<R[]> {
+    const results: R[] = new Array(items.length);
+    let nextIndex = 0;
+
+    async function worker(): Promise<void> {
+      for (;;) {
+        const index = nextIndex++;
+        if (index >= items.length) return;
+        results[index] = await task(items[index]!, index);
+      }
+    }
+
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
+    return results;
+  }
+
+  // One submitted card's independent creation outcome (stories 17/18),
+  // matching the OpenAPI `BulkCardOutcome` schema.
+  type BulkCardOutcome =
+    | { status: 'created'; card: ReturnType<typeof serializeCard> }
+    | { status: 'failed'; problem: ReturnType<typeof problem> };
+
+  // Stories 17/18's bulk TCGdex-card creation endpoint - the sole
+  // TCGdex-card creation path now that the single-card JSON variant of
+  // `POST /binders/{binderId}/cards` above is removed. Each submitted card
+  // is persisted independently (never one all-or-nothing transaction) so a
+  // large selection's partial success is possible; `targetPlacement`, when
+  // supplied, is attempted only for the first array element (used only
+  // when the card-selection modal was opened from an empty binder slot) -
+  // every other element, and the first element when no `targetPlacement`
+  // was supplied, always uses all-null placement (the unplaced-cards
+  // section). Idempotency-key-aware like `POST /art/{artId}/duplicate`
+  // (story 26's pattern): a repeated key within the retention window
+  // replays the stored outcome instead of creating additional cards.
+  router.post('/binders/:binderId/cards/bulk', async (request, response) => {
+    const { binderId } = request.params;
+
+    const idempotencyKey = request.header('Idempotency-Key');
+    if (!idempotencyKey) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(problem(400, 'Bad Request', 'An Idempotency-Key header is required.'));
+      return;
+    }
+
+    const replayed = findIdempotentOutcome(database, 'bulk-create-cards', idempotencyKey);
+    if (replayed) {
+      response.status(replayed.responseStatus).json(replayed.responseBody);
+      return;
+    }
+
+    const binder = database.select().from(binders).where(eq(binders.id, binderId)).get();
+    if (!binder) {
+      response
+        .status(404)
+        .type('application/problem+json')
+        .json(problem(404, 'Not Found', `No binder exists with id "${binderId}".`));
+      return;
+    }
+
+    const body = request.body as BulkCreateCardsRequestBody;
+
+    if (body.targetPlacement) {
+      const placementError = validatePlacement(body.targetPlacement, binder);
+      if (placementError) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(problem(400, 'Bad Request', placementError));
+        return;
+      }
+    }
+
+    // Blank shared variation input normalizes to null; a nonblank value is
+    // trimmed (planning.md), matching every other card-creation endpoint's
+    // own variation handling.
     const variation = body.variation?.trim() || null;
     if (variation && variation.length > CARD_VARIATION_MAX_LENGTH) {
       response
@@ -814,46 +906,126 @@ export function createCardsRouter(
       return;
     }
 
-    const controller = new AbortController();
-    request.on('close', () => controller.abort());
-
-    let asset: ResolvedImageAsset;
-    try {
-      asset = await resolveTcgDexImageAsset(database, imagesDirectory, body, controller.signal);
-    } catch (error) {
-      if (error instanceof TcgDexAbortedError) return;
-      if (error instanceof TcgDexProviderError) {
-        response
-          .status(error.isTimeout ? 504 : 502)
-          .type('application/problem+json')
-          .json(problem(error.isTimeout ? 504 : 502, 'Bad Gateway', error.message));
-        return;
-      }
-      throw error;
+    if (activeBulkRequestBinderIds.has(binderId)) {
+      response
+        .status(409)
+        .type('application/problem+json')
+        .json(
+          problem(
+            409,
+            'Conflict',
+            'Another bulk card-creation request is already running for this binder.',
+          ),
+        );
+      return;
     }
+    activeBulkRequestBinderIds.add(binderId);
 
-    const now = new Date().toISOString();
-    insertCardAndRespond(
-      response,
-      {
-        id: randomUUID(),
-        binderId,
-        name: body.name,
-        setName: body.setName,
-        localNumber: body.localNumber,
-        source: 'tcgdex',
-        providerCardId: body.providerCardId,
-        providerSetId: body.providerSetId,
-        variation,
-        physicalPage: body.placement.physicalPage,
-        row: body.placement.row,
-        column: body.placement.column,
-        imageAssetId: asset.assetId,
-        createdAt: now,
-        updatedAt: now,
-      },
-      asset,
-    );
+    // Deliberately not tied to `request.on('close', ...)`: planning.md
+    // requires that "after the backend accepts a bulk request, client
+    // disconnection does not cancel in-flight or remaining card
+    // processing" - unlike the single-card endpoints above, this batch
+    // keeps running to completion (and its outcome stays idempotency-key
+    // replayable) even if the client goes away. Each TCGdex request is
+    // still bounded by its own TCGDEX_REQUEST_TIMEOUT_MS internally.
+    const neverAbortedSignal = new AbortController().signal;
+
+    try {
+      const outcomes = await mapWithConcurrencyLimit(
+        body.cards,
+        BULK_CARD_CREATE_CONCURRENCY,
+        async (item, index): Promise<BulkCardOutcome> => {
+          // Only the first array element is attempted at the supplied
+          // target placement; every other element - and the first when no
+          // target placement was supplied - lands in the unplaced-cards
+          // section (planning.md).
+          const placement: NullablePlacement =
+            index === 0 && body.targetPlacement
+              ? body.targetPlacement
+              : { physicalPage: null, row: null, column: null };
+
+          if (placement.physicalPage !== null) {
+            const artConflict = findArtOccupancyConflict(database, binderId, placement);
+            if (artConflict) {
+              return { status: 'failed', problem: problem(409, 'Conflict', artConflict) };
+            }
+          }
+
+          let asset: ResolvedImageAsset;
+          try {
+            asset = await resolveTcgDexImageAsset(
+              database,
+              imagesDirectory,
+              item,
+              neverAbortedSignal,
+            );
+          } catch (error) {
+            if (error instanceof TcgDexProviderError) {
+              const status = error.isTimeout ? 504 : 502;
+              return { status: 'failed', problem: problem(status, 'Bad Gateway', error.message) };
+            }
+            throw error;
+          }
+
+          const now = new Date().toISOString();
+          const card = {
+            id: randomUUID(),
+            binderId,
+            name: item.name,
+            setName: item.setName,
+            localNumber: item.localNumber,
+            source: 'tcgdex' as const,
+            providerCardId: item.providerCardId,
+            providerSetId: item.providerSetId,
+            variation,
+            physicalPage: placement.physicalPage,
+            row: placement.row,
+            column: placement.column,
+            imageAssetId: asset.assetId,
+            createdAt: now,
+            updatedAt: now,
+          };
+
+          try {
+            database.insert(cards).values(card).run();
+          } catch (error) {
+            // The image asset row/file this card just created is otherwise
+            // unreferenced once its insert fails, so it's removed rather
+            // than left orphaned (planning.md), mirroring
+            // `insertCardAndRespond`'s own cleanup.
+            if (asset.newlyCreatedFilePath) {
+              unlinkSync(asset.newlyCreatedFilePath);
+              database.delete(cardImageAssets).where(eq(cardImageAssets.id, asset.assetId)).run();
+            }
+            if (isUniqueConstraintError(error)) {
+              return {
+                status: 'failed',
+                problem: problem(
+                  409,
+                  'Conflict',
+                  'Another card already occupies that binder, physical page, row, and column.',
+                ),
+              };
+            }
+            throw error;
+          }
+
+          return { status: 'created', card: serializeCard(card) };
+        },
+      );
+
+      const responseStatus = outcomes.some((outcome) => outcome.status === 'failed') ? 207 : 201;
+
+      saveIdempotentOutcome(database, 'bulk-create-cards', idempotencyKey, {
+        responseStatus,
+        responseBody: outcomes,
+        locationHeader: null,
+      });
+
+      response.status(responseStatus).json(outcomes);
+    } finally {
+      activeBulkRequestBinderIds.delete(binderId);
+    }
   });
 
   // Story 14's card move/swap endpoint (and story 16's variation-update

@@ -29,8 +29,7 @@ agressive use of comments
 Story #26 was wayyyyy tooo big
 
 # Title
-17 Add more cards
-18 Bulk add cards
+
 19 Duplicate a card
 42 Preview binder layout and multi-slot art while editing binder settings
 22 Show binder completion metrics

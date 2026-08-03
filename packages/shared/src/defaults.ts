@@ -156,6 +156,12 @@ export const CARD_VARIATION_MAX_LENGTH = 50;
 // outcome instead of repeating the mutation.
 export const MUTATION_IDEMPOTENCY_RETENTION_MS = 86_400_000; // 24 hours
 
+// Stories 17/18: "Add more cards" / "Bulk add cards". The maximum number of
+// card creations `POST /binders/{binderId}/cards/bulk` processes
+// concurrently for one request - keeps one large selection from opening an
+// unbounded number of simultaneous TCGdex image downloads/database writes.
+export const BULK_CARD_CREATE_CONCURRENCY = 5;
+
 // Story 20: "Add a binder preview". The reusable binder-details form's
 // `previewPhysicalPage` field defaults to physical page 2 (the binder's
 // first two-page spread) for a newly created binder. The backend also

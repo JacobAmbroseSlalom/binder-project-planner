@@ -36,10 +36,11 @@ export type CreateBinderRequest = components['schemas']['CreateBinderRequest'];
 export type UpdateBinderRequest = components['schemas']['UpdateBinderRequest'];
 export type Card = components['schemas']['Card'];
 export type TcgDexCatalogCard = components['schemas']['TcgDexCatalogCard'];
-export type CreateCardRequest = components['schemas']['CreateCardRequest'];
 export type CardSearchLanguage = components['schemas']['CardSearchLanguage'];
 export type CardSearchResponse = components['schemas']['CardSearchResponse'];
 export type CardPositionUpdate = components['schemas']['CardPositionUpdate'];
+export type BulkTargetPlacement = components['schemas']['BulkTargetPlacement'];
+export type BulkCardOutcome = components['schemas']['BulkCardOutcome'];
 export type Art = components['schemas']['Art'];
 export type PlacementCoordinates = components['schemas']['PlacementCoordinates'];
 export type BinderPreviewSpread = components['schemas']['BinderPreviewSpread'];
@@ -258,13 +259,29 @@ export async function searchCardCatalog(
   return data;
 }
 
-// Assigns a TCGdex catalog card to a binder slot through
-// `POST /binders/{binderId}/cards` (story 11). Throws the Problem Details
-// body on failure so the caller can roll back its optimistic update and
-// surface the error via `toProblemDetailsInfo`.
-export async function createCard(binderId: string, request: CreateCardRequest): Promise<Card> {
-  const { data, error } = await apiClient.POST('/binders/{binderId}/cards', {
-    params: { path: { binderId } },
+// Creates one or more independent TCGdex cards through
+// `POST /binders/{binderId}/cards/bulk` (stories 17/18) - the sole
+// TCGdex-card creation path; a single selected card is submitted as a
+// one-element `cards` array rather than a separate single-card request.
+// `idempotencyKey` is a client-generated UUID sent as the `Idempotency-Key`
+// header; retrying the same key after a dropped response replays the
+// original outcome instead of creating additional cards, matching the
+// backend's 24-hour mutation-idempotency retention. Throws the Problem
+// Details body only for a request-wide failure (e.g. missing binder,
+// overlapping bulk request, or invalid `targetPlacement`) - per-card
+// failures are reported through the returned outcome array instead, since
+// the backend's `207 Multi-Status` response is still a successful fetch.
+export async function createCardsBulk(
+  binderId: string,
+  request: {
+    cards: TcgDexCatalogCard[];
+    variation?: string | null;
+    targetPlacement?: BulkTargetPlacement;
+  },
+  idempotencyKey: string,
+): Promise<BulkCardOutcome[]> {
+  const { data, error } = await apiClient.POST('/binders/{binderId}/cards/bulk', {
+    params: { path: { binderId }, header: { 'Idempotency-Key': idempotencyKey } },
     body: request,
   });
 

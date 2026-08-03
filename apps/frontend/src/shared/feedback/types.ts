@@ -11,6 +11,11 @@ export interface FailedToastDetails {
   detail: string;
   httpStatus?: number;
   problemType?: string;
+  // An optional action button rendered alongside the dismiss control
+  // (stories 17/18: a bulk card-add partial failure's toast includes a
+  // "View details" action opening the failure-details modal). Omitted by
+  // every other failed toast, which shows only the dismiss button.
+  action?: { label: string; onClick: () => void };
 }
 
 // One toast entry, keyed by its mutation's operation id so concurrent

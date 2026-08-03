@@ -73,28 +73,85 @@ const FOCUSABLE_SELECTOR =
 // triggering slot button below.
 export function CardSelectionModal({
   onClose,
-  onSelectCard,
+  initialTarget,
+  onAddCards,
+  onAddMoreCards,
   onSubmitCustomCard,
+  onSubmitCustomCardAddMore,
+  isBulkAddPending,
   initialManualEntry,
+  initialSelectionRestore,
 }: {
   onClose: () => void;
-  // Called with the chosen catalog card immediately on "Add Card" - the
-  // caller (BinderLayoutView, via the route context's `assignCard`) owns
-  // the actual optimistic-update/request lifecycle from that point on, so
-  // this modal closes right away rather than waiting on the assignment.
-  // `variation` (story 16) is the trimmed value of this modal's shared
-  // variation field, or `null` if left blank.
-  onSelectCard: (card: TcgDexCatalogCard, variation: string | null) => void;
-  // Called with the manual-entry form's values and selected file
-  // immediately on submit (story 12) - like `onSelectCard`, the caller owns
-  // the optimistic-update/request lifecycle from here, closing this modal
-  // right away rather than waiting on the multipart request.
-  onSubmitCustomCard: (values: CustomCardFormValues, file: File) => void;
+  // The slot (or unplaced-panel target) this modal session originally
+  // opened for (stories 11, 15). This modal - not its caller - owns the
+  // "only the session's first submission may use this target" rule (story
+  // 17: "every later submission in the same session adds to the unplaced
+  // section, even if the first submission's slot placement failed"), via
+  // `hasSubmittedRef` below, since that rule spans both the search view's
+  // Add Card/Add More and the manual-entry view's Add Card/Add More.
+  initialTarget: { physicalPage: number | null; row: number | null; column: number | null };
+  // Called with the full checkbox selection on "Add Card" (stories 17/18,
+  // replacing the old single-card `onSelectCard`) - the caller
+  // (BinderLayoutView, via the route context's `assignCards`) owns the
+  // optimistic-update/request lifecycle and closes this modal right away,
+  // so this fires-and-forgets rather than awaiting settlement.
+  // `targetPlacement` is this session's resolved target (see
+  // `initialTarget` above), already `null` if this is a later submission
+  // in the session. `variation` (story 16) is the trimmed value of this
+  // modal's shared variation field, or `null` if left blank.
+  onAddCards: (
+    cards: TcgDexCatalogCard[],
+    variation: string | null,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ) => void;
+  // Called with the full checkbox selection on "Add More" (story 18) -
+  // unlike `onAddCards`, this modal awaits the returned promise so it can
+  // decide whether to clear its own query/results/selection/variation
+  // (only on complete success) or retain them for correction (on any
+  // failure), and keeps this session open rather than closing it.
+  onAddMoreCards: (
+    cards: TcgDexCatalogCard[],
+    variation: string | null,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ) => Promise<boolean>;
+  // Called with the manual-entry form's values, selected file, and this
+  // session's resolved target on "Add Card" (story 12) - like
+  // `onAddCards`, the caller owns the lifecycle from here and this modal
+  // closes right away.
+  onSubmitCustomCard: (
+    values: CustomCardFormValues,
+    file: File,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ) => void;
+  // The manual-entry view's own "Add More" (story 18), mirroring
+  // `onAddMoreCards`: awaited so the form only clears (and its file input
+  // resets) on success, keeping the entered values/file for correction on
+  // failure.
+  onSubmitCustomCardAddMore: (
+    values: CustomCardFormValues,
+    file: File,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ) => Promise<boolean>;
+  // True while a bulk card-add request is in flight for this binder
+  // (stories 17/18's per-binder overlapping-request guard, mirrored
+  // client-side) - disables Select All, every result checkbox, and both
+  // Add Card/Add More buttons in the search view until it settles.
+  isBulkAddPending: boolean;
   // Set only when this modal is being reopened to let the user correct a
   // custom card whose submission just failed (story 12): seeds the
   // manual-entry view (rather than the search view) with the previously
   // entered text values and selected file, instead of starting blank.
   initialManualEntry?: { values: CustomCardFormValues; file: File };
+  // Set only when this modal is being reopened after an Add-Card TCGdex
+  // submission had a failed card (story 17): seeds the search view's
+  // selection and shared variation field from the failed attempt, so the
+  // user can correct/retry just the cards that failed rather than losing
+  // the whole batch. The failed cards' own data isn't re-seeded into
+  // `results` directly - the existing remembered-query search effect below
+  // re-fetches the same results these selections came from, and this
+  // restore's ids simply arrive pre-checked among them.
+  initialSelectionRestore?: { cards: TcgDexCatalogCard[]; variation: string | null };
 }) {
   const { markFailed, dismiss } = useToastContext();
   // Story 41's language toggle lives in the route context (rather than as
@@ -123,7 +180,15 @@ export function CardSelectionModal({
   // qualifying search or while a search is loading") so an empty initial
   // state or an empty in-flight state never renders it.
   const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
-  const [selectedCard, setSelectedCard] = useState<TcgDexCatalogCard | null>(null);
+  // Stories 17/18: a set of `providerCardId`s (rather than a single
+  // selected card) - checkbox multi-select replaces story 11's exclusive
+  // single-select. Seeded from `initialSelectionRestore` (if this modal is
+  // reopening after a failed Add-Card submission) so the failed cards
+  // arrive pre-checked once the remembered-query search effect below
+  // re-fetches them.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(
+    () => new Set((initialSelectionRestore?.cards ?? []).map((card) => card.providerCardId)),
+  );
   // Story 16: a single shared field for the selected/created card's
   // variation, used by both the search view (TCGdex selection) and the
   // manual-entry view - the story's acceptance criteria describe one
@@ -131,7 +196,26 @@ export function CardSelectionModal({
   // `useState` (not React Hook Form-managed like the manual form's other
   // fields) since it applies identically regardless of which view is
   // showing.
-  const [variation, setVariation] = useState(initialManualEntry?.values.variation ?? '');
+  const [variation, setVariation] = useState(
+    initialManualEntry?.values.variation ?? initialSelectionRestore?.variation ?? '',
+  );
+  // Story 18's Add-More flow: tracked locally (rather than through the
+  // shared `isBulkAddPending` context flag) so an Add-More submission
+  // disables this modal's own controls while awaited, independent of
+  // whatever other pending state the binder context tracks.
+  const [isAddMoreSubmitting, setIsAddMoreSubmitting] = useState(false);
+  // Mirrors `isAddMoreSubmitting` for the manual-entry view's own Add More
+  // (story 18) - a separate flag since the two views' submissions are
+  // mutually exclusive but not the same request type.
+  const [isCustomAddMoreSubmitting, setIsCustomAddMoreSubmitting] = useState(false);
+  // Story 17's session-scoped slot-consumption tracking: `true` once any
+  // submission (Add Card or Add More, from either view) has been made in
+  // this modal session, regardless of outcome - every later submission
+  // targets the unplaced section instead of `initialTarget`, even if the
+  // very first submission's own slot placement ultimately failed. A ref
+  // (not state) since it's read only inside event handlers, never
+  // rendered.
+  const hasSubmittedRef = useRef(false);
 
   // Story 12's manual-entry view: replaces the search content in place
   // (never a nested modal) rather than being a separate component
@@ -335,9 +419,89 @@ export function CardSelectionModal({
     }
   }
 
-  function handleAddCard() {
-    if (!selectedCard) return;
-    onSelectCard(selectedCard, variation.trim() || null);
+  // Resolves this session's target placement for the *next* submission
+  // (story 17): the original `initialTarget` only for the session's first
+  // submission (whichever view/button makes it), `null` (unplaced) for
+  // every later one - see `hasSubmittedRef`'s own doc comment above.
+  function resolveTargetPlacement(): {
+    physicalPage: number;
+    row: number;
+    column: number;
+  } | null {
+    if (hasSubmittedRef.current) return null;
+    if (initialTarget.physicalPage === null) return null;
+    return {
+      physicalPage: initialTarget.physicalPage,
+      row: initialTarget.row as number,
+      column: initialTarget.column as number,
+    };
+  }
+
+  // The currently checked results, in the same order they're displayed -
+  // both `onAddCards`/`onAddMoreCards` calls below and the slot-targeting
+  // rule above treat this array's first entry as "the" card eligible for
+  // `initialTarget`.
+  const selectedResults = results.filter((card) => selectedIds.has(card.providerCardId));
+
+  function toggleSelected(providerCardId: string) {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(providerCardId)) {
+        next.delete(providerCardId);
+      } else {
+        next.add(providerCardId);
+      }
+      return next;
+    });
+  }
+
+  // Story 18: toggles between selecting every currently loaded result and
+  // clearing the selection entirely, rather than two separate buttons.
+  const allResultsSelected =
+    results.length > 0 && results.every((card) => selectedIds.has(card.providerCardId));
+  function handleToggleSelectAll() {
+    setSelectedIds(
+      allResultsSelected ? new Set() : new Set(results.map((card) => card.providerCardId)),
+    );
+  }
+
+  // "Add Card" (stories 17/18): fires-and-forgets the full checkbox
+  // selection - the caller closes this modal right away, so there's
+  // nothing further for this handler to await.
+  function handleAddCards() {
+    if (selectedResults.length === 0) return;
+    const targetPlacement = resolveTargetPlacement();
+    hasSubmittedRef.current = true;
+    onAddCards(selectedResults, variation.trim() || null, targetPlacement);
+  }
+
+  // "Add More" (story 18): keeps this modal open, awaiting settlement so
+  // the query/results/selection/variation only clear on complete success -
+  // any failure (partial or complete) leaves them in place for correction,
+  // matching planning.md's Add-More acceptance criteria.
+  async function handleAddMoreCards() {
+    if (selectedResults.length === 0 || isAddMoreSubmitting) return;
+    const targetPlacement = resolveTargetPlacement();
+    hasSubmittedRef.current = true;
+    setIsAddMoreSubmitting(true);
+    try {
+      const allSucceeded = await onAddMoreCards(
+        selectedResults,
+        variation.trim() || null,
+        targetPlacement,
+      );
+      if (allSucceeded) {
+        setQuery('');
+        setDebouncedQuery('');
+        setResults([]);
+        setHasCompletedSearch(false);
+        setSelectedIds(new Set());
+        setVariation('');
+        searchInputRef.current?.focus();
+      }
+    } finally {
+      setIsAddMoreSubmitting(false);
+    }
   }
 
   // Switches from the search view to the manual-entry view in place
@@ -382,8 +546,8 @@ export function CardSelectionModal({
     }
   }
 
-  // Submits the manual-entry form (story 12). A file is required
-  // independently of the RHF/Zod-validated text fields (see
+  // Submits the manual-entry form's "Add Card" (story 12). A file is
+  // required independently of the RHF/Zod-validated text fields (see
   // `manualCardSchema.ts`'s comment), so it's checked here rather than
   // through the form's own validation.
   const handleManualSubmit = manualForm.handleSubmit((values) => {
@@ -391,6 +555,8 @@ export function CardSelectionModal({
       setFileError('An image is required.');
       return;
     }
+    const targetPlacement = resolveTargetPlacement();
+    hasSubmittedRef.current = true;
     onSubmitCustomCard(
       {
         name: values.name,
@@ -399,7 +565,43 @@ export function CardSelectionModal({
         variation: variation.trim() || null,
       },
       customCardFile,
+      targetPlacement,
     );
+  });
+
+  // The manual-entry view's own "Add More" (story 18), mirroring
+  // `handleAddMoreCards`: awaited so the form (and its selected file) only
+  // clears on complete success, keeping everything in place for
+  // correction on failure.
+  const handleManualAddMore = manualForm.handleSubmit(async (values) => {
+    if (!customCardFile) {
+      setFileError('An image is required.');
+      return;
+    }
+    if (isCustomAddMoreSubmitting) return;
+    const targetPlacement = resolveTargetPlacement();
+    hasSubmittedRef.current = true;
+    setIsCustomAddMoreSubmitting(true);
+    try {
+      const succeeded = await onSubmitCustomCardAddMore(
+        {
+          name: values.name,
+          setName: values.setName.trim() || null,
+          localNumber: values.localNumber.trim() || null,
+          variation: variation.trim() || null,
+        },
+        customCardFile,
+        targetPlacement,
+      );
+      if (succeeded) {
+        manualForm.reset(defaultManualCardFormValues);
+        setCustomCardFile(null);
+        setVariation('');
+        setFileError(undefined);
+      }
+    } finally {
+      setIsCustomAddMoreSubmitting(false);
+    }
   });
 
   return (
@@ -418,7 +620,7 @@ export function CardSelectionModal({
         onClick={(event) => event.stopPropagation()}
         onKeyDown={handleKeyDown}
         onPaste={handlePaste}
-        className="flex h-full max-h-[40rem] w-full max-w-3xl flex-col gap-4 rounded-standard bg-surface p-6 shadow-modal"
+        className="flex h-full max-h-[52rem] w-full max-w-5xl flex-col gap-4 rounded-standard bg-surface p-6 shadow-modal"
       >
         {/* A 3-column grid (rather than `justify-between`) so the heading
             can be truly centered on the modal instead of centered only in
@@ -509,6 +711,22 @@ export function CardSelectionModal({
               </p>
             )}
 
+            {/* Stories 17/18: Select All/Deselect All plus a running
+            selection count, replacing story 11's single-select. Disabled
+            whenever there are no loaded results to select, or while a bulk
+            request for this binder is already in flight. */}
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={handleToggleSelectAll}
+                disabled={results.length === 0 || isBulkAddPending || isAddMoreSubmitting}
+                className="cursor-pointer rounded-standard px-2 py-1 font-bold text-primary hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {allResultsSelected ? 'Deselect All' : 'Select All'}
+              </button>
+              <span className="text-caption text-neutral-500">{selectedIds.size} selected</span>
+            </div>
+
             <div
               ref={scrollContainerRef}
               onScroll={(event) => {
@@ -546,12 +764,13 @@ export function CardSelectionModal({
                       }}
                     >
                       {rows[virtualRow.index].map((card) => {
-                        const isSelected = selectedCard?.providerCardId === card.providerCardId;
+                        const isSelected = selectedIds.has(card.providerCardId);
                         return (
                           <button
                             key={card.providerCardId}
                             type="button"
-                            onClick={() => setSelectedCard(card)}
+                            onClick={() => toggleSelected(card.providerCardId)}
+                            disabled={isBulkAddPending || isAddMoreSubmitting}
                             aria-pressed={isSelected}
                             // `self-start` guards against the grid default
                             // (`stretch`) if a row ever contains cards of
@@ -562,7 +781,11 @@ export function CardSelectionModal({
                             // would otherwise size the column to fit the
                             // truncated (nowrap) text's full unwrapped width
                             // and cause horizontal overflow/scrolling.
-                            className={`flex min-w-0 flex-col items-center gap-1 self-start rounded-standard border p-2 text-center hover:brightness-110 ${
+                            // Selection is indicated solely by the border/
+                            // background treatment below (stories 17/18) -
+                            // no separate checkbox glyph is overlaid on the
+                            // tile.
+                            className={`flex min-w-0 flex-col items-center gap-1 self-start rounded-standard border p-2 text-center hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
                               isSelected
                                 ? 'border-primary bg-neutral-800'
                                 : 'border-neutral-700 bg-neutral-800'
@@ -663,23 +886,46 @@ export function CardSelectionModal({
               Cancel
             </button>
             {viewMode === 'search' ? (
-              <button
-                type="button"
-                disabled={!selectedCard}
-                onClick={handleAddCard}
-                className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Add Card
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={selectedResults.length === 0 || isBulkAddPending || isAddMoreSubmitting}
+                  onClick={handleAddMoreCards}
+                  className="cursor-pointer rounded-standard border border-primary px-4 py-2 font-bold text-primary hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {/* Pluralized once more than one result is checked (stories
+                  17/18's multi-select), so the label reflects the actual
+                  number of cards the click will submit. */}
+                  {selectedResults.length > 1 ? 'Add More Cards' : 'Add More'}
+                </button>
+                <button
+                  type="button"
+                  disabled={selectedResults.length === 0 || isBulkAddPending || isAddMoreSubmitting}
+                  onClick={handleAddCards}
+                  className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {selectedResults.length > 1 ? 'Add Cards' : 'Add Card'}
+                </button>
+              </>
             ) : (
-              <button
-                type="button"
-                disabled={!customCardFile}
-                onClick={handleManualSubmit}
-                className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                Add Card
-              </button>
+              <>
+                <button
+                  type="button"
+                  disabled={!customCardFile || isCustomAddMoreSubmitting}
+                  onClick={handleManualAddMore}
+                  className="cursor-pointer rounded-standard border border-primary px-4 py-2 font-bold text-primary hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add More
+                </button>
+                <button
+                  type="button"
+                  disabled={!customCardFile || isCustomAddMoreSubmitting}
+                  onClick={handleManualSubmit}
+                  className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  Add Card
+                </button>
+              </>
             )}
           </div>
         </div>

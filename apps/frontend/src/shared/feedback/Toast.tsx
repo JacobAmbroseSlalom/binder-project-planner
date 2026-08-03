@@ -48,6 +48,15 @@ export function Toast({ toast, onDismiss }: ToastProps) {
     >
       <CircleAlert className="size-5" />
       <span>{toast.detail}</span>
+      {toast.action && (
+        <button
+          type="button"
+          onClick={toast.action.onClick}
+          className="ml-2 cursor-pointer font-bold underline hover:no-underline"
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
         type="button"
         aria-label="Dismiss"

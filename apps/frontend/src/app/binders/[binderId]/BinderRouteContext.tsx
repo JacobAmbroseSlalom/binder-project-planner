@@ -9,7 +9,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 
 import {
   createArt as createArtRequest,
-  createCard,
+  createCardsBulk,
   createCustomCard,
   deleteArt as deleteArtRequest,
   deleteCard,
@@ -26,7 +26,7 @@ import {
   type Card,
   type CardPositionUpdate,
   type CardSearchLanguage,
-  type CreateCardRequest,
+  type TcgDexCatalogCard,
   type PlacementCoordinates,
 } from '@/lib/api';
 import {
@@ -71,6 +71,46 @@ export interface ManualEntryRestore {
   placement: { physicalPage: number; row: number; column: number } | null;
   values: CustomCardFormValues;
   file: File;
+}
+
+// One failed card from the most recent bulk-add batch (stories 17/18),
+// preserved for the failure-details modal's per-card listing and the
+// shared failed toast's "View details" action.
+export interface BulkAddFailedCard {
+  card: TcgDexCatalogCard;
+  detail: string;
+  httpStatus?: number;
+  problemType?: string;
+  // The target placement this specific card was attempted at, or `null`
+  // if it was submitted to the unplaced section - only ever populated for
+  // the batch's first entry (the only one eligible for a real slot
+  // target; see `assignCards`'s doc comment below).
+  targetPlacement: { physicalPage: number; row: number; column: number } | null;
+}
+
+// The most recent bulk-add batch's unresolved failure summary (stories
+// 17/18), surfaced through the shared failed toast's "View details" action
+// and the `BulkAddFailuresModal`. `null` whenever there's no unresolved
+// batch failure to show - cleared by `clearBulkAddFailure` (dismiss) or by
+// `retryFailedBulkCards`, which clears it immediately (before the retry
+// request even settles), since Retry All Failed always closes the details
+// modal right away.
+export interface BulkAddFailure {
+  items: BulkAddFailedCard[];
+  variation: string | null;
+}
+
+// A one-shot signal set by `assignCards` when an Add-Card (closes-
+// immediately) bulk submission has any failed card (story 17), mirroring
+// `ManualEntryRestore`'s "reopen pre-filled" behavior: the layout tab
+// reopens the card-selection modal pre-filled with just the failed cards'
+// selection and shared variation, rather than losing the whole batch to a
+// background toast alone. Never set for an Add-More submission, since that
+// view stays open on its own and needs no restore signal.
+export interface BulkSelectionRestore {
+  placement: { physicalPage: number; row: number; column: number } | null;
+  cards: TcgDexCatalogCard[];
+  variation: string | null;
 }
 
 // The create-art modal's non-image field values (story 25) - excludes the
@@ -143,24 +183,66 @@ interface BinderRouteContextValue {
   // needing to reload binder data.
   layoutFocalPage: number | null;
   setLayoutFocalPage: (page: number) => void;
-  // Assigns a TCGdex catalog card to a binder slot (story 11): inserts an
-  // optimistic `Card` immediately (so the slot shows the card without
-  // waiting on the request), then replaces it with the backend's
-  // authoritative representation on success, or removes it (restoring the
-  // empty slot) and surfaces the shared failed toast on failure.
-  assignCard: (request: CreateCardRequest) => void;
+  // Submits one or more selected TCGdex catalog cards to a binder slot, or
+  // to the unplaced section if `targetPlacement` is `null` (stories 11, 17,
+  // 18 - the sole TCGdex-card assignment path; a single-card selection is
+  // just a one-element array). Inserts an optimistic `Card` per selected
+  // card immediately, then replaces or removes each one individually as
+  // the bulk endpoint's per-card outcomes come back. Only the array's
+  // first element is ever attempted at `targetPlacement`; every other
+  // element - and the first when `targetPlacement` is itself `null` -
+  // lands in the unplaced section, matching the backend bulk endpoint's
+  // own slot-targeting rule. `reopenOnFailure` is `true` only for an
+  // Add-Card (closes-immediately) submission (story 17): if any card
+  // fails, it seeds `bulkSelectionRestore` so the layout tab can reopen the
+  // modal pre-filled, mirroring `assignCustomCard`'s `manualEntryRestore`.
+  // Returns whether every card in the batch succeeded, so an Add-More
+  // submission can await it to decide whether to clear its own search
+  // state.
+  assignCards: (
+    cards: TcgDexCatalogCard[],
+    variation: string | null,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+    reopenOnFailure: boolean,
+  ) => Promise<boolean>;
+  // True while a bulk card-add request is in flight for this binder (story
+  // 18's per-binder overlapping-request guard mirrored client-side): the
+  // layout tab disables Select All/checkboxes/Add Card/Add More until it
+  // settles, matching the backend's own 409 rejection of an overlapping
+  // request.
+  isBulkAddPending: boolean;
+  // The most recent bulk-add batch's unresolved failure summary (stories
+  // 17/18), or `null`. Surfaced by the shared failed toast's "View
+  // details" action and the `BulkAddFailuresModal`.
+  bulkAddFailure: BulkAddFailure | null;
+  clearBulkAddFailure: () => void;
+  // Resubmits every card from `bulkAddFailure` through `assignCards` and
+  // clears `bulkAddFailure` immediately (story 18: "Retry All Failed
+  // closes the details modal right away and runs the retry in the
+  // background"). If the original slot-targeted card is among the failed
+  // cards, it's resubmitted first at the same target placement; every
+  // other retried card uses an all-null (unplaced) placement.
+  retryFailedBulkCards: () => void;
+  // Set only by `assignCards` when an Add-Card submission fails (story
+  // 17), mirroring `manualEntryRestore`. Consumed exactly once via
+  // `clearBulkSelectionRestore`.
+  bulkSelectionRestore: BulkSelectionRestore | null;
+  clearBulkSelectionRestore: () => void;
   // Assigns a manually-entered custom card to a binder slot (story 12),
-  // mirroring `assignCard`'s optimistic-insert/replace-or-remove lifecycle.
-  // `placement` is `null` for an unplaced-section target (story 15's panel
-  // add button).
+  // mirroring `assignCards`'s optimistic-insert/replace-or-remove
+  // lifecycle. `placement` is `null` for an unplaced-section target
+  // (story 15's panel add button). Returns whether the submission
+  // succeeded, so an Add-More custom-card submission can await it to
+  // decide whether to clear its own form state (story 17/18).
   assignCustomCard: (
     values: CustomCardFormValues,
     file: File,
     placement: { physicalPage: number; row: number; column: number } | null,
-  ) => void;
+    reopenOnFailure: boolean,
+  ) => Promise<boolean>;
   // The set of optimistic card ids for a card currently being created
   // directly into the unplaced section (story 15) - either through
-  // `assignCard` or `assignCustomCard` with an all-null placement target -
+  // `assignCards` or `assignCustomCard` with an all-null placement target -
   // so the unplaced panel can disable that one pending card's own actions
   // until its create request settles. Keyed by id (not `placementKey`,
   // which needs concrete coordinates that an unplaced card never has).
@@ -347,6 +429,17 @@ export function BinderRouteProvider({
   // comment above) - `null` whenever there's no failed custom-card
   // submission awaiting correction.
   const [manualEntryRestore, setManualEntryRestore] = useState<ManualEntryRestore | null>(null);
+  // True while a bulk card-add request is in flight for this binder
+  // (stories 17/18) - see the context value's own doc comment above.
+  const [isBulkAddPending, setIsBulkAddPending] = useState(false);
+  // The most recent bulk-add batch's unresolved failure summary (stories
+  // 17/18) - `null` whenever there's no unresolved batch failure to show.
+  const [bulkAddFailure, setBulkAddFailure] = useState<BulkAddFailure | null>(null);
+  // Story 17's one-shot Add-Card restore signal, mirroring
+  // `manualEntryRestore` above.
+  const [bulkSelectionRestore, setBulkSelectionRestore] = useState<BulkSelectionRestore | null>(
+    null,
+  );
   // Story 13's in-flight card removals, by card id - lets the layout tab
   // disable a pending card's own actions until its delete request settles.
   const [pendingCardDeletionIds, setPendingCardDeletionIds] = useState<Set<string>>(new Set());
@@ -442,95 +535,201 @@ export function BinderRouteProvider({
     setRetryToken((token) => token + 1);
   }, []);
 
-  // Assigns a TCGdex catalog card to a binder slot, or to the unplaced
-  // section if `request.placement` is all-null (story 11; unplaced target
-  // added in story 15). A placed target is tracked by `placementKey` (so
-  // the occupied/targeted slot itself can be disabled); an unplaced target
-  // has no slot to disable, so it's tracked by the optimistic card's own id
-  // in `pendingUnplacedCardIds` instead. Uses a synthetic
-  // `crypto.randomUUID()` id for the optimistic card so it can be found and
-  // replaced/removed again once the request settles, without colliding
-  // with any real backend-issued id.
-  const assignCard = useCallback(
-    (request: CreateCardRequest) => {
-      const { physicalPage, row, column } = request.placement;
-      const isPlaced = physicalPage !== null && row !== null && column !== null;
-      const key = isPlaced ? placementKey({ physicalPage, row, column }) : null;
-      const optimisticId = `optimistic-${crypto.randomUUID()}`;
-      const now = new Date().toISOString();
-      const optimisticCard: Card = {
-        id: optimisticId,
-        binderId,
-        name: request.name,
-        setName: request.setName,
-        localNumber: request.localNumber,
-        source: 'tcgdex',
-        providerCardId: request.providerCardId,
-        providerSetId: request.providerSetId,
-        variation: request.variation ?? null,
-        placement: request.placement,
-        // The provider's own image URL stands in until the backend's
-        // representation (pointing at its own `/cards/{cardId}/image`
-        // endpoint) replaces this optimistic entry.
-        imageUrl: request.imageUrl,
-        createdAt: now,
-        updatedAt: now,
-      };
+  // Submits one or more selected TCGdex catalog cards to a binder slot, or
+  // to the unplaced section (stories 11, 17, 18 - see the context value's
+  // own doc comment above for the full contract). Each selected card gets
+  // its own optimistic `Card` up front, independent of the others, since
+  // the backend persists (and can fail) each one independently too. Only
+  // the first entry ever uses `targetPlacement`; every other entry - and
+  // the first when `targetPlacement` is itself `null` - is unplaced.
+  const assignCards = useCallback(
+    (
+      selection: TcgDexCatalogCard[],
+      variation: string | null,
+      targetPlacement: { physicalPage: number; row: number; column: number } | null,
+      reopenOnFailure: boolean,
+    ): Promise<boolean> => {
+      if (selection.length === 0) return Promise.resolve(true);
 
-      setCards((previous) => [...previous, optimisticCard]);
-      if (key) {
-        setPendingPlacementKeys((previous) => new Set(previous).add(key));
-      } else {
-        setPendingUnplacedCardIds((previous) => new Set(previous).add(optimisticId));
+      const idempotencyKey = crypto.randomUUID();
+      const now = new Date().toISOString();
+
+      const entries = selection.map((catalogCard, index) => {
+        const placement =
+          index === 0 && targetPlacement
+            ? targetPlacement
+            : { physicalPage: null, row: null, column: null };
+        const optimisticId = `optimistic-${crypto.randomUUID()}`;
+        const optimisticCard: Card = {
+          id: optimisticId,
+          binderId,
+          name: catalogCard.name,
+          setName: catalogCard.setName,
+          localNumber: catalogCard.localNumber,
+          source: 'tcgdex',
+          providerCardId: catalogCard.providerCardId,
+          providerSetId: catalogCard.providerSetId,
+          variation,
+          placement,
+          // The provider's own image URL stands in until the backend's
+          // representation (pointing at its own `/cards/{cardId}/image`
+          // endpoint) replaces this optimistic entry.
+          imageUrl: catalogCard.imageUrl,
+          createdAt: now,
+          updatedAt: now,
+        };
+        return { catalogCard, optimisticCard, placement };
+      });
+
+      setCards((previous) => [...previous, ...entries.map((entry) => entry.optimisticCard)]);
+      const placedKey = targetPlacement ? placementKey(targetPlacement) : null;
+      if (placedKey) {
+        setPendingPlacementKeys((previous) => new Set(previous).add(placedKey));
+      }
+      setPendingUnplacedCardIds((previous) => {
+        const next = new Set(previous);
+        for (const entry of entries) {
+          if (entry.placement.physicalPage === null) next.add(entry.optimisticCard.id);
+        }
+        return next;
+      });
+      setIsBulkAddPending(true);
+
+      // Shared across every card in the batch (rather than one toast per
+      // card), matching story 18's "one shared saving toast for the whole
+      // batch" requirement.
+      const toast = start(`bulk-add-cards-${idempotencyKey}`);
+
+      function settle() {
+        if (placedKey) {
+          setPendingPlacementKeys((previous) => {
+            const next = new Set(previous);
+            next.delete(placedKey);
+            return next;
+          });
+        }
+        setPendingUnplacedCardIds((previous) => {
+          const next = new Set(previous);
+          for (const entry of entries) next.delete(entry.optimisticCard.id);
+          return next;
+        });
+        setIsBulkAddPending(false);
       }
 
-      const toast = start(key ? `assign-card-${key}` : `assign-card-${optimisticId}`);
+      return createCardsBulk(
+        binderId,
+        {
+          cards: selection.map(
+            ({ name, setName, localNumber, providerCardId, providerSetId, imageUrl }) => ({
+              name,
+              setName,
+              localNumber,
+              providerCardId,
+              providerSetId,
+              imageUrl,
+            }),
+          ),
+          variation,
+          targetPlacement: targetPlacement ?? undefined,
+        },
+        idempotencyKey,
+      )
+        .then((outcomes) => {
+          const failed: BulkAddFailedCard[] = [];
 
-      createCard(binderId, request)
-        .then((created) => {
-          setCards((previous) =>
-            previous.map((card) => (card.id === optimisticId ? created : card)),
-          );
-          toast.markSaved();
-        })
-        .catch((error) => {
-          setCards((previous) => previous.filter((card) => card.id !== optimisticId));
-          toast.markFailed(error);
-        })
-        .finally(() => {
-          if (key) {
-            setPendingPlacementKeys((previous) => {
-              const next = new Set(previous);
-              next.delete(key);
-              return next;
+          setCards((previous) => {
+            let next = previous;
+            outcomes.forEach((outcome, index) => {
+              const entry = entries[index]!;
+              if (outcome.status === 'created' && outcome.card) {
+                const created = outcome.card;
+                next = next.map((existing) =>
+                  existing.id === entry.optimisticCard.id ? created : existing,
+                );
+              } else {
+                next = next.filter((existing) => existing.id !== entry.optimisticCard.id);
+                failed.push({
+                  card: entry.catalogCard,
+                  detail: outcome.problem?.detail ?? 'This card failed to save.',
+                  httpStatus: outcome.problem?.status,
+                  problemType: outcome.problem?.type,
+                  targetPlacement:
+                    entry.placement.physicalPage !== null
+                      ? (entry.placement as { physicalPage: number; row: number; column: number })
+                      : null,
+                });
+              }
             });
-          } else {
-            setPendingUnplacedCardIds((previous) => {
-              const next = new Set(previous);
-              next.delete(optimisticId);
-              return next;
+            return next;
+          });
+
+          settle();
+
+          if (failed.length === 0) {
+            toast.markSaved();
+            return true;
+          }
+
+          const successCount = outcomes.length - failed.length;
+          markFailed(toast.operationId, {
+            detail: `Added ${successCount} card${successCount === 1 ? '' : 's'}; ${failed.length} card${failed.length === 1 ? '' : 's'} failed to save.`,
+            action: {
+              label: 'View details',
+              onClick: () => setBulkAddFailure({ items: failed, variation }),
+            },
+          });
+          setBulkAddFailure({ items: failed, variation });
+          if (reopenOnFailure) {
+            setBulkSelectionRestore({
+              placement: targetPlacement,
+              cards: failed.map((item) => item.card),
+              variation,
             });
           }
+          return false;
+        })
+        .catch((error) => {
+          // A request-wide failure (e.g. a network error, or a 4xx/5xx
+          // rejecting the whole batch before any per-card outcome exists) -
+          // every optimistic card in this batch is rolled back, not just
+          // some of them.
+          setCards((previous) =>
+            previous.filter(
+              (card) => !entries.some((entry) => entry.optimisticCard.id === card.id),
+            ),
+          );
+          settle();
+          toast.markFailed(error);
+          if (reopenOnFailure) {
+            setBulkSelectionRestore({ placement: targetPlacement, cards: selection, variation });
+          }
+          return false;
         });
     },
-    [binderId, start],
+    [binderId, start, markFailed],
   );
 
   // Assigns a manually-entered custom card to a binder slot (story 12).
-  // Mirrors `assignCard`'s optimistic lifecycle, but creates its own
+  // Mirrors `assignCards`'s optimistic lifecycle, but creates its own
   // object-URL preview from the uploaded `file` for the optimistic card's
   // `imageUrl` (independent of the card-selection modal's own preview
   // object URL - each owns and revokes its own). Revoking it
   // unconditionally in `.finally()` is safe either way: by the time
   // `.finally()` runs, the `.then()`/`.catch()` above has already replaced
   // or removed the optimistic card from `cards`, so nothing continues to
-  // reference this URL regardless of outcome.
+  // reference this URL regardless of outcome. `reopenOnFailure` mirrors
+  // `assignCards`'s own parameter (story 17): `true` only for an Add-Card
+  // (closes-immediately) submission, so an Add-More custom-card submission
+  // - whose view stays open on its own - never sets `manualEntryRestore`.
+  // Returns whether the submission succeeded, so an Add-More caller can
+  // await it to decide whether to clear its own form state.
   const assignCustomCard = useCallback(
     (
       values: CustomCardFormValues,
       file: File,
       placement: { physicalPage: number; row: number; column: number } | null,
-    ) => {
+      reopenOnFailure: boolean,
+    ): Promise<boolean> => {
       const key = placement ? placementKey(placement) : `unplaced-${crypto.randomUUID()}`;
       const optimisticId = `optimistic-${crypto.randomUUID()}`;
       const previewUrl = URL.createObjectURL(file);
@@ -560,12 +759,13 @@ export function BinderRouteProvider({
 
       const toast = start(`assign-custom-card-${key}`);
 
-      createCustomCard(binderId, { ...values, placement, image: file })
+      return createCustomCard(binderId, { ...values, placement, image: file })
         .then((created) => {
           setCards((previous) =>
             previous.map((card) => (card.id === optimisticId ? created : card)),
           );
           toast.markSaved();
+          return true;
         })
         .catch((error) => {
           setCards((previous) => previous.filter((card) => card.id !== optimisticId));
@@ -573,8 +773,9 @@ export function BinderRouteProvider({
           // can reopen the modal pre-filled (see `ManualEntryRestore`'s doc
           // comment above) instead of the user having to re-enter
           // everything.
-          setManualEntryRestore({ placement, values, file });
+          if (reopenOnFailure) setManualEntryRestore({ placement, values, file });
           toast.markFailed(error);
+          return false;
         })
         .finally(() => {
           URL.revokeObjectURL(previewUrl);
@@ -601,6 +802,50 @@ export function BinderRouteProvider({
   const clearManualEntryRestore = useCallback(() => {
     setManualEntryRestore(null);
   }, []);
+
+  // Dismisses the bulk-add failure summary without retrying (story 18).
+  const clearBulkAddFailure = useCallback(() => {
+    setBulkAddFailure(null);
+  }, []);
+
+  // Consumed exactly once by the layout tab after it reopens the
+  // card-selection modal pre-filled from `bulkSelectionRestore` (story 17).
+  const clearBulkSelectionRestore = useCallback(() => {
+    setBulkSelectionRestore(null);
+  }, []);
+
+  // Resubmits every failed card from the most recent bulk-add batch
+  // (story 18's "Retry All Failed"). Clears `bulkAddFailure` immediately -
+  // before the retry even starts - since the details modal always closes
+  // right away regardless of the retry's eventual outcome.
+  const retryFailedBulkCards = useCallback(() => {
+    setBulkAddFailure((current) => {
+      if (!current || current.items.length === 0) return current;
+
+      // If the original slot-targeted card is among the failed cards, it's
+      // resubmitted first at the same target placement; every other
+      // retried card - including any that themselves failed at a target
+      // placement, which by construction can only be this same one entry -
+      // uses an all-null (unplaced) placement.
+      const slotTargetedIndex = current.items.findIndex((item) => item.targetPlacement !== null);
+      const orderedItems =
+        slotTargetedIndex > 0
+          ? [
+              current.items[slotTargetedIndex]!,
+              ...current.items.filter((_, index) => index !== slotTargetedIndex),
+            ]
+          : current.items;
+      const targetPlacement = slotTargetedIndex >= 0 ? orderedItems[0]!.targetPlacement : null;
+
+      void assignCards(
+        orderedItems.map((item) => item.card),
+        current.variation,
+        targetPlacement,
+        false,
+      );
+      return null;
+    });
+  }, [assignCards]);
 
   // Creates multi-slot art directly into the unplaced-art section (story
   // 25), mirroring `assignCustomCard`'s optimistic-insert/replace-or-remove
@@ -1084,7 +1329,13 @@ export function BinderRouteProvider({
       updateBinder,
       layoutFocalPage,
       setLayoutFocalPage,
-      assignCard,
+      assignCards,
+      isBulkAddPending,
+      bulkAddFailure,
+      clearBulkAddFailure,
+      retryFailedBulkCards,
+      bulkSelectionRestore,
+      clearBulkSelectionRestore,
       pendingPlacementKeys,
       assignCustomCard,
       pendingUnplacedCardIds,
@@ -1120,7 +1371,13 @@ export function BinderRouteProvider({
     art,
     updateBinder,
     layoutFocalPage,
-    assignCard,
+    assignCards,
+    isBulkAddPending,
+    bulkAddFailure,
+    clearBulkAddFailure,
+    retryFailedBulkCards,
+    bulkSelectionRestore,
+    clearBulkSelectionRestore,
     pendingPlacementKeys,
     assignCustomCard,
     pendingUnplacedCardIds,

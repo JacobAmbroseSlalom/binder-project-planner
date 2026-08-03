@@ -379,21 +379,20 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
     post:
       operationId: createBinderCard
-      summary: Assign a TCGdex or custom card to a binder slot or the unplaced-cards section
+      summary: Assign a manually-entered custom card to a binder slot or the unplaced-cards section
       description: >-
-        Creates a binder-owned card from either a normalized TCGdex catalog
-        result (story 11, `application/json`) or a manually-entered custom
-        card (story 12, `multipart/form-data`) and its target placement, or
-        with a fully-null placement to add it to the unplaced-cards section
-        instead (story 15). The backend assigns the `source` server-side,
-        installs the card's image, and validates a fully-populated
-        placement against the binder's current dimensions.
+        Creates a binder-owned custom card from a manually-entered card
+        (story 12, `multipart/form-data`) and its target placement, or with
+        a fully-null placement to add it to the unplaced-cards section
+        instead (story 15). The backend assigns `source: 'custom'`
+        server-side, installs the uploaded image, and validates a
+        fully-populated placement against the binder's current dimensions.
+        TCGdex-card creation, including for a single selected card, instead
+        uses `POST /binders/{binderId}/cards/bulk` (stories 11, 17, and
+        18); there is no single-card TCGdex JSON variant of this endpoint.
       requestBody:
         required: true
         content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateCardRequest'
           multipart/form-data:
             schema:
               $ref: '#/components/schemas/CreateCustomCardRequest'
@@ -441,14 +440,84 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-        '502':
-          description: The upstream TCGdex image download failed.
+  /binders/{binderId}/cards/bulk:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    post:
+      operationId: createCardsBulk
+      summary: Create one or more independent TCGdex cards in a binder
+      description: >-
+        Creates one or more binder-owned TCGdex cards from an array of
+        normalized catalog search results the user selected (stories 17 and
+        18) - the sole TCGdex-card creation path; a single selected card is
+        submitted as a one-element array rather than a separate single-card
+        request. Each submitted card is persisted independently rather
+        than in one all-or-nothing transaction. When `targetPlacement` is
+        supplied, only the first array element is attempted at that
+        placement (used only when the card-selection modal was opened from
+        an empty binder slot); every other element, and the first element
+        when `targetPlacement` is omitted, uses all-null placement
+        coordinates (the unplaced-cards section). If the first element's
+        placement attempt fails for any reason, no other submitted card
+        claims that slot. Outcomes preserve the submitted array's order
+        regardless of processing completion order. The backend processes
+        at most `BULK_CARD_CREATE_CONCURRENCY` card creations concurrently.
+        Requires a client-generated `Idempotency-Key` header; retrying the
+        same key replays the original outcome instead of creating
+        additional cards, for the shared 24-hour mutation-idempotency
+        retention period. At most one bulk request may run at a time for a
+        given binder.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkCreateCardsRequest'
+      responses:
+        '201':
+          description: Every submitted card was created successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BulkCardOutcome'
+        '207':
+          description: >-
+            One or more submitted cards failed to be created, including a
+            batch in which every card failed. The response body still
+            contains an outcome entry for every submitted card.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BulkCardOutcome'
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, the
+            Idempotency-Key header is missing, the request body did not
+            match the documented schema, or `targetPlacement` is not valid
+            within the binder's current dimensions.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-        '504':
-          description: The upstream TCGdex image download timed out.
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: Another bulk card-creation request is already running for this binder.
           content:
             application/problem+json:
               schema:
@@ -1579,43 +1648,75 @@ components:
             Pokémon species name attempt but no matching translation was
             found, so TCGdex was searched using the original entered query
             instead.
-    CreateCardRequest:
+    BulkTargetPlacement:
       type: object
       additionalProperties: false
       description: >-
-        Creates a TCGdex-sourced binder card (story 11). The backend does
-        not refetch card details before saving; it assigns `source`
-        server-side and downloads the image from `imageUrl` itself.
+        A fully-populated one-based physical page, row, and column
+        (stories 17/18) - unlike `PlacementCoordinates`, never null,
+        since `BulkCreateCardsRequest` simply omits this property entirely
+        for a session that targets the unplaced-cards section instead of a
+        real slot.
       required:
-        - name
-        - setName
-        - localNumber
-        - providerCardId
-        - providerSetId
-        - imageUrl
-        - placement
+        - physicalPage
+        - row
+        - column
       properties:
-        name:
-          type: string
-        setName:
-          type: string
-          nullable: true
-        localNumber:
-          type: string
-          nullable: true
-        providerCardId:
-          type: string
-        providerSetId:
-          type: string
-        imageUrl:
-          type: string
-          format: uri
+        physicalPage:
+          type: integer
+          minimum: 1
+        row:
+          type: integer
+          minimum: 1
+        column:
+          type: integer
+          minimum: 1
+    BulkCreateCardsRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `POST /binders/{binderId}/cards/bulk`'s request body (stories 17
+        and 18): the checked subset of a TCGdex catalog search, in
+        search-result order, plus one optional shared variation applied to
+        every created card and one optional target placement applied only
+        to the first array element.
+      required:
+        - cards
+      properties:
+        cards:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TcgDexCatalogCard'
         variation:
           type: string
           maxLength: 50
           nullable: true
-        placement:
-          $ref: '#/components/schemas/PlacementCoordinates'
+        targetPlacement:
+          $ref: '#/components/schemas/BulkTargetPlacement'
+    BulkCardOutcome:
+      type: object
+      additionalProperties: false
+      description: >-
+        One submitted card's independent creation outcome (stories 17 and
+        18), preserving the submitted array's order regardless of
+        processing completion order.
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          enum:
+            - created
+            - failed
+        card:
+          description: Present only when `status` is `created`.
+          allOf:
+            - $ref: '#/components/schemas/Card'
+        problem:
+          description: Present only when `status` is `failed`.
+          allOf:
+            - $ref: '#/components/schemas/ProblemDetails'
     CreateCustomCardRequest:
       type: object
       additionalProperties: false

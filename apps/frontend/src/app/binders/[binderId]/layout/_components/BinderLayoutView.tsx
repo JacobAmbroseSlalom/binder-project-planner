@@ -41,6 +41,7 @@ import { CreateArtModal } from './art/CreateArtModal';
 import { PrintArtModal } from './art/PrintArtModal';
 import { UnplacedArtPanel } from './art/UnplacedArtPanel';
 import { BinderSide } from './BinderSide';
+import { BulkAddFailuresModal } from './card/BulkAddFailuresModal';
 import { CardSelectionModal } from './card/CardSelectionModal';
 import { EditCardVariationModal } from './card/EditCardVariationModal';
 import { UnplacedCardsPanel } from './card/UnplacedCardsPanel';
@@ -92,7 +93,13 @@ export function BinderLayoutView() {
     setLayoutFocalPage,
     cards,
     pendingPlacementKeys,
-    assignCard,
+    assignCards,
+    isBulkAddPending,
+    bulkAddFailure,
+    clearBulkAddFailure,
+    retryFailedBulkCards,
+    bulkSelectionRestore,
+    clearBulkSelectionRestore,
     assignCustomCard,
     manualEntryRestore,
     clearManualEntryRestore,
@@ -426,6 +433,14 @@ export function BinderLayoutView() {
     file: File;
   } | null>(null);
 
+  // Stories 17/18: the failed TCGdex selection/variation to seed the modal
+  // with, only set while reopening it to correct a failed Add-Card bulk
+  // submission - `null` for a normal (blank) modal open.
+  const [bulkSelectionDraft, setBulkSelectionDraft] = useState<{
+    cards: TcgDexCatalogCard[];
+    variation: string | null;
+  } | null>(null);
+
   // Auto-reopens the card-selection modal, pre-filled, once a custom-card
   // submission fails (story 12). Derived during render (comparing against
   // the last-seen restore signal), matching this file's own
@@ -454,42 +469,73 @@ export function BinderLayoutView() {
     if (manualEntryRestore) clearManualEntryRestore();
   }, [manualEntryRestore, clearManualEntryRestore]);
 
-  // Assigns the chosen catalog card to the currently selected slot (or the
-  // unplaced panel - story 15) and closes the modal immediately -
-  // `selectedSlot` already matches `CreateCardRequest['placement']`'s
-  // nullable-triple shape either way - the route context's `assignCard`
-  // owns the optimistic-update/request lifecycle from here (see
-  // `BinderRouteContext.tsx`). `variation` (story 16) is the modal's
-  // shared variation field's trimmed value, or `null` if left blank.
-  function handleSelectCard(card: TcgDexCatalogCard, variation: string | null) {
-    if (!selectedSlot) return;
-    assignCard({
-      ...card,
-      variation,
-      placement: selectedSlot,
-    });
-    setSelectedSlot(null);
+  // Mirrors the `manualEntryRestore` derivation above, but for an Add-Card
+  // TCGdex bulk submission's failure (story 17).
+  const [lastSeenBulkSelectionRestore, setLastSeenBulkSelectionRestore] =
+    useState(bulkSelectionRestore);
+  if (bulkSelectionRestore !== lastSeenBulkSelectionRestore) {
+    setLastSeenBulkSelectionRestore(bulkSelectionRestore);
+    if (bulkSelectionRestore) {
+      setSelectedSlot(bulkSelectionRestore.placement ?? UNPLACED_SLOT_TARGET);
+      setBulkSelectionDraft({
+        cards: bulkSelectionRestore.cards,
+        variation: bulkSelectionRestore.variation,
+      });
+    }
   }
 
-  // Submits the manual-entry form's custom card to the currently selected
-  // slot or the unplaced panel (story 12; unplaced target added in story
-  // 15) and closes the modal immediately, mirroring `handleSelectCard`
-  // above. `assignCustomCard`'s `placement` parameter is `null` only as a
-  // whole (never partially), so a placed `selectedSlot`'s numeric fields
-  // are passed through together.
-  function handleSubmitCustomCard(values: CustomCardFormValues, file: File) {
-    if (!selectedSlot) return;
-    const placement =
-      selectedSlot.physicalPage !== null
-        ? {
-            physicalPage: selectedSlot.physicalPage,
-            row: selectedSlot.row as number,
-            column: selectedSlot.column as number,
-          }
-        : null;
-    assignCustomCard(values, file, placement);
+  useEffect(() => {
+    if (bulkSelectionRestore) clearBulkSelectionRestore();
+  }, [bulkSelectionRestore, clearBulkSelectionRestore]);
+
+  // "Add Card" for the search view's checkbox selection (stories 17/18,
+  // replacing story 11's single-card `handleSelectCard`): fires-and-forgets
+  // through `assignCards` and closes the modal immediately - the route
+  // context owns the optimistic-update/request lifecycle from here (see
+  // `BinderRouteContext.tsx`). `targetPlacement` is already this session's
+  // resolved target (or `null`), computed by the modal itself.
+  function handleAddCards(
+    selection: TcgDexCatalogCard[],
+    variation: string | null,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ) {
+    void assignCards(selection, variation, targetPlacement, true);
+    setSelectedSlot(null);
+    setBulkSelectionDraft(null);
+  }
+
+  // "Add More" for the search view's checkbox selection (story 18): keeps
+  // the modal open, so this just forwards to `assignCards` without closing
+  // anything - the modal itself awaits the returned promise to decide
+  // whether to clear its own search state.
+  function handleAddMoreCards(
+    selection: TcgDexCatalogCard[],
+    variation: string | null,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ): Promise<boolean> {
+    return assignCards(selection, variation, targetPlacement, false);
+  }
+
+  // Submits the manual-entry form's custom card via "Add Card" (story 12)
+  // and closes the modal immediately, mirroring `handleAddCards` above.
+  function handleSubmitCustomCard(
+    values: CustomCardFormValues,
+    file: File,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ) {
+    void assignCustomCard(values, file, targetPlacement, true);
     setSelectedSlot(null);
     setManualEntryDraft(null);
+  }
+
+  // The manual-entry view's own "Add More" (story 18), mirroring
+  // `handleAddMoreCards`.
+  function handleSubmitCustomCardAddMore(
+    values: CustomCardFormValues,
+    file: File,
+    targetPlacement: { physicalPage: number; row: number; column: number } | null,
+  ): Promise<boolean> {
+    return assignCustomCard(values, file, targetPlacement, false);
   }
 
   const maxPhysicalPage = getMaxPhysicalPage(binder.pages);
@@ -970,10 +1016,24 @@ export function BinderLayoutView() {
           onClose={() => {
             setSelectedSlot(null);
             setManualEntryDraft(null);
+            setBulkSelectionDraft(null);
           }}
-          onSelectCard={handleSelectCard}
+          initialTarget={selectedSlot}
+          onAddCards={handleAddCards}
+          onAddMoreCards={handleAddMoreCards}
           onSubmitCustomCard={handleSubmitCustomCard}
+          onSubmitCustomCardAddMore={handleSubmitCustomCardAddMore}
+          isBulkAddPending={isBulkAddPending}
           initialManualEntry={manualEntryDraft ?? undefined}
+          initialSelectionRestore={bulkSelectionDraft ?? undefined}
+        />
+      )}
+
+      {bulkAddFailure && (
+        <BulkAddFailuresModal
+          failure={bulkAddFailure}
+          onRetryAll={retryFailedBulkCards}
+          onClose={clearBulkAddFailure}
         />
       )}
 

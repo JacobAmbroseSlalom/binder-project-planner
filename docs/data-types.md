@@ -220,14 +220,18 @@ nonblocking translation-warning flag instead of returning a bare array.
 | `results`            | `TcgDexCatalogCard[]` | The normalized search results.                                                                                                       |
 | `translationWarning` | boolean               | `true` only when `language=ja` and no PokéAPI translation was found for the query, so the original entered query was searched as-is. |
 
-`POST /binders/{binderId}/cards` supports two variants.
+`POST /binders/{binderId}/cards` supports one variant.
 
 | Variant                    | Properties                                                                                                                                                                    |
 | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| TCGdex JSON                | Complete `TcgDexCatalogCard`, `variation` or `null`, and a `PlacementCoordinates` target. The backend sets `source` to `tcgdex`.                                              |
 | Custom multipart form data | `name`, optional `setName`, optional `localNumber`, optional `variation`, optional placement coordinates, and one required image file. The backend sets `source` to `custom`. |
 
-Both variants return `201 Created`, a card `Location` header, and the persisted `Card`.
+TCGdex-card creation, including for a single selected card, uses
+`POST /binders/{binderId}/cards/bulk` (`BulkCreateCardsRequest` below) instead; there is
+no single-card TCGdex JSON variant of this endpoint.
+
+A successful custom-card creation returns `201 Created`, a card `Location` header, and
+the persisted `Card`.
 
 ### CardPositionUpdate and UpdateCardRequest
 
@@ -242,13 +246,16 @@ updated card.
 
 ### BulkCreateCardsRequest and BulkCardOutcome
 
-| Object                   | Properties                                                                                                                                                                                    |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `BulkCreateCardsRequest` | Complete array of `TcgDexCatalogCard` values, optional shared `variation`, and client-generated UUID idempotency key.                                                                         |
-| `BulkCardOutcome`        | One result per submitted card, in submitted order; successful results include the created `Card`, and failed results include that card's Problem Details data. Exact field names are **TBD**. |
+| Object                   | Properties                                                                                                                                                                                                                              |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BulkCreateCardsRequest` | Array of the user-selected `TcgDexCatalogCard` values (in search-result order), optional shared `variation`, optional target `PlacementCoordinates` applied only to the first array element, and client-generated UUID idempotency key. |
+| `BulkCardOutcome`        | One result per submitted card, in submitted order; successful results include the created `Card`, and failed results include that card's Problem Details data. Exact field names are **TBD**.                                           |
 
-Bulk creation always targets unplaced coordinates. It returns `201 Created` when every
-card succeeds and `207 Multi-Status` for any card-level failure.
+Bulk creation targets unplaced coordinates for every array element except the first,
+which is attempted at the optional target placement (used only when the modal was
+opened from an empty binder slot); if that attempt fails, no other card claims the slot.
+It returns `201 Created` when every card succeeds and `207 Multi-Status` for any
+card-level failure.
 
 ### CreateArtRequest and UpdateArtRequest
 
