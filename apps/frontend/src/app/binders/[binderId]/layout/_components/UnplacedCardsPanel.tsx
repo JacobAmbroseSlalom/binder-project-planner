@@ -12,8 +12,16 @@ import { UnplacedCard } from './UnplacedCard';
 // Cards render in a fixed 3-column grid (rather than one full-width tile
 // per row) so each `BinderSlot`-style aspect-ratio tile stays a reasonable
 // thumbnail size instead of stretching to the whole panel width. Each
-// virtualized "row" is one grid row of up to this many cards.
-const UNPLACED_GRID_COLUMNS = 3;
+// virtualized "row" is one grid row of up to this many cards. Exported so
+// `UnplacedArtPanel` can size its own art tiles proportionally to this
+// same grid's column width (see its own usage).
+export const UNPLACED_GRID_COLUMNS = 3;
+
+// The grid's column gap in pixels (matches the `gap-2` Tailwind class
+// used on the grid below - Tailwind's spacing scale is `0.25rem` per
+// step, so `gap-2` is `0.5rem`/`8px` at the default `16px` root font
+// size). Exported alongside `UNPLACED_GRID_COLUMNS` for the same reason.
+export const UNPLACED_GRID_GAP_PX = 8;
 
 // A grid row's estimated height before the virtualizer measures its real
 // rendered height - a rough guess for a `BinderSlot`-style aspect-ratio

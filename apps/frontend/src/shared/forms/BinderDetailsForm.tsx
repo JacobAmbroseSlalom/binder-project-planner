@@ -3,7 +3,7 @@
 import {
   DEFAULT_BORDER_COLOR,
   DEFAULT_BORDER_RADIUS_PERCENT,
-  DEFAULT_BORDER_WIDTH_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
   DEFAULT_HEIGHT_BASE_CM,
   DEFAULT_HEIGHT_PER_SLOT_CM,
   DEFAULT_WIDTH_BASE_CM,
@@ -215,7 +215,7 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
       shouldDirty: true,
       shouldValidate: true,
     });
-    form.setValue('borderWidth', DEFAULT_BORDER_WIDTH_PERCENT, {
+    form.setValue('borderWidth', DEFAULT_BORDER_WIDTH_CM, {
       shouldDirty: true,
       shouldValidate: true,
     });
@@ -423,7 +423,7 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
           />
         </Field>
         <Field
-          label="Border width (%)"
+          label="Border width (cm)"
           htmlFor="binder-border-width"
           error={errors.borderWidth?.message}
           className="flex-1"
@@ -432,7 +432,6 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
             id="binder-border-width"
             type="number"
             min={0}
-            max={100}
             step={0.01}
             disabled={disabled}
             className={errors.borderWidth ? errorInputClassName : inputClassName}

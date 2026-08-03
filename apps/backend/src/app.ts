@@ -9,6 +9,7 @@ import { pinoHttp } from 'pino-http';
 
 import type { DatabaseConnection } from './database/client.js';
 import { openApiSpecificationPath } from './paths.js';
+import { createArtRouter } from './routes/art.js';
 import { createBindersRouter } from './routes/binders.js';
 import { createCardsRouter } from './routes/cards.js';
 import { createDigestDiskStorage } from './uploads/digestDiskStorage.js';
@@ -80,6 +81,7 @@ export function createApp({
 
   app.use(createBindersRouter(database));
   app.use(createCardsRouter(database, imagesDirectory));
+  app.use(createArtRouter(database, imagesDirectory));
 
   const errorHandler: ErrorRequestHandler = (error: HttpError, _request, response, _next) => {
     const status = error.status ?? 500;

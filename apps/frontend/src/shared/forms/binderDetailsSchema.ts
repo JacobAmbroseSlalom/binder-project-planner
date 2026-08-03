@@ -6,7 +6,7 @@ import {
   DEFAULT_BINDER_WIDTH,
   DEFAULT_BORDER_COLOR,
   DEFAULT_BORDER_RADIUS_PERCENT,
-  DEFAULT_BORDER_WIDTH_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
   DEFAULT_HEIGHT_BASE_CM,
   DEFAULT_HEIGHT_PER_SLOT_CM,
   DEFAULT_WIDTH_BASE_CM,
@@ -51,14 +51,28 @@ function unboundedDecimalField(label: string) {
     .transform((value) => Math.round(value * 100) / 100);
 }
 
-// A decimal percentage field for the story 24 border-style fields
-// (`borderRadius`/`borderWidth`): 0 through 100 inclusive, rounded to two
-// decimal places.
+// A decimal percentage field for the story 24 `borderRadius` field: 0
+// through 100 inclusive, rounded to two decimal places.
 function percentageField(label: string) {
   return z.coerce
     .number({ message: `${label} is required.` })
     .min(0, `${label} must be 0 or greater.`)
     .max(100, `${label} must be 100 or less.`)
+    .transform((value) => Math.round(value * 100) / 100);
+}
+
+// A decimal pixels field for the story 24 `borderWidth` field: zero or
+// A decimal centimeters field for the story 24 `borderWidth` field: zero or
+// greater (unlike `positiveDecimalField`, zero is allowed - it means no
+// border), rounded to two decimal places. Border width is a physical
+// centimeters measurement (like the dimension fields above) rather than a
+// percentage, so it's converted to pixels at render time using the same
+// cm-to-px scale factor as the art's own image - unlike border radius,
+// which intentionally scales with the frame per CSS percentage semantics.
+function nonNegativeDecimalField(label: string) {
+  return z.coerce
+    .number({ message: `${label} is required.` })
+    .min(0, `${label} must be 0 or greater.`)
     .transform((value) => Math.round(value * 100) / 100);
 }
 
@@ -99,7 +113,7 @@ export const binderDetailsSchema = z
     heightBase: unboundedDecimalField('Height base'),
     borderColor: borderColorField,
     borderRadius: percentageField('Border radius'),
-    borderWidth: percentageField('Border width'),
+    borderWidth: nonNegativeDecimalField('Border width'),
   })
   .superRefine((values, ctx) => {
     // Cross-field validation that can't be expressed on one field alone:
@@ -147,5 +161,5 @@ export const defaultBinderDetailsFormValues: BinderDetailsFormInput = {
   heightBase: DEFAULT_HEIGHT_BASE_CM,
   borderColor: DEFAULT_BORDER_COLOR,
   borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
-  borderWidth: DEFAULT_BORDER_WIDTH_PERCENT,
+  borderWidth: DEFAULT_BORDER_WIDTH_CM,
 };

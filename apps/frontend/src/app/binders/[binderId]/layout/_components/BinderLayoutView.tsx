@@ -30,6 +30,8 @@ import {
 } from '../layoutSpread';
 import { BinderSide } from './BinderSide';
 import { CardSelectionModal } from './CardSelectionModal';
+import { CreateArtModal } from './CreateArtModal';
+import { UnplacedArtPanel } from './UnplacedArtPanel';
 import { UnplacedCardsPanel } from './UnplacedCardsPanel';
 
 // The slot (or unplaced-panel target) currently targeted by an open
@@ -88,6 +90,11 @@ export function BinderLayoutView() {
     moveCard,
     isMovePending,
     pendingUnplacedCardIds,
+    art,
+    createArt,
+    pendingUnplacedArtIds,
+    artCreateRestore,
+    clearArtCreateRestore,
   } = useBinderRouteContext();
   const router = useRouter();
   const pathname = usePathname();
@@ -106,6 +113,24 @@ export function BinderLayoutView() {
   // The slot (if any) currently targeted by an open card-selection modal
   // (story 11).
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+  // Whether the create-art modal was opened via the unplaced-art panel's
+  // own add button (story 25) - `showCreateArtModal` below also reopens it
+  // automatically after a failed create, without this flag needing to be
+  // set for that case.
+  const [isCreateArtModalOpen, setIsCreateArtModalOpen] = useState(false);
+  // The modal is visible either because the user just clicked "Add art" or
+  // because a previous create attempt failed and needs correcting
+  // (planning.md: "Failure ... reopens the editor with the image,
+  // metadata ... preserved").
+  const showCreateArtModal = isCreateArtModalOpen || artCreateRestore !== null;
+
+  function handleCloseCreateArtModal() {
+    setIsCreateArtModalOpen(false);
+    // A no-op when there's no pending restore to discard, but clears one
+    // if the user manually closes a modal that was auto-reopened after a
+    // failure, so it doesn't keep reopening itself.
+    clearArtCreateRestore();
+  }
   // The card currently being dragged (story 14), or `null` while no drag
   // is in progress - drives the `DragOverlay`'s content, the source slot's
   // empty-placeholder rendering (in `BinderSlot`), and disabling page
@@ -520,7 +545,12 @@ export function BinderLayoutView() {
           </div>
         </div>
 
-        <div aria-hidden="true" />
+        <UnplacedArtPanel
+          art={art}
+          binder={binder}
+          pendingUnplacedArtIds={pendingUnplacedArtIds}
+          onAddArt={() => setIsCreateArtModalOpen(true)}
+        />
       </div>
 
       {/* The drag overlay (story 14): renders the dragged card's image
@@ -553,6 +583,19 @@ export function BinderLayoutView() {
           onSelectCard={handleSelectCard}
           onSubmitCustomCard={handleSubmitCustomCard}
           initialManualEntry={manualEntryDraft ?? undefined}
+        />
+      )}
+
+      {showCreateArtModal && (
+        <CreateArtModal
+          binder={binder}
+          restore={artCreateRestore}
+          onClose={handleCloseCreateArtModal}
+          onSubmit={(values, file) => {
+            createArt(values, file);
+            setIsCreateArtModalOpen(false);
+          }}
+          onConsumeRestore={clearArtCreateRestore}
         />
       )}
     </DndContext>

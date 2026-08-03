@@ -173,9 +173,35 @@ export interface paths {
         };
         /**
          * List a binder's multi-slot art
-         * @description Returns every binder-owned multi-slot-art record, placed and unplaced, without image bytes. Art creation does not exist yet (story 25), so this always returns an empty array today.
+         * @description Returns every binder-owned multi-slot-art record, placed and unplaced, without image bytes (story 25). Placement is always null today - placing art on the layout is story 26's scope.
          */
         get: operations["listBinderArt"];
+        put?: never;
+        /**
+         * Create multi-slot art in the unplaced-art section
+         * @description Creates binder-owned multi-slot art from one multipart request containing the image and normalized art metadata (story 25). New art always starts unplaced (all-null placement); placing it on the layout is story 26's scope.
+         */
+        post: operations["createBinderArt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/art/{artId}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artId: components["parameters"]["artId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Stream a multi-slot art item's rendering image
+         * @description Resolves the art's shared image asset and streams its orientation-normalized local file with the detected image Content-Type and long-lived immutable caching (story 25). Storage IDs and filenames are never exposed.
+         */
+        get: operations["getArtImage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -215,7 +241,7 @@ export interface components {
         BinderBorderColor: string;
         /** @description Percentage, to two decimal places, from 0 through 100 inclusive. */
         BinderBorderRadius: number;
-        /** @description Percentage, to two decimal places, from 0 through 100 inclusive. */
+        /** @description Centimeters, to two decimal places, zero or greater. Unlike BinderBorderRadius, this is a physical measurement rather than a percentage - the frontend converts it to pixels at render time using the same cm-to-px scale factor as the art's own image. */
         BinderBorderWidth: number;
         CreateBinderRequest: {
             /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
@@ -238,7 +264,7 @@ export interface components {
             borderColor?: components["schemas"]["BinderBorderColor"];
             /** @description Defaults to the shared DEFAULT_BORDER_RADIUS_PERCENT value when omitted. */
             borderRadius?: components["schemas"]["BinderBorderRadius"];
-            /** @description Defaults to the shared DEFAULT_BORDER_WIDTH_PERCENT value when omitted. */
+            /** @description Defaults to the shared DEFAULT_BORDER_WIDTH_CM value when omitted. */
             borderWidth?: components["schemas"]["BinderBorderWidth"];
         };
         /** @description A partial update; only supplied fields are changed. Story 7 covers name/width/height/pages; story 24 adds the dimension and multi-slot-art style fields below; later stories add notes, preview page, and lock-state fields to this same request schema. */
@@ -388,11 +414,84 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description Creates multi-slot art via `multipart/form-data` (story 25). New art always starts in the unplaced-art section (all-null placement); the backend computes a SHA-256 digest of the uploaded image while streaming it to temporary storage so identical uploads share one art image asset, and uses `sharp` to inspect pixel dimensions and generate an EXIF-auto-oriented rendering derivative when needed. */
+        CreateArtRequest: {
+            /** @description Trimmed and required after trimming on the backend. */
+            title: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            description?: string;
+            /** @description Must not exceed the binder's current width. */
+            widthSlots: number;
+            /** @description Must not exceed the binder's current height. */
+            heightSlots: number;
+            /**
+             * @default 0
+             * @enum {integer}
+             */
+            imageRotationDegrees: 0 | 90 | 180 | 270;
+            /**
+             * @description Normalized focal X coordinate relative to the computed centered-cover fit; rounded to 4 decimal places.
+             * @default 0.5
+             */
+            focalX: number;
+            /** @default 0.5 */
+            focalY: number;
+            /**
+             * @description Horizontal scale multiplier relative to the centered-cover fit.
+             * @default 1
+             */
+            scaleX: number;
+            /** @default 1 */
+            scaleY: number;
+            /** @description Null uses the binder's current border color at render time. */
+            borderColor?: string | null;
+            /** @description Null uses the binder's current border radius at render time. */
+            borderRadius?: number | null;
+            /** @description Centimeters, to two decimal places, zero or greater. Null uses the binder's current border width at render time. */
+            borderWidth?: number | null;
+            /**
+             * Format: binary
+             * @description Required. Must be a JPEG, PNG, or WebP file; the backend validates the file's signature rather than trusting its name or multipart MIME type.
+             */
+            image: string;
+        };
+        /** @description The complete persisted representation of one multi-slot-art item. */
+        Art: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            binderId: string;
+            title: string;
+            description: string | null;
+            widthSlots: number;
+            heightSlots: number;
+            placement: components["schemas"]["PlacementCoordinates"];
+            /**
+             * Format: uri-reference
+             * @description The backend's own `/art/{artId}/image` endpoint URL.
+             */
+            imageUrl: string;
+            /** @enum {integer} */
+            imageRotationDegrees: 0 | 90 | 180 | 270;
+            focalX: number;
+            focalY: number;
+            scaleX: number;
+            scaleY: number;
+            borderColor: string | null;
+            borderRadius: number | null;
+            /** @description Centimeters, to two decimal places. Null means the binder's current border width applies at render time. */
+            borderWidth: number | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
     };
     responses: never;
     parameters: {
         binderId: string;
         cardId: string;
+        artId: string;
     };
     requestBodies: never;
     headers: never;
@@ -903,7 +1002,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown[];
+                    "application/json": components["schemas"]["Art"][];
                 };
             };
             /** @description The binderId path parameter is not a well-formed UUID. */
@@ -916,6 +1015,103 @@ export interface operations {
                 };
             };
             /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    createBinderArt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["CreateArtRequest"];
+            };
+        };
+        responses: {
+            /** @description The art was created in the unplaced-art section. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created art resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Art"];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, the request body did not match the documented schema, or `widthSlots`/`heightSlots` exceed the binder's current width/height. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The uploaded file's signature did not match a supported image format. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    getArtImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artId: components["parameters"]["artId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The art's image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "image/webp": unknown;
+                };
+            };
+            /** @description The artId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No art, image-asset record, or local file exists. */
             404: {
                 headers: {
                     [name: string]: unknown;

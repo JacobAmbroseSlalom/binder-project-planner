@@ -4,7 +4,7 @@ import {
   BINDER_NAME_MAX_LENGTH,
   DEFAULT_BORDER_COLOR,
   DEFAULT_BORDER_RADIUS_PERCENT,
-  DEFAULT_BORDER_WIDTH_PERCENT,
+  DEFAULT_BORDER_WIDTH_CM,
   DEFAULT_HEIGHT_BASE_CM,
   DEFAULT_HEIGHT_PER_SLOT_CM,
   DEFAULT_WIDTH_BASE_CM,
@@ -15,6 +15,7 @@ import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
 import { binders } from '../database/schema.js';
+import { listArtForBinder } from './art.js';
 import { listCardsForBinder } from './cards.js';
 
 // The validated, OpenAPI-typed shape of a create-binder request body. The
@@ -237,7 +238,7 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
     };
     const borderColor = body.borderColor ?? DEFAULT_BORDER_COLOR;
     const borderRadius = body.borderRadius ?? DEFAULT_BORDER_RADIUS_PERCENT;
-    const borderWidth = body.borderWidth ?? DEFAULT_BORDER_WIDTH_PERCENT;
+    const borderWidth = body.borderWidth ?? DEFAULT_BORDER_WIDTH_CM;
 
     const dimensionError = validateDimensionFields(dimensionFields);
     if (dimensionError) {
@@ -433,9 +434,8 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
   });
 
   // Story 7 requires the shared binder context to load details, cards, and
-  // art in parallel. Card creation exists as of story 11
-  // (routes/cards.ts); art creation (story 25) doesn't yet, so `/art`
-  // still always returns an empty array today.
+  // art in parallel; both card creation (story 11, routes/cards.ts) and
+  // art creation (story 25, routes/art.ts) exist as of this router.
   router.get('/binders/:binderId/cards', (request, response) => {
     const { binderId } = request.params;
     const exists = database
@@ -465,7 +465,7 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
       return;
     }
 
-    response.status(200).json([]);
+    response.status(200).json(listArtForBinder(database, binderId));
   });
 
   return router;

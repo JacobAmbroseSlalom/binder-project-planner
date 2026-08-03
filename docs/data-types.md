@@ -23,25 +23,25 @@ shape, name, or persistence contract in [planning.md](planning.md).
 
 ### Binder
 
-| Property              | Type                      | Required | Notes                                                                                                      |
-| --------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------- |
-| `id`                  | UUID                      | Yes      | Backend-generated binder identifier used in the database, API, routes, and full-data export.               |
-| `name`                | string                    | Yes      | Trimmed, 1 to 100 characters, case-insensitively unique.                                                   |
-| `width`               | positive integer          | Yes      | Number of slot columns per binder side; `1` to `8`, default `3`.                                           |
-| `height`              | positive integer          | Yes      | Number of slot rows per binder side; `1` to `8`, default `3`.                                              |
-| `pages`               | positive integer          | Yes      | Stored binder-page count; default `20`. Physical pages range from `1` through `2 * pages`.                 |
-| `previewPhysicalPage` | positive integer          | Yes      | One-based physical focal page for the home-page preview; default `2`.                                      |
-| `locked`              | boolean                   | Yes      | Defaults to `false`; blocks restricted details and layout mutations.                                       |
-| `notes`               | Markdown string or `null` | Yes      | Up to 1,000,000 characters. Exactly empty input normalizes to `null`; nonempty input preserves whitespace. |
-| `widthPerSlot`        | decimal centimeters       | Yes      | Greater than zero; default `6.85`.                                                                         |
-| `widthBase`           | decimal centimeters       | Yes      | Default `-0.5`; may be negative only when the one-slot computed width remains positive.                    |
-| `heightPerSlot`       | decimal centimeters       | Yes      | Greater than zero; default `9`.                                                                            |
-| `heightBase`          | decimal centimeters       | Yes      | Default `0`; may be negative only when the one-slot computed height remains positive.                      |
-| `borderColor`         | `#RRGGBB` string          | Yes      | Six-digit uppercase hexadecimal color; default `#FFCB05`.                                                  |
-| `borderRadius`        | decimal percentage        | Yes      | `0` through `100`; default `38`.                                                                           |
-| `borderWidth`         | decimal percentage        | Yes      | `0` through `100`; default `11`. The percentage basis remains **TBD**.                                     |
-| `createdAt`           | UTC timestamp             | Yes      | Backend-managed.                                                                                           |
-| `updatedAt`           | UTC timestamp             | Yes      | Backend-managed; changes when lock state changes.                                                          |
+| Property              | Type                      | Required | Notes                                                                                                                                                                                          |
+| --------------------- | ------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                  | UUID                      | Yes      | Backend-generated binder identifier used in the database, API, routes, and full-data export.                                                                                                   |
+| `name`                | string                    | Yes      | Trimmed, 1 to 100 characters, case-insensitively unique.                                                                                                                                       |
+| `width`               | positive integer          | Yes      | Number of slot columns per binder side; `1` to `8`, default `3`.                                                                                                                               |
+| `height`              | positive integer          | Yes      | Number of slot rows per binder side; `1` to `8`, default `3`.                                                                                                                                  |
+| `pages`               | positive integer          | Yes      | Stored binder-page count; default `20`. Physical pages range from `1` through `2 * pages`.                                                                                                     |
+| `previewPhysicalPage` | positive integer          | Yes      | One-based physical focal page for the home-page preview; default `2`.                                                                                                                          |
+| `locked`              | boolean                   | Yes      | Defaults to `false`; blocks restricted details and layout mutations.                                                                                                                           |
+| `notes`               | Markdown string or `null` | Yes      | Up to 1,000,000 characters. Exactly empty input normalizes to `null`; nonempty input preserves whitespace.                                                                                     |
+| `widthPerSlot`        | decimal centimeters       | Yes      | Greater than zero; default `6.85`.                                                                                                                                                             |
+| `widthBase`           | decimal centimeters       | Yes      | Default `-0.5`; may be negative only when the one-slot computed width remains positive.                                                                                                        |
+| `heightPerSlot`       | decimal centimeters       | Yes      | Greater than zero; default `9`.                                                                                                                                                                |
+| `heightBase`          | decimal centimeters       | Yes      | Default `0`; may be negative only when the one-slot computed height remains positive.                                                                                                          |
+| `borderColor`         | `#RRGGBB` string          | Yes      | Six-digit uppercase hexadecimal color; default `#FFCB05`.                                                                                                                                      |
+| `borderRadius`        | decimal percentage        | Yes      | `0` through `100`; default `38`.                                                                                                                                                               |
+| `borderWidth`         | decimal centimeters       | Yes      | `0` or greater; default `0.25`. A physical measurement (not a percentage or fixed pixel count) converted to pixels at render time using the same cm-to-px scale factor as the art's own image. |
+| `createdAt`           | UTC timestamp             | Yes      | Backend-managed.                                                                                                                                                                               |
+| `updatedAt`           | UTC timestamp             | Yes      | Backend-managed; changes when lock state changes.                                                                                                                                              |
 
 **Relationships:** A binder owns cards and multi-slot art. It references neither image
 files nor image-asset storage paths directly.
@@ -83,27 +83,27 @@ Card deletion cascades dependent variation, acquisition, checklist, and pricing 
 
 ### MultiSlotArt
 
-| Property                               | Type                         | Required     | Notes                                                                                                                                             |
-| -------------------------------------- | ---------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id`                                   | UUID                         | Yes          | Backend-generated art identifier.                                                                                                                 |
-| `binderId`                             | UUID                         | Yes          | Owning binder.                                                                                                                                    |
-| `title`                                | string                       | Yes          | Trimmed and required; maximum 100 characters.                                                                                                     |
-| `description`                          | string or `null`             | Yes          | Optional; maximum 10,000 characters; blank normalizes to `null`.                                                                                  |
-| `widthSlots`                           | positive integer             | Yes          | Selected width in binder slots.                                                                                                                   |
-| `heightSlots`                          | positive integer             | Yes          | Selected height in binder slots.                                                                                                                  |
-| `placement`                            | `PlacementCoordinates`       | Yes          | Top-left anchor when placed; all coordinates are `null` when unplaced.                                                                            |
-| `imageFocalX`                          | normalized decimal           | Yes          | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places.                                                              |
-| `imageFocalY`                          | normalized decimal           | Yes          | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places.                                                              |
-| `imageScaleX`                          | normalized decimal           | Yes          | Independent horizontal scale multiplier relative to centered cover. Rounded to four decimal places.                                               |
-| `imageScaleY`                          | normalized decimal           | Yes          | Independent vertical scale multiplier relative to centered cover. Rounded to four decimal places.                                                 |
-| `imageRotationDegrees`                 | enum integer                 | Yes          | One of `0`, `90`, `180`, or `270`. Rotation applies to the image only, not the frame footprint.                                                   |
-| `borderColorOverride`                  | `#RRGGBB` string or `null`   | Yes          | `null` means use the current binder border color.                                                                                                 |
-| `borderRadiusOverride`                 | decimal percentage or `null` | Yes          | `null` means use the current binder radius.                                                                                                       |
-| `borderWidthOverride`                  | decimal percentage or `null` | Yes          | `null` means use the current binder width.                                                                                                        |
-| `imageUrl`                             | URL string                   | API only     | Resolves the normalized rendering image, not a storage path.                                                                                      |
-| source and normalized image references | `ImageAsset` references      | Backend only | The plan requires original source bytes and, when needed, an orientation-normalized derivative. Exact field names and representation are **TBD**. |
-| `createdAt`                            | UTC timestamp                | Yes          | Used for deterministic mixed unplaced-item ordering.                                                                                              |
-| `updatedAt`                            | UTC timestamp                | Expected     | Exact serialization key is **TBD**.                                                                                                               |
+| Property                               | Type                          | Required     | Notes                                                                                                                                             |
+| -------------------------------------- | ----------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                   | UUID                          | Yes          | Backend-generated art identifier.                                                                                                                 |
+| `binderId`                             | UUID                          | Yes          | Owning binder.                                                                                                                                    |
+| `title`                                | string                        | Yes          | Trimmed and required; maximum 100 characters.                                                                                                     |
+| `description`                          | string or `null`              | Yes          | Optional; maximum 10,000 characters; blank normalizes to `null`.                                                                                  |
+| `widthSlots`                           | positive integer              | Yes          | Selected width in binder slots.                                                                                                                   |
+| `heightSlots`                          | positive integer              | Yes          | Selected height in binder slots.                                                                                                                  |
+| `placement`                            | `PlacementCoordinates`        | Yes          | Top-left anchor when placed; all coordinates are `null` when unplaced.                                                                            |
+| `imageFocalX`                          | normalized decimal            | Yes          | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places.                                                              |
+| `imageFocalY`                          | normalized decimal            | Yes          | Focal coordinate relative to the centered-cover fit. Rounded to four decimal places.                                                              |
+| `imageScaleX`                          | normalized decimal            | Yes          | Independent horizontal scale multiplier relative to centered cover. Rounded to four decimal places.                                               |
+| `imageScaleY`                          | normalized decimal            | Yes          | Independent vertical scale multiplier relative to centered cover. Rounded to four decimal places.                                                 |
+| `imageRotationDegrees`                 | enum integer                  | Yes          | One of `0`, `90`, `180`, or `270`. Rotation applies to the image only, not the frame footprint.                                                   |
+| `borderColorOverride`                  | `#RRGGBB` string or `null`    | Yes          | `null` means use the current binder border color.                                                                                                 |
+| `borderRadiusOverride`                 | decimal percentage or `null`  | Yes          | `null` means use the current binder radius.                                                                                                       |
+| `borderWidthOverride`                  | decimal centimeters or `null` | Yes          | `null` means use the current binder width.                                                                                                        |
+| `imageUrl`                             | URL string                    | API only     | Resolves the normalized rendering image, not a storage path.                                                                                      |
+| source and normalized image references | `ImageAsset` references       | Backend only | The plan requires original source bytes and, when needed, an orientation-normalized derivative. Exact field names and representation are **TBD**. |
+| `createdAt`                            | UTC timestamp                 | Yes          | Used for deterministic mixed unplaced-item ordering.                                                                                              |
+| `updatedAt`                            | UTC timestamp                 | Expected     | Exact serialization key is **TBD**.                                                                                                               |
 
 **Constraints:** Placed art must fit within one binder side, cannot span physical pages,
 and cannot overlap a card or other art. The transformed image must cover the complete
@@ -271,11 +271,11 @@ Both requests use multipart form data.
 
 ### ArtStyleOverrides
 
-| Property               | Type                 | Notes                               |
-| ---------------------- | -------------------- | ----------------------------------- |
-| `borderColorOverride`  | `#RRGGBB` or `null`  | `null` inherits the binder setting. |
-| `borderRadiusOverride` | percentage or `null` | `null` inherits the binder setting. |
-| `borderWidthOverride`  | percentage or `null` | `null` inherits the binder setting. |
+| Property               | Type                  | Notes                               |
+| ---------------------- | --------------------- | ----------------------------------- |
+| `borderColorOverride`  | `#RRGGBB` or `null`   | `null` inherits the binder setting. |
+| `borderRadiusOverride` | percentage or `null`  | `null` inherits the binder setting. |
+| `borderWidthOverride`  | centimeters or `null` | `null` inherits the binder setting. |
 
 ### PdfExportOptions
 

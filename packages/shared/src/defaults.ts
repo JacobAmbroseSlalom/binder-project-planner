@@ -111,7 +111,27 @@ export const DEFAULT_HEIGHT_PER_SLOT_CM = 9;
 export const DEFAULT_HEIGHT_BASE_CM = 0;
 
 // Multi-slot art style defaults, also configured per binder by story 24 and
-// overridable per art item (story 25).
+// overridable per art item (story 25). Border radius follows CSS
+// percentage semantics (relative to the frame's width/height per axis).
+// Border width is a physical centimeters measurement, like the dimension
+// fields above - converted to pixels at render time using the same
+// cm-to-px scale factor as the art's own image, so the border's rendered
+// thickness stays physically consistent (and proportionally correct)
+// across different art sizes and preview scales instead of drifting with
+// either a percentage or a fixed pixel count.
 export const DEFAULT_BORDER_COLOR = '#FFCB05';
-export const DEFAULT_BORDER_RADIUS_PERCENT = 38;
-export const DEFAULT_BORDER_WIDTH_PERCENT = 11;
+export const DEFAULT_BORDER_RADIUS_PERCENT = 5;
+export const DEFAULT_BORDER_WIDTH_CM = 0.25;
+
+// Story 25: "Add multi-slot art". Maximum trimmed lengths for an art
+// item's title/description, shared by the frontend Zod schema, the OpenAPI
+// multipart request contract, and backend validation. Title is required
+// after trimming; description is optional (blank stores as `null`).
+export const ART_TITLE_MAX_LENGTH = 100;
+export const ART_DESCRIPTION_MAX_LENGTH = 10_000;
+
+// The minimum print resolution (pixels per inch) an art image's effective
+// horizontal/vertical resolution must reach at its configured physical
+// output size to avoid the create-art modal's nonblocking image-quality
+// warning (story 25).
+export const MIN_ART_PRINT_RESOLUTION_PPI = 300;

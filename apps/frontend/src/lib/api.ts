@@ -40,6 +40,7 @@ export type CreateCardRequest = components['schemas']['CreateCardRequest'];
 export type CardSearchLanguage = components['schemas']['CardSearchLanguage'];
 export type CardSearchResponse = components['schemas']['CardSearchResponse'];
 export type CardPositionUpdate = components['schemas']['CardPositionUpdate'];
+export type Art = components['schemas']['Art'];
 
 // Fetches the complete binder-summary collection through `GET /binders`
 // (story 5). The backend already returns it in the documented sort order
@@ -263,9 +264,9 @@ export function resolveCardImageUrl(imageUrl: string): string {
 }
 
 // Fetches every binder-owned multi-slot-art record through
-// `GET /binders/{binderId}/art` (story 7). Art creation doesn't exist yet
-// (story 25), so this always resolves to an empty array today.
-export async function listBinderArt(binderId: string, signal?: AbortSignal): Promise<unknown[]> {
+// `GET /binders/{binderId}/art` (story 7, populated by story 25's art
+// creation).
+export async function listBinderArt(binderId: string, signal?: AbortSignal): Promise<Art[]> {
   const { data, error } = await apiClient.GET('/binders/{binderId}/art', {
     params: { path: { binderId } },
     signal,
@@ -276,4 +277,68 @@ export async function listBinderArt(binderId: string, signal?: AbortSignal): Pro
   }
 
   return data;
+}
+
+// One multi-slot-art item's creation request (story 25) - built into a
+// `multipart/form-data` body below since it carries the uploaded image
+// file itself. Border overrides are `null` when the field stays in "use
+// binder setting" mode; a non-null value is a custom per-art override.
+export interface CreateArtRequest {
+  title: string;
+  description: string | null;
+  widthSlots: number;
+  heightSlots: number;
+  imageRotationDegrees: 0 | 90 | 180 | 270;
+  focalX: number;
+  focalY: number;
+  scaleX: number;
+  scaleY: number;
+  borderColor: string | null;
+  borderRadius: number | null;
+  borderWidth: number | null;
+  image: File;
+}
+
+// Creates multi-slot art in the unplaced-art section through
+// `POST /binders/{binderId}/art` (story 25). Throws the Problem Details
+// body on failure so the caller can roll back its optimistic insert and
+// surface the error via `toProblemDetailsInfo`.
+export async function createArt(binderId: string, request: CreateArtRequest): Promise<Art> {
+  const formData = new FormData();
+  formData.append('title', request.title);
+  if (request.description) formData.append('description', request.description);
+  formData.append('widthSlots', String(request.widthSlots));
+  formData.append('heightSlots', String(request.heightSlots));
+  formData.append('imageRotationDegrees', String(request.imageRotationDegrees));
+  formData.append('focalX', String(request.focalX));
+  formData.append('focalY', String(request.focalY));
+  formData.append('scaleX', String(request.scaleX));
+  formData.append('scaleY', String(request.scaleY));
+  if (request.borderColor) formData.append('borderColor', request.borderColor);
+  if (request.borderRadius !== null) formData.append('borderRadius', String(request.borderRadius));
+  if (request.borderWidth !== null) formData.append('borderWidth', String(request.borderWidth));
+  formData.append('image', request.image);
+
+  const { data, error } = await apiClient.POST('/binders/{binderId}/art', {
+    params: { path: { binderId } },
+    // See createCustomCard's identical comment: openapi-fetch passes a
+    // `FormData` instance through untouched, but the generated request-body
+    // type only models the multipart schema's field shapes.
+    body: formData as never,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+// Resolves an `Art.imageUrl` into a full URL for an `<img>` tag (story 25),
+// mirroring `resolveCardImageUrl`.
+export function resolveArtImageUrl(imageUrl: string): string {
+  if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+    return imageUrl;
+  }
+  return `${backendUrl}${imageUrl}`;
 }

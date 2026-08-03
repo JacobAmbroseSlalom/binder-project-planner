@@ -913,10 +913,24 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 **Status:** Done (2026-08-02 16:26 EDT) - the documented default values (widthPerSlot
 6.85 cm, widthBase -0.5 cm, heightPerSlot 9 cm, heightBase 0 cm, border color `#FFCB05`,
-border radius 38%, border width 11%) were used as-is without changes, resolving the
-"verify all supplied default values" TBD below. The border-width percentage's physical
-rendering basis remains an open TBD for story 25/print-export work, since no multi-slot
-art or print rendering exists yet to require an answer.
+border radius 38%, border width 11) were used as-is without changes, resolving the
+"verify all supplied default values" TBD below.
+
+**Update (2026-08-03):** Border width was changed from a percentage to a fixed pixel
+value after story 25's on-screen rendering showed that a percentage-based width - like
+border radius - grows and shrinks with the frame's own size, so the same binder-level
+setting looked inconsistently thick across different art sizes. Border radius is
+unaffected and still follows the CSS percentage semantics described below.
+
+**Update (2026-08-03, later the same day):** Border width was changed again, from a
+fixed pixel value to a physical centimeters measurement (default `0.25` cm) - a fixed
+pixel count doesn't correspond to any real-world size and doesn't scale with the
+rendered preview/print size the way the rest of the app's physical (cm-based)
+dimensions do. The frontend now converts the stored centimeters value to pixels at
+render time using the same cm-to-px scale factor as the art's own image, so the
+rendered border thickness stays physically proportional to the art's actual size. This
+also resolves the border-width-basis TBD below (a physical measurement has no
+frame-relative "basis" to define, unlike a percentage).
 
 #### Acceptance criteria
 
@@ -931,24 +945,44 @@ art or print rendering exists yet to require an answer.
 - The reusable binder-details form has editable multi-slot art fields for border color, border radius, and border width on both pages.
 - Border color defaults to `#FFCB05`.
 - Border radius defaults to 38%.
-- Border width defaults to 11%.
+- Border width defaults to 0.25 cm.
 - The dimension and multi-slot art values are saved with the binder through the backend.
 - Saving dimension and multi-slot art settings uses the shared save-status toast and preserves the entered values for correction if saving fails.
 
 #### Technical requirements
 
-- Dimension values accept centimeters to two decimal places, and border radius and width accept percentages to two decimal places.
-- REST contracts expose decimal values in their documented human-readable units; the database stores centimeters as integer hundredths of a centimeter and percentages as integer hundredths of a percentage point to avoid floating-point drift.
+- Dimension values accept centimeters to two decimal places, border radius accepts a percentage to two decimal places, and border width accepts centimeters to two decimal places.
+- REST contracts expose decimal values in their documented human-readable units; the database stores centimeters and percentages as integer hundredths of their respective unit to avoid floating-point drift.
 - Width-per-slot and height-per-slot values must be greater than zero; base values may be negative only when the corresponding one-slot formula produces a result greater than zero.
-- Border radius and border width must be between `0%` and `100%`, inclusive.
+- Border radius must be between `0%` and `100%`, inclusive. Border width must be `0` cm or greater, with no fixed upper bound.
 - Border color uses a color input paired with an editable text value, accepts only six-digit `#RRGGBB` hexadecimal colors, and normalizes hexadecimal letters to uppercase before saving.
 - Border radius follows CSS percentage semantics: horizontal radii are relative to the frame width and vertical radii are relative to the frame height across editor, layout, preview, and print rendering.
-- TBD: Define the physical or rendered dimension used as the basis for the border-width percentage before implementing multi-slot-art rendering or print export.
+- Border width is a physical centimeters measurement rather than a percentage or a fixed pixel count, converted to pixels at render time using the same cm-to-px scale factor as the art's own image, so it renders physically consistently across different art sizes and preview scales.
 - The configured one-slot width and height define the binder's on-screen slot and card aspect ratio and are also the basis for multi-slot-art and print dimensions; the default formulas retain the initial `6.35:9` one-slot ratio.
 
 ### 25. Add multi-slot art
 
-**Status:** Not started
+**Status:** Done - with known gaps (2026-08-02 20:51 EDT) - implemented per the acceptance
+criteria and technical requirements below, with the following deliberate scope-downs/decisions
+carried over for a later story to close:
+
+- **Image-asset cross-dedup gap**: `artImageAssets` is its own table, separate from
+  `cardImageAssets` (story 12). The SHA-256 digest dedup described below applies only
+  within each table - identical bytes uploaded once as a custom card and once as
+  multi-slot art create two separate image assets rather than the one global asset the
+  acceptance criteria describe. Merging the two tables (or adding a lookup across both)
+  is deferred; flagged here so a future story can decide whether it's worth the
+  migration.
+- **Client-side image-quality calculation**: the quality warning's effective PPI is
+  computed entirely in the browser from the selected `File`'s natural pixel dimensions
+  (via `HTMLImageElement.naturalWidth`/`naturalHeight`), not from the backend's stored
+  `pixelWidth`/`pixelHeight` columns - the OpenAPI `Art`/`CreateArtRequest` schemas don't
+  expose those columns to the frontend, and didn't need to for this calculation.
+- **Modern-browser EXIF assumption**: the client-side quality calculation and Konva
+  editor both assume the browser's own image decoding already applies EXIF orientation
+  to `naturalWidth`/`naturalHeight` (true in current Chrome/Firefox/Safari) rather than
+  re-deriving orientation client-side; the backend's own `sharp`-based normalization is
+  authoritative for the persisted/served image regardless.
 
 #### Acceptance criteria
 
@@ -979,7 +1013,7 @@ art or print rendering exists yet to require an answer.
 - The image-quality warning does not prevent the user from saving the multi-slot art.
 - The title, description, original uploaded image, selected slot dimensions, image-editing specifications, and art-specific style overrides are saved through the backend.
 - Outside the editor, the art renders with the saved positioning, scaling, rotation, aspect-ratio adjustments, and border settings.
-- After it is added, the multi-slot art appears in the unplaced art section with an aspect ratio derived from its configured physical dimensions and scaled to fit the panel width.
+- After it is added, the multi-slot art appears in the unplaced art section with an aspect ratio derived from its configured physical dimensions, sized proportionally to the unplaced cards section's own card size (a shared physical cm-to-px scale derived from one slot's width) rather than stretched to fill the panel width.
 - Placement and other interactions for multi-slot art on the binder layout will be defined in the next story.
 - Image upload and multi-slot art creation use the shared save-status toast, and the modal retains its image and entered settings if either operation fails.
 

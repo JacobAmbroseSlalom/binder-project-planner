@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 
 import {
+  createArt as createArtRequest,
   createCard,
   createCustomCard,
   deleteCard,
@@ -15,6 +16,7 @@ import {
   listBinderArt,
   listBinderCards,
   moveCards,
+  type Art,
   type Binder,
   type Card,
   type CardPositionUpdate,
@@ -63,6 +65,36 @@ export interface ManualEntryRestore {
   file: File;
 }
 
+// The create-art modal's non-image field values (story 25) - excludes the
+// image file (handled separately as a `File`).
+export interface ArtFormValues {
+  title: string;
+  description: string | null;
+  widthSlots: number;
+  heightSlots: number;
+  imageRotationDegrees: 0 | 90 | 180 | 270;
+  focalX: number;
+  focalY: number;
+  scaleX: number;
+  scaleY: number;
+  borderColor: string | null;
+  borderRadius: number | null;
+  borderWidth: number | null;
+}
+
+// A one-shot signal set by `createArt` when a create-art submission fails
+// (story 25: "reopens the editor with the image, metadata, dimensions,
+// rotation, transforms, and style choices preserved"). `previewUrl` is the
+// same object URL the failed optimistic item used - retained (not
+// revoked) so the reopened editor can reuse it without recreating one -
+// until `clearArtCreateRestore` revokes it once the editor no longer needs
+// it.
+export interface ArtCreateRestore {
+  values: ArtFormValues;
+  file: File;
+  previewUrl: string;
+}
+
 // Fixed (not per-attempt-random) toast id, matching the pattern established
 // by BinderList's `LIST_BINDERS_TOAST_ID`: a later attempt (retry, or a
 // fresh mount after the redirect-home case below) replaces this operation's
@@ -77,13 +109,11 @@ type BinderLoadStatus = 'loading' | 'success' | 'error';
 // The shared binder route context value (story 7): the binder details,
 // cards, and multi-slot art loaded in parallel by the route's provider, plus
 // a setter the Edit Details tab uses to sync the context after a successful
-// `PATCH` without forcing a full reload. Art doesn't have a real schema yet
-// (story 25; see BinderRouteProvider's fetch below), so it's still typed as
-// `unknown[]` for now.
+// `PATCH` without forcing a full reload.
 interface BinderRouteContextValue {
   binder: Binder;
   cards: Card[];
-  art: unknown[];
+  art: Art[];
   // Replaces the context's binder with the backend's authoritative
   // representation, e.g. after the Edit Details tab's `PATCH` succeeds.
   updateBinder: (binder: Binder) => void;
@@ -164,6 +194,22 @@ interface BinderRouteContextValue {
   // above.
   includeTcgPocket: boolean;
   setIncludeTcgPocket: (includeTcgPocket: boolean) => void;
+  // Creates multi-slot art directly into the unplaced-art section (story
+  // 25): inserts an optimistic `Art` item immediately using an object-URL
+  // image preview, then replaces it with the backend's authoritative
+  // representation on success, or removes it and preserves the failed
+  // attempt via `artCreateRestore` on failure.
+  createArt: (values: ArtFormValues, file: File) => void;
+  // The set of optimistic art ids currently being created, so the
+  // unplaced-art panel can disable that one pending item until its create
+  // request settles - mirrors `pendingUnplacedCardIds`.
+  pendingUnplacedArtIds: Set<string>;
+  // Set once by `createArt` when a submission fails, so the create-art
+  // modal can reopen pre-filled with the failed attempt's values/file
+  // rather than losing them. Consumed exactly once via
+  // `clearArtCreateRestore`.
+  artCreateRestore: ArtCreateRestore | null;
+  clearArtCreateRestore: () => void;
 }
 
 const BinderRouteContext = createContext<BinderRouteContextValue | null>(null);
@@ -200,7 +246,7 @@ export function BinderRouteProvider({
   const [status, setStatus] = useState<BinderLoadStatus>('loading');
   const [binder, setBinder] = useState<Binder | null>(null);
   const [cards, setCards] = useState<Card[]>([]);
-  const [art, setArt] = useState<unknown[]>([]);
+  const [art, setArt] = useState<Art[]>([]);
   // The slots (by `placementKey`) with an assignment currently in flight
   // (story 11), so the layout tab can disable them until the request
   // settles.
@@ -235,6 +281,13 @@ export function BinderRouteProvider({
   // Story 15's in-flight-unplaced-create ids (see the context value's own
   // doc comment above).
   const [pendingUnplacedCardIds, setPendingUnplacedCardIds] = useState<Set<string>>(new Set());
+  // Story 25's in-flight-art-create ids, mirroring
+  // `pendingUnplacedCardIds`.
+  const [pendingUnplacedArtIds, setPendingUnplacedArtIds] = useState<Set<string>>(new Set());
+  // Story 25's one-shot create-art failure restore signal (see the context
+  // value type's own doc comment above) - `null` whenever there's no
+  // failed art submission awaiting correction.
+  const [artCreateRestore, setArtCreateRestore] = useState<ArtCreateRestore | null>(null);
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -460,6 +513,79 @@ export function BinderRouteProvider({
     setManualEntryRestore(null);
   }, []);
 
+  // Creates multi-slot art directly into the unplaced-art section (story
+  // 25), mirroring `assignCustomCard`'s optimistic-insert/replace-or-remove
+  // lifecycle. New art always starts unplaced (all-null placement) -
+  // placing it on the layout is story 26's scope.
+  const createArt = useCallback(
+    (values: ArtFormValues, file: File) => {
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const previewUrl = URL.createObjectURL(file);
+      const now = new Date().toISOString();
+      const optimisticArt: Art = {
+        id: optimisticId,
+        binderId,
+        title: values.title,
+        description: values.description,
+        widthSlots: values.widthSlots,
+        heightSlots: values.heightSlots,
+        placement: { physicalPage: null, row: null, column: null },
+        imageUrl: previewUrl,
+        imageRotationDegrees: values.imageRotationDegrees,
+        focalX: values.focalX,
+        focalY: values.focalY,
+        scaleX: values.scaleX,
+        scaleY: values.scaleY,
+        borderColor: values.borderColor,
+        borderRadius: values.borderRadius,
+        borderWidth: values.borderWidth,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      setArt((previous) => [...previous, optimisticArt]);
+      setPendingUnplacedArtIds((previous) => new Set(previous).add(optimisticId));
+
+      const toast = start(`create-art-${optimisticId}`);
+
+      createArtRequest(binderId, { ...values, image: file })
+        .then((created) => {
+          setArt((previous) => previous.map((item) => (item.id === optimisticId ? created : item)));
+          toast.markSaved();
+          // The backend's own `/art/{artId}/image` endpoint replaces this
+          // optimistic entry, so the object-URL preview is no longer
+          // referenced by anything.
+          URL.revokeObjectURL(previewUrl);
+        })
+        .catch((error) => {
+          setArt((previous) => previous.filter((item) => item.id !== optimisticId));
+          // Retains `previewUrl` (rather than revoking it here) so the
+          // reopened editor can reuse it without recreating one; it's
+          // revoked once `clearArtCreateRestore` runs (planning.md).
+          setArtCreateRestore({ values, file, previewUrl });
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingUnplacedArtIds((previous) => {
+            const next = new Set(previous);
+            next.delete(optimisticId);
+            return next;
+          });
+        });
+    },
+    [binderId, start],
+  );
+
+  // Clears the one-shot art-create restore signal once the create-art
+  // modal has consumed it, revoking its retained object URL now that the
+  // restored preview no longer needs it.
+  const clearArtCreateRestore = useCallback(() => {
+    setArtCreateRestore((previous) => {
+      if (previous) URL.revokeObjectURL(previous.previewUrl);
+      return null;
+    });
+  }, []);
+
   // Permanently removes a card from a binder slot (story 13). Sending X
   // immediately: no confirmation dialog. Captures the card's current list
   // index and full record before removing it so a failed delete restores
@@ -620,6 +746,10 @@ export function BinderRouteProvider({
       setCardSearchLanguage,
       includeTcgPocket,
       setIncludeTcgPocket,
+      createArt,
+      pendingUnplacedArtIds,
+      artCreateRestore,
+      clearArtCreateRestore,
     };
   }, [
     binder,
@@ -639,6 +769,10 @@ export function BinderRouteProvider({
     isMovePending,
     cardSearchLanguage,
     includeTcgPocket,
+    createArt,
+    pendingUnplacedArtIds,
+    artCreateRestore,
+    clearArtCreateRestore,
   ]);
 
   if (status === 'loading') {

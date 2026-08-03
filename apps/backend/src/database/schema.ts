@@ -23,8 +23,8 @@ export const binders = sqliteTable(
     pages: integer().notNull(),
     // Card/multi-slot-art dimension and style settings (story 24). REST
     // contracts expose these as decimal centimeters/percentages, but the
-    // database stores them as integer hundredths (e.g. 6.85 cm ->
-    // `685`, 38% -> `3800`) to avoid floating-point drift, per
+    // database stores them as integer hundredths (e.g. 6.85 cm -> `685`,
+    // 38% -> `3800`, 0.25 cm -> `25`) to avoid floating-point drift, per
     // planning.md's "Technical requirements".
     widthPerSlotHundredths: integer().notNull(),
     widthBaseHundredths: integer().notNull(),
@@ -33,7 +33,13 @@ export const binders = sqliteTable(
     // Six-digit uppercase `#RRGGBB` hex color; normalized to uppercase by
     // the backend before saving.
     borderColor: text().notNull(),
+    // Percentage (CSS percentage semantics: relative to the frame's
+    // width/height per axis).
     borderRadiusHundredths: integer().notNull(),
+    // Physical centimeters (not a percentage or fixed pixel count) - the
+    // frontend converts it to pixels at render time using the same
+    // cm-to-px scale factor as the art's own image, so it stays
+    // physically proportional to the art's actual size.
     borderWidthHundredths: integer().notNull(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
@@ -62,16 +68,14 @@ export const binders = sqliteTable(
       'binder_height_one_slot_positive',
       sql`(${table.heightPerSlotHundredths} + ${table.heightBaseHundredths}) > 0`,
     ),
-    // Border radius/width are percentages from 0 to 100 inclusive (0 to
-    // 10000 hundredths).
+    // Border radius is a percentage from 0 to 100 inclusive (0 to 10000
+    // hundredths); border width is a centimeters measurement with no fixed
+    // upper bound, only a non-negative lower bound.
     check(
       'binder_border_radius_range',
       sql`${table.borderRadiusHundredths} >= 0 AND ${table.borderRadiusHundredths} <= 10000`,
     ),
-    check(
-      'binder_border_width_range',
-      sql`${table.borderWidthHundredths} >= 0 AND ${table.borderWidthHundredths} <= 10000`,
-    ),
+    check('binder_border_width_range', sql`${table.borderWidthHundredths} >= 0`),
     // Six uppercase hex digits after the `#`; SQLite's GLOB uses UNIX
     // glob-style bracket character classes, which support ranges like
     // `[0-9A-F]`.
@@ -188,6 +192,105 @@ export const cards = sqliteTable(
       table.physicalPage,
       table.row,
       table.column,
+    ),
+  ],
+);
+
+// A shared, immutable local image asset for multi-slot art (story 25).
+// Kept as its own table (rather than reusing `cardImageAssets`) for
+// simplicity; the "reuse the global asset when identical bytes already
+// belong to a custom card" cross-dedupe planning.md describes is a known,
+// documented gap - art uploads only dedupe against other art uploads for
+// now. `normalizedStorageFilename` is populated only when the uploaded
+// JPEG's EXIF orientation required an auto-oriented derivative; when null,
+// `storageFilename` itself is already correctly oriented and used
+// directly by every renderer.
+export const artImageAssets = sqliteTable('art_image_assets', {
+  id: text().primaryKey(),
+  sha256Digest: text().notNull().unique(),
+  originalFilename: text(),
+  storageFilename: text().notNull(),
+  normalizedStorageFilename: text(),
+  contentType: text().notNull(),
+  fileExtension: text().notNull(),
+  // The image's correctly-oriented pixel dimensions (after resolving EXIF
+  // orientation, if any) - used by the frontend's print-resolution
+  // quality-warning calculation (story 25).
+  pixelWidth: integer().notNull(),
+  pixelHeight: integer().notNull(),
+  createdAt: text().notNull(),
+});
+
+// Binder-owned multi-slot art (story 25). Placement always starts null -
+// story 25 only adds the unplaced-art section; placing art onto the
+// layout is story 26's scope, per planning.md ("Placement and other
+// interactions for multi-slot art on the binder layout will be defined in
+// the next story").
+export const art = sqliteTable(
+  'art',
+  {
+    id: text().primaryKey(),
+    binderId: text()
+      .notNull()
+      .references(() => binders.id, { onDelete: 'cascade' }),
+    title: text().notNull(),
+    description: text(),
+    widthSlots: integer().notNull(),
+    heightSlots: integer().notNull(),
+    // Placement coordinates, mirroring `cards`' all-or-none triple (story
+    // 26 will start populating these); enforced by
+    // `art_placement_all_or_none` below.
+    physicalPage: integer(),
+    row: integer(),
+    column: integer(),
+    imageAssetId: text()
+      .notNull()
+      .references(() => artImageAssets.id),
+    // One of 0/90/180/270; rotate-left/rotate-right change this by one
+    // quarter turn with wraparound (story 25).
+    imageRotationDegrees: integer().notNull().default(0),
+    // Normalized focal point and independent scale multipliers relative to
+    // the computed centered-cover fit, stored as integer ten-thousandths
+    // per planning.md ("stored as integer ten-thousandths in the
+    // database").
+    focalXTenThousandths: integer().notNull(),
+    focalYTenThousandths: integer().notNull(),
+    scaleXTenThousandths: integer().notNull(),
+    scaleYTenThousandths: integer().notNull(),
+    // Nullable border style overrides: null means "use the binder's
+    // current setting at render time"; a non-null value is this art
+    // item's own custom override (planning.md). Radius is a percentage;
+    // width is a physical centimeters measurement (see the binders table
+    // above).
+    borderColor: text(),
+    borderRadiusHundredths: integer(),
+    borderWidthHundredths: integer(),
+    createdAt: text().notNull(),
+    updatedAt: text().notNull(),
+  },
+  (table) => [
+    check(
+      'art_placement_all_or_none',
+      sql`(${table.physicalPage} IS NULL AND ${table.row} IS NULL AND ${table.column} IS NULL) OR (${table.physicalPage} IS NOT NULL AND ${table.row} IS NOT NULL AND ${table.column} IS NOT NULL)`,
+    ),
+    check('art_width_slots_positive', sql`${table.widthSlots} > 0`),
+    check('art_height_slots_positive', sql`${table.heightSlots} > 0`),
+    check('art_rotation_valid', sql`${table.imageRotationDegrees} IN (0, 90, 180, 270)`),
+    check(
+      'art_scale_positive',
+      sql`${table.scaleXTenThousandths} > 0 AND ${table.scaleYTenThousandths} > 0`,
+    ),
+    check(
+      'art_border_color_format',
+      sql`${table.borderColor} IS NULL OR ${table.borderColor} GLOB '#[0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F][0-9A-F]'`,
+    ),
+    check(
+      'art_border_radius_range',
+      sql`${table.borderRadiusHundredths} IS NULL OR (${table.borderRadiusHundredths} >= 0 AND ${table.borderRadiusHundredths} <= 10000)`,
+    ),
+    check(
+      'art_border_width_range',
+      sql`${table.borderWidthHundredths} IS NULL OR ${table.borderWidthHundredths} >= 0`,
     ),
   ],
 );

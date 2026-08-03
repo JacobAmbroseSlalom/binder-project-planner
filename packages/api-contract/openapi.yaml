@@ -432,8 +432,8 @@ paths:
       summary: List a binder's multi-slot art
       description: >-
         Returns every binder-owned multi-slot-art record, placed and
-        unplaced, without image bytes. Art creation does not exist yet
-        (story 25), so this always returns an empty array today.
+        unplaced, without image bytes (story 25). Placement is always null
+        today - placing art on the layout is story 26's scope.
       responses:
         '200':
           description: The binder's multi-slot art.
@@ -441,7 +441,8 @@ paths:
             application/json:
               schema:
                 type: array
-                items: {}
+                items:
+                  $ref: '#/components/schemas/Art'
         '400':
           description: The binderId path parameter is not a well-formed UUID.
           content:
@@ -450,6 +451,87 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         '404':
           description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      operationId: createBinderArt
+      summary: Create multi-slot art in the unplaced-art section
+      description: >-
+        Creates binder-owned multi-slot art from one multipart request
+        containing the image and normalized art metadata (story 25). New
+        art always starts unplaced (all-null placement); placing it on the
+        layout is story 26's scope.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/CreateArtRequest'
+      responses:
+        '201':
+          description: The art was created in the unplaced-art section.
+          headers:
+            Location:
+              description: The path of the newly created art resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Art'
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, the
+            request body did not match the documented schema, or
+            `widthSlots`/`heightSlots` exceed the binder's current
+            width/height.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '415':
+          description: >-
+            The uploaded file's signature did not match a supported image
+            format.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /art/{artId}/image:
+    parameters:
+      - $ref: '#/components/parameters/artId'
+    get:
+      operationId: getArtImage
+      summary: Stream a multi-slot art item's rendering image
+      description: >-
+        Resolves the art's shared image asset and streams its
+        orientation-normalized local file with the detected image
+        Content-Type and long-lived immutable caching (story 25). Storage
+        IDs and filenames are never exposed.
+      responses:
+        '200':
+          description: The art's image bytes.
+          content:
+            image/jpeg: {}
+            image/png: {}
+            image/webp: {}
+        '400':
+          description: The artId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No art, image-asset record, or local file exists.
           content:
             application/problem+json:
               schema:
@@ -466,6 +548,14 @@ components:
         pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     cardId:
       name: cardId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    artId:
+      name: artId
       in: path
       required: true
       schema:
@@ -545,8 +635,11 @@ components:
     BinderBorderWidth:
       type: number
       minimum: 0
-      maximum: 100
-      description: Percentage, to two decimal places, from 0 through 100 inclusive.
+      description: >-
+        Centimeters, to two decimal places, zero or greater. Unlike
+        BinderBorderRadius, this is a physical measurement rather than a
+        percentage - the frontend converts it to pixels at render time
+        using the same cm-to-px scale factor as the art's own image.
     CreateBinderRequest:
       type: object
       additionalProperties: false
@@ -609,7 +702,7 @@ components:
           allOf:
             - $ref: '#/components/schemas/BinderBorderWidth'
           description: >-
-            Defaults to the shared DEFAULT_BORDER_WIDTH_PERCENT value when
+            Defaults to the shared DEFAULT_BORDER_WIDTH_CM value when
             omitted.
     UpdateBinderRequest:
       type: object
@@ -1011,6 +1104,163 @@ components:
           type: string
           format: uri-reference
           description: The backend's own `/cards/{cardId}/image` endpoint URL.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateArtRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        Creates multi-slot art via `multipart/form-data` (story 25). New
+        art always starts in the unplaced-art section (all-null
+        placement); the backend computes a SHA-256 digest of the uploaded
+        image while streaming it to temporary storage so identical uploads
+        share one art image asset, and uses `sharp` to inspect pixel
+        dimensions and generate an EXIF-auto-oriented rendering derivative
+        when needed.
+      required:
+        - title
+        - widthSlots
+        - heightSlots
+        - image
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Trimmed and required after trimming on the backend.
+        description:
+          type: string
+          maxLength: 10000
+          description: Trimmed on the backend; a blank value is stored as null.
+        widthSlots:
+          type: integer
+          minimum: 1
+          description: Must not exceed the binder's current width.
+        heightSlots:
+          type: integer
+          minimum: 1
+          description: Must not exceed the binder's current height.
+        imageRotationDegrees:
+          type: integer
+          enum: [0, 90, 180, 270]
+          default: 0
+        focalX:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.5
+          description: >-
+            Normalized focal X coordinate relative to the computed
+            centered-cover fit; rounded to 4 decimal places.
+        focalY:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0.5
+        scaleX:
+          type: number
+          exclusiveMinimum: 0
+          default: 1
+          description: Horizontal scale multiplier relative to the centered-cover fit.
+        scaleY:
+          type: number
+          exclusiveMinimum: 0
+          default: 1
+        borderColor:
+          type: string
+          pattern: '^#[0-9A-Fa-f]{6}$'
+          nullable: true
+          description: Null uses the binder's current border color at render time.
+        borderRadius:
+          type: number
+          minimum: 0
+          maximum: 100
+          nullable: true
+          description: Null uses the binder's current border radius at render time.
+        borderWidth:
+          type: number
+          minimum: 0
+          nullable: true
+          description: >-
+            Centimeters, to two decimal places, zero or greater. Null uses
+            the binder's current border width at render time.
+        image:
+          type: string
+          format: binary
+          description: >-
+            Required. Must be a JPEG, PNG, or WebP file; the backend
+            validates the file's signature rather than trusting its name
+            or multipart MIME type.
+    Art:
+      type: object
+      additionalProperties: false
+      description: The complete persisted representation of one multi-slot-art item.
+      required:
+        - id
+        - binderId
+        - title
+        - description
+        - widthSlots
+        - heightSlots
+        - placement
+        - imageUrl
+        - imageRotationDegrees
+        - focalX
+        - focalY
+        - scaleX
+        - scaleY
+        - borderColor
+        - borderRadius
+        - borderWidth
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        binderId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        description:
+          type: string
+          nullable: true
+        widthSlots:
+          type: integer
+        heightSlots:
+          type: integer
+        placement:
+          $ref: '#/components/schemas/PlacementCoordinates'
+        imageUrl:
+          type: string
+          format: uri-reference
+          description: The backend's own `/art/{artId}/image` endpoint URL.
+        imageRotationDegrees:
+          type: integer
+          enum: [0, 90, 180, 270]
+        focalX:
+          type: number
+        focalY:
+          type: number
+        scaleX:
+          type: number
+        scaleY:
+          type: number
+        borderColor:
+          type: string
+          nullable: true
+        borderRadius:
+          type: number
+          nullable: true
+        borderWidth:
+          type: number
+          nullable: true
+          description: Centimeters, to two decimal places. Null means the binder's current border width applies at render time.
         createdAt:
           type: string
           format: date-time
