@@ -1,4 +1,6 @@
 import { randomUUID } from 'node:crypto';
+import { existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 
 import {
   BINDER_NAME_MAX_LENGTH,
@@ -10,6 +12,7 @@ import {
   DEFAULT_HEIGHT_PER_SLOT_CM,
   DEFAULT_WIDTH_BASE_CM,
   DEFAULT_WIDTH_PER_SLOT_CM,
+  generateUniqueBinderCopyName,
   getMaxPhysicalPage,
   resolveSpread,
 } from '@binder-project-planner/shared';
@@ -17,7 +20,11 @@ import { asc, desc, eq } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
-import { binders } from '../database/schema.js';
+import { art, artImageAssets, binders, cardImageAssets, cards } from '../database/schema.js';
+import {
+  findIdempotentOutcome,
+  saveIdempotentOutcome,
+} from '../idempotency/mutationIdempotency.js';
 import { listArtForBinder, listPlacedArtForPreview } from './art.js';
 import { listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
 
@@ -171,6 +178,33 @@ function notFoundProblem(binderId: string) {
   };
 }
 
+// Builds one binder's home-page summary (story 5's list shape plus story
+// 20's embedded preview spread), shared by `GET /binders` and story 21's
+// `POST /binders/{binderId}/duplicate` response - both need the identical
+// shape for a binder row they already have in hand.
+function buildBinderSummary(database: DatabaseConnection['database'], row: BinderRow) {
+  const maxPhysicalPage = getMaxPhysicalPage(row.pages);
+  const spread = resolveSpread(row.previewPhysicalPage, maxPhysicalPage);
+  // Only the spread's actual page(s) - the first/last spread has only one
+  // side - are queried, matching the OpenAPI `BinderPreviewSpread` schema's
+  // `left`/`right` nullability.
+  const physicalPages = [spread.left, spread.right].filter((page): page is number => page !== null);
+
+  return {
+    ...serializeBinder(row),
+    preview: {
+      spread,
+      cards: listPlacedCardsForPreview(database, row.id, physicalPages),
+      art: listPlacedArtForPreview(database, row.id, physicalPages),
+    },
+  };
+}
+
+// Story 21's binder-copy name generator now lives in the shared package
+// (`generateUniqueBinderCopyName`) so the frontend's optimistic copy-name
+// preview and this backend endpoint always agree on the same generated
+// name.
+
 // better-sqlite3 throws a `SqliteError` with a `.code` of
 // `SQLITE_CONSTRAINT_UNIQUE` (among other `SQLITE_CONSTRAINT_*` codes) when an
 // insert violates a unique constraint. Checking the code (rather than
@@ -186,8 +220,13 @@ function isUniqueConstraintError(error: unknown): boolean {
 
 // Creates the router owning binder resources. Takes the raw database handle
 // (rather than the whole `DatabaseConnection`) so it only depends on what it
-// needs to run queries.
-export function createBindersRouter(database: DatabaseConnection['database']): Router {
+// needs to run queries. `imagesDirectory` is used by story 21's delete
+// endpoint to clean up now-orphaned card/art image files after a binder
+// (and everything it owns) is removed.
+export function createBindersRouter(
+  database: DatabaseConnection['database'],
+  imagesDirectory: string,
+): Router {
   const router = Router();
 
   // Story 5: "List binders". Returns the complete binder-summary collection
@@ -203,25 +242,7 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
       .orderBy(desc(binders.updatedAt), asc(binders.id))
       .all() as BinderRow[];
 
-    const summaries = rows.map((row) => {
-      const maxPhysicalPage = getMaxPhysicalPage(row.pages);
-      const spread = resolveSpread(row.previewPhysicalPage, maxPhysicalPage);
-      // Only the spread's actual page(s) - the first/last spread has only
-      // one side - are queried, matching the OpenAPI `BinderPreviewSpread`
-      // schema's `left`/`right` nullability.
-      const physicalPages = [spread.left, spread.right].filter(
-        (page): page is number => page !== null,
-      );
-
-      return {
-        ...serializeBinder(row),
-        preview: {
-          spread,
-          cards: listPlacedCardsForPreview(database, row.id, physicalPages),
-          art: listPlacedArtForPreview(database, row.id, physicalPages),
-        },
-      };
-    });
+    const summaries = rows.map((row) => buildBinderSummary(database, row));
 
     response.status(200).json(summaries);
   });
@@ -493,6 +514,235 @@ export function createBindersRouter(database: DatabaseConnection['database']): R
     }
 
     response.status(200).json(serializeBinder(updated));
+  });
+
+  // Story 21's binder-deletion endpoint: permanently deletes the binder
+  // and cascade-deletes every card, art, and dependent record it owns (the
+  // schema's `onDelete: 'cascade'` foreign keys) in one transaction, then -
+  // still within that same transaction - deletes any card/art image-asset
+  // record this binder's own cards/art referenced that no other card or
+  // art (in any binder) still references. Note: story 32 ("Lock a
+  // binder"), which planning.md's acceptance criteria for this story
+  // depend on for rejecting deletion of a locked binder with `409
+  // Conflict`, hasn't been implemented yet - there's no `locked` column on
+  // `binders` at all yet, so that specific acceptance criterion is a known
+  // gap deferred until story 32 adds the lock feature this one builds on.
+  router.delete('/binders/:binderId', (request, response) => {
+    const { binderId } = request.params;
+
+    const orphanedFilePaths = database.transaction((tx) => {
+      const existing = tx
+        .select({ id: binders.id })
+        .from(binders)
+        .where(eq(binders.id, binderId))
+        .get();
+      // Deleting an already-absent binder is still a successful no-op per
+      // planning.md, matching every other delete endpoint in this app.
+      if (!existing) return [];
+
+      // Collected before the cascade delete below removes the rows that
+      // reference them - deduplicated since multiple cards/art commonly
+      // share one image asset (e.g. repeated TCGdex cards).
+      const cardAssetIds = [
+        ...new Set(
+          tx
+            .select({ imageAssetId: cards.imageAssetId })
+            .from(cards)
+            .where(eq(cards.binderId, binderId))
+            .all()
+            .map((row) => row.imageAssetId),
+        ),
+      ];
+      const artAssetIds = [
+        ...new Set(
+          tx
+            .select({ imageAssetId: art.imageAssetId })
+            .from(art)
+            .where(eq(art.binderId, binderId))
+            .all()
+            .map((row) => row.imageAssetId),
+        ),
+      ];
+
+      // Cascade-deletes this binder's own cards, art, and other
+      // binder-owned dependent records via the schema's foreign keys.
+      tx.delete(binders).where(eq(binders.id, binderId)).run();
+
+      const paths: string[] = [];
+
+      // An asset is only cleaned up once no card anywhere (in any binder)
+      // still references it - shared assets (e.g. a TCGdex card also
+      // placed in another binder) are left alone.
+      for (const assetId of cardAssetIds) {
+        const stillReferenced = tx
+          .select({ id: cards.id })
+          .from(cards)
+          .where(eq(cards.imageAssetId, assetId))
+          .get();
+        if (stillReferenced) continue;
+
+        const asset = tx
+          .select({ storageFilename: cardImageAssets.storageFilename })
+          .from(cardImageAssets)
+          .where(eq(cardImageAssets.id, assetId))
+          .get();
+        tx.delete(cardImageAssets).where(eq(cardImageAssets.id, assetId)).run();
+        if (asset) paths.push(join(imagesDirectory, asset.storageFilename));
+      }
+
+      // Mirrors the loop above for art image assets, which may have up to
+      // two files (the source upload and an orientation-normalized
+      // derivative - see routes/art.ts).
+      for (const assetId of artAssetIds) {
+        const stillReferenced = tx
+          .select({ id: art.id })
+          .from(art)
+          .where(eq(art.imageAssetId, assetId))
+          .get();
+        if (stillReferenced) continue;
+
+        const asset = tx
+          .select({
+            storageFilename: artImageAssets.storageFilename,
+            normalizedStorageFilename: artImageAssets.normalizedStorageFilename,
+          })
+          .from(artImageAssets)
+          .where(eq(artImageAssets.id, assetId))
+          .get();
+        tx.delete(artImageAssets).where(eq(artImageAssets.id, assetId)).run();
+        if (asset) {
+          paths.push(join(imagesDirectory, asset.storageFilename));
+          if (asset.normalizedStorageFilename) {
+            paths.push(join(imagesDirectory, asset.normalizedStorageFilename));
+          }
+        }
+      }
+
+      return paths;
+    });
+
+    // Filesystem cleanup runs after the transaction commits (planning.md).
+    // A failure here doesn't roll back or fail the already-completed
+    // deletion - the now-unreferenced file (its asset row is already gone)
+    // is left for the existing orphaned-image maintenance sweep
+    // (routes/maintenance.ts) to find and remove on a later pass, which is
+    // this app's existing "persisted as pending cleanup work and retried
+    // by the backend" mechanism.
+    for (const filePath of orphanedFilePaths) {
+      if (existsSync(filePath)) {
+        try {
+          unlinkSync(filePath);
+        } catch (error) {
+          request.log.error(
+            { err: error, path: filePath },
+            'Failed to delete an orphaned image file after binder deletion.',
+          );
+        }
+      }
+    }
+
+    response.status(204).end();
+  });
+
+  // Story 21's binder-duplication endpoint: deep-copies the binder itself
+  // plus every card and art record it owns into a brand-new binder, all in
+  // one database transaction so a failure partway through rolls back the
+  // complete copied graph without touching the source. Copied cards/art
+  // reference the source records' existing image assets rather than
+  // copying image files. Idempotency-key-aware (mirrors
+  // `POST /art/{artId}/duplicate`) so a client retrying a duplicate
+  // request after a dropped response never creates a second binder.
+  router.post('/binders/:binderId/duplicate', (request, response) => {
+    const { binderId } = request.params;
+    const idempotencyKey = request.header('Idempotency-Key');
+    if (!idempotencyKey) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(badRequestProblem('An Idempotency-Key header is required.'));
+      return;
+    }
+
+    const replayed = findIdempotentOutcome(database, 'binder-duplicate', idempotencyKey);
+    if (replayed) {
+      const replayedResponse = response.status(replayed.responseStatus);
+      if (replayed.locationHeader) replayedResponse.location(replayed.locationHeader);
+      replayedResponse.json(replayed.responseBody);
+      return;
+    }
+
+    const source = database.select().from(binders).where(eq(binders.id, binderId)).get() as
+      BinderRow | undefined;
+    if (!source) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    const newBinderId = randomUUID();
+    const now = new Date().toISOString();
+
+    const newBinderRow = database.transaction((tx) => {
+      // Reads every existing normalized name once, up front, to compute
+      // the unique copy name in-process. Node/better-sqlite3 run this
+      // callback fully synchronously, so nothing else can insert a
+      // colliding binder name between this read and the insert below.
+      const existingNormalizedNames = new Set(
+        tx
+          .select({ normalizedName: binders.normalizedName })
+          .from(binders)
+          .all()
+          .map((row) => row.normalizedName),
+      );
+      const uniqueName = generateUniqueBinderCopyName(existingNormalizedNames, source.name);
+
+      const newBinder: BinderRow = {
+        ...source,
+        id: newBinderId,
+        name: uniqueName,
+        normalizedName: uniqueName.toLowerCase(),
+        createdAt: now,
+        updatedAt: now,
+      };
+      tx.insert(binders).values(newBinder).run();
+
+      const sourceCards = tx.select().from(cards).where(eq(cards.binderId, binderId)).all();
+      for (const card of sourceCards) {
+        tx.insert(cards)
+          .values({
+            ...card,
+            id: randomUUID(),
+            binderId: newBinderId,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+      }
+
+      const sourceArt = tx.select().from(art).where(eq(art.binderId, binderId)).all();
+      for (const artItem of sourceArt) {
+        tx.insert(art)
+          .values({
+            ...artItem,
+            id: randomUUID(),
+            binderId: newBinderId,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .run();
+      }
+
+      return newBinder;
+    });
+
+    const summary = buildBinderSummary(database, newBinderRow);
+    const locationHeader = `/binders/${newBinderId}`;
+    saveIdempotentOutcome(database, 'binder-duplicate', idempotencyKey, {
+      responseStatus: 201,
+      responseBody: summary,
+      locationHeader,
+    });
+
+    response.status(201).location(locationHeader).json(summary);
   });
 
   // Story 7 requires the shared binder context to load details, cards, and

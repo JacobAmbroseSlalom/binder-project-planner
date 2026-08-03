@@ -142,6 +142,80 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteBinder
+      summary: Permanently delete a binder
+      description: >-
+        Permanently deletes the binder identified by its UUID, along with
+        every binder-owned card, multi-slot-art, and dependent record, in
+        one database transaction (story 21). Deleting an already-absent
+        binder also returns `204 No Content`. Image assets shared with
+        other binders remain intact; an image asset is cleaned up only
+        after its final card or art reference is removed, and filesystem
+        cleanup runs after the transaction commits - a file-deletion
+        failure does not roll back the committed deletion.
+      responses:
+        '204':
+          description: The binder was deleted, or no binder existed with the given id.
+        '400':
+          description: The binderId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}/duplicate:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    post:
+      operationId: duplicateBinder
+      summary: Duplicate a binder and every record it owns
+      description: >-
+        Reads and deep-copies the authoritative binder graph - the binder
+        itself plus every owned card, multi-slot-art, and dependent record
+        - in one database transaction (story 21). Copied records reference
+        the source records' existing immutable image assets rather than
+        copying image files. The backend names the copy by trying the
+        source name plus " Copy", then " Copy 2", " Copy 3", and increasing
+        integers until the case-insensitively normalized name is unique,
+        truncating the source-name portion as needed to fit the 100-
+        character binder-name limit. Requires a client-generated
+        `Idempotency-Key` header; retrying the same key replays the
+        original response instead of creating a second copy, for the
+        shared 24-hour mutation-idempotency retention period.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '201':
+          description: The duplicate binder's complete home-page binder summary.
+          headers:
+            Location:
+              description: The path of the newly created binder resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinderSummary'
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, or the
+            Idempotency-Key header is missing.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /binders/{binderId}/cards:
     parameters:
       - $ref: '#/components/parameters/binderId'

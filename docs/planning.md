@@ -805,7 +805,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 ### 21. Manage binders from the home page
 
-**Status:** Not started
+**Status:** Done (2026-08-03 00:25 EDT) - with one known gap: the "deleting a locked binder is rejected with a 409 Conflict" acceptance criterion (and any home-page Delete-menu omission for locked binders) isn't implemented yet because story 32 ("Lock a binder") hasn't been built - there's no `locked` column on the `binders` table at all yet. Every other acceptance criterion and technical requirement is implemented: hover delete/copy/edit actions, the delete confirmation modal, `POST /binders/{binderId}/duplicate` and `DELETE /binders/{binderId}` (both idempotency-aware/transactional with orphaned-asset file cleanup deferred to the existing maintenance sweep on delete-file-cleanup failure), the shared `generateUniqueBinderCopyName` copy-name algorithm (moved to `packages/shared` so frontend and backend agree on the same generated name), and optimistic copy/delete with the shared save-status toast and rollback on failure.
 
 #### Acceptance criteria
 

@@ -58,7 +58,11 @@ export interface paths {
         get: operations["getBinder"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Permanently delete a binder
+         * @description Permanently deletes the binder identified by its UUID, along with every binder-owned card, multi-slot-art, and dependent record, in one database transaction (story 21). Deleting an already-absent binder also returns `204 No Content`. Image assets shared with other binders remain intact; an image asset is cleaned up only after its final card or art reference is removed, and filesystem cleanup runs after the transaction commits - a file-deletion failure does not roll back the committed deletion.
+         */
+        delete: operations["deleteBinder"];
         options?: never;
         head?: never;
         /**
@@ -66,6 +70,28 @@ export interface paths {
          * @description Applies a partial update to the documented dirty fields (story 7 covers name/width/height/pages; later stories add notes, preview page, dimension, and lock-state fields).
          */
         patch: operations["updateBinder"];
+        trace?: never;
+    };
+    "/binders/{binderId}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate a binder and every record it owns
+         * @description Reads and deep-copies the authoritative binder graph - the binder itself plus every owned card, multi-slot-art, and dependent record - in one database transaction (story 21). Copied records reference the source records' existing immutable image assets rather than copying image files. The backend names the copy by trying the source name plus " Copy", then " Copy 2", " Copy 3", and increasing integers until the case-insensitively normalized name is unique, truncating the source-name portion as needed to fit the 100- character binder-name limit. Requires a client-generated `Idempotency-Key` header; retrying the same key replays the original response instead of creating a second copy, for the shared 24-hour mutation-idempotency retention period.
+         */
+        post: operations["duplicateBinder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/binders/{binderId}/cards": {
@@ -801,6 +827,35 @@ export interface operations {
             };
         };
     };
+    deleteBinder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The binder was deleted, or no binder existed with the given id. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The binderId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     updateBinder: {
         parameters: {
             query?: never;
@@ -845,6 +900,50 @@ export interface operations {
             };
             /** @description A binder with the same case-insensitively normalized name already exists. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    duplicateBinder: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The duplicate binder's complete home-page binder summary. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created binder resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinderSummary"];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, or the Idempotency-Key header is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

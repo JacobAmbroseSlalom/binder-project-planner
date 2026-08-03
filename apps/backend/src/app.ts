@@ -80,7 +80,7 @@ export function createApp({
     }
   });
 
-  app.use(createBindersRouter(database));
+  app.use(createBindersRouter(database, imagesDirectory));
   app.use(createCardsRouter(database, imagesDirectory));
   app.use(createArtRouter(database, imagesDirectory));
   app.use(createMaintenanceRouter(database, imagesDirectory));

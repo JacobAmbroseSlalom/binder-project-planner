@@ -111,6 +111,43 @@ export async function updateBinder(binderId: string, patch: UpdateBinderRequest)
   return data;
 }
 
+// Permanently deletes a binder through `DELETE /binders/{binderId}` (story
+// 21). Deleting an already-absent binder also succeeds (`204 No Content`).
+// Throws the Problem Details body on any other failure (e.g. a locked-
+// binder `409 Conflict`, once story 32 adds binder locking) so the caller
+// can restore its optimistically removed binder summary.
+export async function deleteBinder(binderId: string): Promise<void> {
+  const { error } = await apiClient.DELETE('/binders/{binderId}', {
+    params: { path: { binderId } },
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
+// Duplicates a binder and everything it owns through
+// `POST /binders/{binderId}/duplicate` (story 21). `idempotencyKey` is a
+// client-generated UUID sent as the `Idempotency-Key` header; retrying the
+// same key after a dropped response replays the original outcome instead
+// of creating a second copy, matching the backend's 24-hour
+// mutation-idempotency retention. Throws the Problem Details body on
+// failure so the caller can roll back its optimistic temporary summary.
+export async function duplicateBinder(
+  binderId: string,
+  idempotencyKey: string,
+): Promise<BinderSummary> {
+  const { data, error } = await apiClient.POST('/binders/{binderId}/duplicate', {
+    params: { path: { binderId }, header: { 'Idempotency-Key': idempotencyKey } },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 // Fetches every binder-owned card through `GET /binders/{binderId}/cards`
 // (story 7, populated by story 11's card creation).
 export async function listBinderCards(binderId: string, signal?: AbortSignal): Promise<Card[]> {
