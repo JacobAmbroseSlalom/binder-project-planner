@@ -19,4 +19,10 @@ Code review as copilot is coding
 
 Had it delete downstream dependencies with cascade delete while doing database migrations.
 
-give example of multi-art sizes
+The art was a headache to get right
+
+ai struggled with the ui aspect, thats where a lot of back and forth happened. UX Designs would have probably helped.
+
+agressive use of comments
+
+Story #26 was wayyyyy tooo big

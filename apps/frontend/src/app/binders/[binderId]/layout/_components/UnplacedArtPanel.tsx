@@ -1,12 +1,13 @@
 'use client';
 
+import { useDroppable } from '@dnd-kit/core';
 import { Plus } from 'lucide-react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Art, Binder } from '@/lib/api';
 
-import { ArtTile } from './ArtTile';
+import { UnplacedArt } from './UnplacedArt';
 import { UNPLACED_GRID_COLUMNS, UNPLACED_GRID_GAP_PX } from './UnplacedCardsPanel';
 
 // A rough guess for a single-column art row's height before the
@@ -30,20 +31,27 @@ function sortUnplacedArt(unplacedArt: Art[]): Art[] {
   });
 }
 
-// The "Edit Layout" tab's unplaced-art section (story 25): an
+// The "Edit Layout" tab's unplaced-art section (stories 25 and 26): an
 // independently scrolling, virtualized single-column list of every
 // binder-owned multi-slot art item without a physical page/row/column,
 // alongside an add button that opens the create-art modal. Rendered as
 // its own separate panel (not combined with `UnplacedCardsPanel`) per
-// planning.md's "separate from the unplaced cards section." Unlike the
-// cards panel, this has no dnd-kit droppable wiring at all - art always
-// starts unplaced in story 25, and dragging it onto the layout is story
-// 26's scope.
+// planning.md's "separate from the unplaced cards section." The whole
+// panel is one dnd-kit drop target (story 26), sharing the exact
+// `{ unplaced: true }` marker `UnplacedCardsPanel` uses so either panel
+// accepts a dropped card or art item, unplacing it.
 export function UnplacedArtPanel({
   art,
   binder,
   pendingUnplacedArtIds,
+  pendingArtEditIds,
+  pendingArtDeletionIds,
+  pendingArtDuplicateIds,
+  isMovePending,
   onAddArt,
+  onEditArt,
+  onRemoveArt,
+  onDuplicateArt,
 }: {
   // Every art item in the binder; filtered internally to the unplaced
   // subset (all-null placement), mirroring `UnplacedCardsPanel`'s own
@@ -51,12 +59,33 @@ export function UnplacedArtPanel({
   art: Art[];
   binder: Binder;
   pendingUnplacedArtIds: Set<string>;
+  pendingArtEditIds: Set<string>;
+  pendingArtDeletionIds: Set<string>;
+  pendingArtDuplicateIds: Set<string>;
+  // True while any card/art move or swap is in flight for the binder
+  // (story 26's shared movement queue) - disables dragging every art item
+  // and dropping onto this panel until it settles.
+  isMovePending: boolean;
   onAddArt: () => void;
+  onEditArt: (art: Art) => void;
+  onRemoveArt: (artId: string) => void;
+  onDuplicateArt: (artId: string) => void;
 }) {
   const unplacedArt = useMemo(
     () => sortUnplacedArt(art.filter((item) => item.placement.physicalPage === null)),
     [art],
   );
+
+  // The whole panel is the one drop target (story 26, mirroring
+  // `UnplacedCardsPanel`'s own `useDroppable`) - reuses the identical
+  // `{ unplaced: true }` marker so `BinderLayoutView`'s drag-end handler
+  // doesn't need a separate case for which unplaced panel a card or art
+  // item was dropped onto.
+  const { setNodeRef: setDroppableRef, isOver } = useDroppable({
+    id: 'unplaced-art',
+    data: { unplaced: true },
+    disabled: isMovePending,
+  });
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -112,7 +141,12 @@ export function UnplacedArtPanel({
   }, [unplacedArt, rowVirtualizer]);
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-3 rounded-standard bg-neutral-800 p-3 shadow-panel">
+    <div
+      ref={setDroppableRef}
+      className={`flex h-full min-h-0 w-full flex-col gap-3 rounded-standard bg-neutral-800 p-3 shadow-panel ${
+        isOver ? 'ring-2 ring-inset ring-primary' : ''
+      }`}
+    >
       <div className="flex items-center gap-2">
         {/* An invisible spacer matching the add button's own size, so the
             title centers on the row's true midpoint instead of leaning
@@ -153,11 +187,18 @@ export function UnplacedArtPanel({
                 className="absolute top-0 left-0 flex w-full justify-center pb-2"
                 style={{ transform: `translateY(${virtualRow.start}px)` }}
               >
-                <ArtTile
+                <UnplacedArt
                   art={item}
                   binder={binder}
-                  isPendingCreate={pendingUnplacedArtIds.has(item.id)}
                   widthPx={tileWidthPx}
+                  isPendingCreate={pendingUnplacedArtIds.has(item.id)}
+                  isMovePending={isMovePending}
+                  isEditPending={pendingArtEditIds.has(item.id)}
+                  isDeletionPending={pendingArtDeletionIds.has(item.id)}
+                  isDuplicatePending={pendingArtDuplicateIds.has(item.id)}
+                  onEditArt={onEditArt}
+                  onRemoveArt={onRemoveArt}
+                  onDuplicateArt={onDuplicateArt}
                 />
               </div>
             );

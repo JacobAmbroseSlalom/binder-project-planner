@@ -18,6 +18,7 @@ export function BinderSlot({
   isPendingPlacement,
   isRemovalPending,
   isMovePending,
+  isCoveredByArt,
   onSlotClick,
   onRemoveCard,
   slotAspectRatio,
@@ -37,6 +38,16 @@ export function BinderSlot({
   // 14) - disables dragging and dropping on every slot until it settles,
   // per the story's single in-flight-movement-per-binder requirement.
   isMovePending: boolean;
+  // True when a placed multi-slot art item's footprint covers this
+  // (necessarily card-free, per the backend's own occupancy validation)
+  // cell (story 26) - suppresses the empty slot's "+" add-card
+  // affordance, since `BinderSide` already renders the art itself as a
+  // grid-spanning overlay on top of this cell, but this slot still needs
+  // its own (now invisible) droppable node mounted at this exact grid
+  // position so `pointerWithin` collision detection - which is rect-based,
+  // not DOM-hit-test-based - still resolves a drop "onto" this covered
+  // cell correctly underneath that overlay.
+  isCoveredByArt: boolean;
   onSlotClick: (row: number, column: number) => void;
   onRemoveCard: (cardId: string) => void;
   // Story 24: the binder's configured single-slot width-to-height ratio,
@@ -95,6 +106,19 @@ export function BinderSlot({
         dragAttributes={attributes}
         dragListeners={listeners}
         slotAspectRatio={slotAspectRatio}
+        gridRow={row}
+        gridColumn={column}
+      />
+    );
+  }
+
+  if (isCoveredByArt) {
+    return (
+      <div
+        ref={setDroppableRef}
+        aria-hidden="true"
+        className={highlightClassName}
+        style={{ aspectRatio: slotAspectRatio, gridRow: row, gridColumn: column }}
       />
     );
   }
@@ -107,7 +131,7 @@ export function BinderSlot({
       onClick={() => onSlotClick(row, column)}
       aria-label={`Add a card to row ${row}, column ${column}`}
       className={`flex cursor-pointer items-center justify-center rounded-standard border border-neutral-700 bg-neutral-800 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${highlightClassName}`}
-      style={{ aspectRatio: slotAspectRatio }}
+      style={{ aspectRatio: slotAspectRatio, gridRow: row, gridColumn: column }}
     >
       <Plus className="size-6 text-neutral-500" aria-hidden="true" />
     </button>

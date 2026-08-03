@@ -188,6 +188,54 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/art/{artId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artId: components["parameters"]["artId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Permanently delete a binder-owned multi-slot art item
+         * @description Permanently deletes the binder-owned art item identified by its UUID (story 26). Deleting an already-absent art item also returns `204 No Content`. If this removes the final art reference to its image asset, the backend also deletes the image-asset record and its local file(s); a failure to delete the now-orphaned local file(s) does not roll back the committed deletion.
+         */
+        delete: operations["deleteArt"];
+        options?: never;
+        head?: never;
+        /**
+         * Move or edit one multi-slot art item
+         * @description Applies either a placement move or a metadata/image edit to one art item (story 26), branching on the request's content type. An `application/json` body moves the art to a new placement (or to the unplaced-art section) using the same expected/final compare-before-write pattern as `PATCH /cards/{cardId}`; art never swaps, so exactly one placement pair is supplied. A `multipart/form-data` body edits the art's own title, description, dimensions, positioning/scaling/rotation, and style overrides, and may optionally replace its image; if edited dimensions would leave currently-placed art out of bounds or overlapping another item, the request is rejected with `409 Conflict` unless `moveToUnplacedOnConflict` is `true`, in which case the art is saved and moved to the unplaced-art section in the same request.
+         */
+        patch: operations["updateArt"];
+        trace?: never;
+    };
+    "/art/{artId}/duplicate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artId: components["parameters"]["artId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Duplicate a multi-slot art item into the unplaced-art section
+         * @description Creates a new, always-unplaced art item sharing the source item's image asset and every editable property (story 26). Requires a client-generated `Idempotency-Key` header; retrying the same key replays the original response instead of creating a second copy, for the shared 24-hour mutation-idempotency retention period.
+         */
+        post: operations["duplicateArt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/art/{artId}/image": {
         parameters: {
             query?: never;
@@ -512,6 +560,51 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /** @description `PATCH /art/{artId}`'s `application/json` movement body (story 26). Unlike `MoveCardsRequest`, art never swaps - the destination is always for the one art item the path identifies - so this is a single expected/final placement pair rather than an array. */
+        MoveArtRequest: {
+            expectedPlacement: components["schemas"]["PlacementCoordinates"];
+            finalPlacement: components["schemas"]["PlacementCoordinates"];
+        };
+        /** @description Edits an existing art item's metadata, transform, and style overrides via `multipart/form-data` (story 26), mirroring `CreateArtRequest`'s fields except that `image` is optional - omitting it keeps the art's current image. */
+        UpdateArtRequest: {
+            /** @description Trimmed and required after trimming on the backend. */
+            title: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            description?: string;
+            /** @description Must not exceed the binder's current width. */
+            widthSlots: number;
+            /** @description Must not exceed the binder's current height. */
+            heightSlots: number;
+            /**
+             * @default 0
+             * @enum {integer}
+             */
+            imageRotationDegrees: 0 | 90 | 180 | 270;
+            /** @default 0.5 */
+            focalX: number;
+            /** @default 0.5 */
+            focalY: number;
+            /** @default 1 */
+            scaleX: number;
+            /** @default 1 */
+            scaleY: number;
+            /** @description Null uses the binder's current border color at render time. */
+            borderColor?: string | null;
+            /** @description Null uses the binder's current border radius at render time. */
+            borderRadius?: number | null;
+            /** @description Centimeters, to two decimal places, zero or greater. Null uses the binder's current border width at render time. */
+            borderWidth?: number | null;
+            /**
+             * @description When `true`, confirms saving even though the edited dimensions would leave currently-placed art out of bounds or overlapping another item; the art is moved to the unplaced-art section in the same request instead of returning `409 Conflict`.
+             * @default false
+             */
+            moveToUnplacedOnConflict: boolean;
+            /**
+             * Format: binary
+             * @description Optional. When supplied, must be a JPEG, PNG, or WebP file; the backend validates the file's signature rather than trusting its name or multipart MIME type. Omitting it keeps the art's current image.
+             */
+            image?: string;
         };
     };
     responses: never;
@@ -1098,6 +1191,142 @@ export interface operations {
             };
             /** @description The uploaded file's signature did not match a supported image format. */
             415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    deleteArt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artId: components["parameters"]["artId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The art item was deleted, or no art existed with the given id. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The artId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateArt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                artId: components["parameters"]["artId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MoveArtRequest"];
+                "multipart/form-data": components["schemas"]["UpdateArtRequest"];
+            };
+        };
+        responses: {
+            /** @description The art item's complete persisted representation after the update. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Art"];
+                };
+            };
+            /** @description The artId path parameter is not a well-formed UUID, or the request body did not match the documented schema (a malformed placement, or metadata failing validation). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No art exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description A move's expected placement no longer matches the art's persisted placement, the destination is occupied, or an edit's new dimensions would leave placed art out of bounds or overlapping another item without `moveToUnplacedOnConflict`. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description A replacement image's signature did not match a supported image format. */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    duplicateArt: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path: {
+                artId: components["parameters"]["artId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The duplicate art item, created in the unplaced-art section. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created art resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Art"];
+                };
+            };
+            /** @description The artId path parameter is not a well-formed UUID, or the Idempotency-Key header is missing. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No art exists with the given id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

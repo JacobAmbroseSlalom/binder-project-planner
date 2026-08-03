@@ -6,14 +6,15 @@ import { RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
-import type { Binder } from '@/lib/api';
+import { resolveArtImageUrl, type Art, type Binder } from '@/lib/api';
 
-import type { ArtCreateRestore, ArtFormValues } from '../../BinderRouteContext';
+import type { ArtCreateRestore, ArtEditRestore, ArtFormValues } from '../../BinderRouteContext';
 import { ArtGridSelector } from './ArtGridSelector';
 import {
   ArtImageEditor,
   DEFAULT_ART_TRANSFORM,
   useImageFromFile,
+  useImageFromUrl,
   type ArtTransform,
 } from './ArtImageEditor';
 import { computeArtImageQuality } from './artImageQuality';
@@ -40,35 +41,89 @@ const PREVIEW_MAX_SIZE_PX = 320;
 // Displayed in the quality warning below.
 const MIN_PPI_LABEL = MIN_ART_PRINT_RESOLUTION_PPI;
 
+// Converts an existing `Art` record into this modal's own form-values
+// shape (story 26's edit mode), resolving each nullable border override
+// to its currently effective value (mirroring `ArtTile`'s own `??
+// binder.borderX` resolution) so the field starts populated with what's
+// actually rendering today, exactly like the create flow's own
+// binder-setting-seeded fields.
+function artToFormValues(art: Art, binder: Binder): ArtFormValues {
+  return {
+    title: art.title,
+    description: art.description,
+    widthSlots: art.widthSlots,
+    heightSlots: art.heightSlots,
+    imageRotationDegrees: art.imageRotationDegrees,
+    focalX: art.focalX,
+    focalY: art.focalY,
+    scaleX: art.scaleX,
+    scaleY: art.scaleY,
+    borderColor: art.borderColor ?? binder.borderColor,
+    borderRadius: art.borderRadius ?? binder.borderRadius,
+    borderWidth: art.borderWidth ?? binder.borderWidth,
+  };
+}
+
 interface CreateArtModalProps {
   binder: Binder;
+  // 'create' (story 25) opens a blank modal targeting the unplaced-art
+  // section's own add button; 'edit' (story 26) opens the identical modal
+  // pre-filled from an existing art item, per planning.md's "Selecting
+  // edit opens the same modal used to add multi-slot art."
+  mode: 'create' | 'edit';
   // Present when reopening after a failed create (story 25's "Failure ...
   // reopens the editor with the image, metadata ... preserved"); `null` for
-  // a fresh add-art click.
+  // a fresh add-art click. Only ever set in 'create' mode.
   restore: ArtCreateRestore | null;
+  // The art item being edited; required in 'edit' mode, ignored in
+  // 'create' mode.
+  editingArt?: Art;
+  // Present when reopening after a failed edit submission (story 26,
+  // mirroring `restore` above); `null` for a fresh edit click. Only ever
+  // set in 'edit' mode.
+  editRestore?: ArtEditRestore | null;
+  // 'edit' mode only: reports whether the given candidate dimensions
+  // would leave `editingArt`'s own CURRENT placement (if it's currently
+  // placed at all) out of bounds or overlapping another item, using the
+  // binder route context's own up-to-date `cards`/`art` state - drives
+  // the nested "Save and Move to Unplaced" confirmation dialog per
+  // planning.md's "If an edit changes placed art so its current footprint
+  // would be out of bounds or overlap another item, Save opens a nested
+  // confirmation dialog."
+  checkPlacementConflict?: (widthSlots: number, heightSlots: number) => boolean;
   onClose: () => void;
-  // Called with the finished form values and file immediately on Save - the
-  // caller (BinderLayoutView, via the route context's `createArt`) owns the
-  // actual optimistic-update/request lifecycle from that point on, so this
-  // modal closes right away rather than waiting on the multipart request.
-  onSubmit: (values: ArtFormValues, file: File) => void;
-  // Called once this modal has copied `restore`'s file/values into its own
-  // local state, so the route context can revoke its own now-unneeded copy
-  // of the preview object URL (see `BinderRouteContext.tsx`'s
-  // `artCreateRestore` comment).
+  // Called with the finished form values, the replacement file (`null` in
+  // edit mode when the existing image is kept as-is), and - only ever
+  // `true` in edit mode - whether the user confirmed "Save and Move to
+  // Unplaced" in the nested conflict dialog. The caller (BinderLayoutView,
+  // via the route context's `createArt`/`editArt`) owns the actual
+  // optimistic-update/request lifecycle from that point on, so this modal
+  // closes right away rather than waiting on the multipart request.
+  onSubmit: (values: ArtFormValues, file: File | null, moveToUnplacedOnConflict?: boolean) => void;
+  // Called once this modal has copied `restore`/`editRestore`'s file/values
+  // into its own local state, so the route context can revoke its own now-
+  // unneeded copy of the preview object URL (see `BinderRouteContext.tsx`'s
+  // `artCreateRestore`/`artEditRestore` comments).
   onConsumeRestore: () => void;
 }
 
-// The create-art modal (story 25): grid-based slot-size selection, title/
-// description fields, image upload/paste with a Konva-based
-// position/scale/rotation editor, per-field border-style overrides, and a
-// nonblocking image-quality warning. Fully custom-built (no headless UI
-// library) per styling.instructions.md, mirroring `CardSelectionModal.tsx`'s
-// dialog-shell conventions (manual focus trap, Escape-to-close, an outer
-// `onPaste` handler).
+// The create/edit-art modal (stories 25 and 26): grid-based slot-size
+// selection, title/description fields, image upload/paste with a
+// Konva-based position/scale/rotation editor, per-field border-style
+// overrides, and a nonblocking image-quality warning. Fully custom-built
+// (no headless UI library) per styling.instructions.md, mirroring
+// `CardSelectionModal.tsx`'s dialog-shell conventions (manual focus trap,
+// Escape-to-close, an outer `onPaste` handler). The same component and
+// markup serve both modes (planning.md: "Selecting edit opens the same
+// modal used to add multi-slot art") - only the initial pre-fill source,
+// title text, Save behavior, and the edit-only conflict dialog differ.
 export function CreateArtModal({
   binder,
+  mode,
   restore,
+  editingArt,
+  editRestore,
+  checkPlacementConflict,
   onClose,
   onSubmit,
   onConsumeRestore,
@@ -76,27 +131,37 @@ export function CreateArtModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElementRef = useRef<Element | null>(null);
 
+  // The one set of initial values/file this modal pre-fills from,
+  // regardless of mode: a failed create's restore, a failed edit's
+  // restore, or (only in 'edit' mode, and only when neither restore is
+  // set) the art item being edited itself. At most one of `restore`/
+  // `editRestore` is ever non-null for a given mode, so this doesn't need
+  // to special-case which one "wins".
+  const initialValues: ArtFormValues | null =
+    restore?.values ??
+    editRestore?.values ??
+    (editingArt ? artToFormValues(editingArt, binder) : null);
+  const initialFile: File | null = restore?.file ?? editRestore?.file ?? null;
+
   const form = useForm<ArtDetailsFormValues>({
     resolver: zodResolver(artDetailsSchema),
-    defaultValues: restore
-      ? { title: restore.values.title, description: restore.values.description ?? '' }
+    defaultValues: initialValues
+      ? { title: initialValues.title, description: initialValues.description ?? '' }
       : defaultArtDetailsFormValues,
   });
 
-  const [widthSlots, setWidthSlots] = useState<number | null>(restore?.values.widthSlots ?? null);
-  const [heightSlots, setHeightSlots] = useState<number | null>(
-    restore?.values.heightSlots ?? null,
-  );
-  const [file, setFile] = useState<File | null>(restore?.file ?? null);
+  const [widthSlots, setWidthSlots] = useState<number | null>(initialValues?.widthSlots ?? null);
+  const [heightSlots, setHeightSlots] = useState<number | null>(initialValues?.heightSlots ?? null);
+  const [file, setFile] = useState<File | null>(initialFile);
   const [fileError, setFileError] = useState<string | undefined>(undefined);
   const [transform, setTransform] = useState<ArtTransform>(
-    restore
+    initialValues
       ? {
-          imageRotationDegrees: restore.values.imageRotationDegrees,
-          focalX: restore.values.focalX,
-          focalY: restore.values.focalY,
-          scaleX: restore.values.scaleX,
-          scaleY: restore.values.scaleY,
+          imageRotationDegrees: initialValues.imageRotationDegrees,
+          focalX: initialValues.focalX,
+          focalY: initialValues.focalY,
+          scaleX: initialValues.scaleX,
+          scaleY: initialValues.scaleY,
         }
       : DEFAULT_ART_TRANSFORM,
   );
@@ -108,25 +173,40 @@ export function CreateArtModal({
   // matches the binder's setting - see `handleFormSubmit` below - so an
   // untouched field still inherits the binder's setting dynamically, the
   // same as before.
-  const [borderColor, setBorderColor] = useState(restore?.values.borderColor ?? binder.borderColor);
+  const [borderColor, setBorderColor] = useState(initialValues?.borderColor ?? binder.borderColor);
   const [borderRadius, setBorderRadius] = useState(
-    restore?.values.borderRadius ?? binder.borderRadius,
+    initialValues?.borderRadius ?? binder.borderRadius,
   );
-  const [borderWidth, setBorderWidth] = useState(restore?.values.borderWidth ?? binder.borderWidth);
+  const [borderWidth, setBorderWidth] = useState(initialValues?.borderWidth ?? binder.borderWidth);
 
   // A pasted image that's awaiting the nested replace-confirmation dialog
   // (only used when a file is already loaded - see `handlePaste` below).
   const [pendingPasteFile, setPendingPasteFile] = useState<File | null>(null);
 
-  const image = useImageFromFile(file);
+  // Story 26's nested "Save and Move to Unplaced" confirmation (edit mode
+  // only): holds the fully-built submission values while the dialog is
+  // open, `null` otherwise. Set by `handleFormSubmit` instead of
+  // submitting immediately when `checkPlacementConflict` predicts the
+  // new dimensions would no longer fit the art's current placement.
+  const [pendingConflictValues, setPendingConflictValues] = useState<ArtFormValues | null>(null);
 
-  // Consumes `restore` exactly once on mount: this modal has already
-  // copied its file/values into its own local state above, so the route
-  // context's own copy of the preview object URL is no longer needed and
-  // can be revoked.
+  const fileImage = useImageFromFile(file);
+  // Falls back to the art's own already-hosted image only in edit mode,
+  // and only while no replacement file has been chosen yet - the moment a
+  // new file is selected, `file` (and therefore `fileImage`) takes over
+  // per the `??` below.
+  const existingImageUrl =
+    mode === 'edit' && !file && editingArt ? resolveArtImageUrl(editingArt.imageUrl) : null;
+  const existingImage = useImageFromUrl(existingImageUrl);
+  const image = fileImage ?? existingImage;
+
+  // Consumes `restore`/`editRestore` exactly once on mount: this modal has
+  // already copied its file/values into its own local state above, so the
+  // route context's own copy of the preview object URL is no longer
+  // needed and can be revoked.
   const hasConsumedRestoreRef = useRef(false);
   useEffect(() => {
-    if (restore && !hasConsumedRestoreRef.current) {
+    if ((restore || editRestore) && !hasConsumedRestoreRef.current) {
       hasConsumedRestoreRef.current = true;
       onConsumeRestore();
     }
@@ -153,6 +233,10 @@ export function CreateArtModal({
       event.stopPropagation();
       if (pendingPasteFile) {
         setPendingPasteFile(null);
+        return;
+      }
+      if (pendingConflictValues) {
+        setPendingConflictValues(null);
         return;
       }
       onClose();
@@ -311,11 +395,14 @@ export function CreateArtModal({
         })
       : null;
 
-  const canSave = widthSlots !== null && heightSlots !== null && file !== null;
+  // In create mode a file is mandatory; in edit mode the existing image
+  // stays in place unless a replacement is chosen, so no file is required.
+  const canSave = widthSlots !== null && heightSlots !== null && (mode === 'edit' || file !== null);
 
   const handleFormSubmit = form.handleSubmit((formValues) => {
-    if (!file || widthSlots === null || heightSlots === null) {
-      if (!file) setFileError('An image is required.');
+    if (widthSlots === null || heightSlots === null) return;
+    if (mode === 'create' && !file) {
+      setFileError('An image is required.');
       return;
     }
 
@@ -338,8 +425,31 @@ export function CreateArtModal({
       borderRadius: borderRadius === binder.borderRadius ? null : borderRadius,
       borderWidth: borderWidth === binder.borderWidth ? null : borderWidth,
     };
-    onSubmit(values, file);
+
+    // Story 26: only in edit mode, and only when the new dimensions would
+    // leave the art's own current placement out of bounds or overlapping
+    // another item, defer to the nested confirmation dialog instead of
+    // submitting immediately.
+    if (mode === 'edit' && checkPlacementConflict?.(widthSlots, heightSlots)) {
+      setPendingConflictValues(values);
+      return;
+    }
+
+    onSubmit(values, file, false);
   });
+
+  // Confirms the nested "Save and Move to Unplaced" dialog (story 26):
+  // submits the already-built values with the conflict explicitly
+  // acknowledged, so the backend clears the art's placement in the same
+  // update instead of rejecting it.
+  function handleConfirmMoveToUnplaced() {
+    if (pendingConflictValues) onSubmit(pendingConflictValues, file, true);
+    setPendingConflictValues(null);
+  }
+
+  function handleCancelMoveToUnplaced() {
+    setPendingConflictValues(null);
+  }
 
   // Resets all three border-style fields back to the binder's current
   // settings (rather than the shared app defaults - unlike
@@ -369,7 +479,7 @@ export function CreateArtModal({
         className="flex h-full max-h-[44rem] w-full max-w-4xl flex-col gap-4 overflow-y-auto rounded-standard bg-surface p-6 shadow-modal"
       >
         <h2 id="create-art-modal-title" className="text-center">
-          Add multi-slot art
+          {mode === 'edit' ? 'Edit multi-slot art' : 'Add multi-slot art'}
         </h2>
 
         <form onSubmit={handleFormSubmit} className="flex flex-1 flex-col gap-6 md:flex-row">
@@ -512,7 +622,11 @@ export function CreateArtModal({
                   className="sr-only"
                 />
                 <span className="text-caption text-neutral-500">
-                  {file ? file.name : 'No file chosen'}
+                  {file
+                    ? file.name
+                    : mode === 'edit'
+                      ? 'Using the current image'
+                      : 'No file chosen'}
                 </span>
               </div>
               <p className="text-caption text-neutral-500">
@@ -592,6 +706,73 @@ export function CreateArtModal({
           onCancel={handleCancelPasteReplace}
         />
       )}
+
+      {/* Story 26's nested "Save and Move to Unplaced" confirmation,
+          mirroring `PasteReplaceConfirmDialog`'s own minimal two-button
+          dialog shell. */}
+      {pendingConflictValues && (
+        <PlacementConflictConfirmDialog
+          onConfirm={handleConfirmMoveToUnplaced}
+          onCancel={handleCancelMoveToUnplaced}
+        />
+      )}
+    </div>
+  );
+}
+
+// The nested "the new size no longer fits" confirmation dialog (story 26,
+// planning.md: "If an edit changes placed art so its current footprint
+// would be out of bounds or overlap another item, Save opens a nested
+// confirmation dialog offering Cancel or Save and Move to Unplaced").
+// Mirrors `PasteReplaceConfirmDialog`'s own minimal focus handling.
+function PlacementConflictConfirmDialog({
+  onConfirm,
+  onCancel,
+}: {
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const confirmButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    confirmButtonRef.current?.focus();
+  }, []);
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-8"
+      onClick={onCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="placement-conflict-dialog-title"
+        onClick={(event) => event.stopPropagation()}
+        className="flex w-full max-w-sm flex-col gap-4 rounded-standard bg-surface p-6 shadow-modal"
+      >
+        <h3 id="placement-conflict-dialog-title">Move this art to unplaced art?</h3>
+        <p className="text-caption text-neutral-500">
+          These changes no longer fit this art&apos;s current position on the binder layout. Saving
+          will move it to the unplaced art section instead.
+        </p>
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="cursor-pointer rounded-standard px-4 py-2 text-neutral-100 hover:brightness-110"
+          >
+            Cancel
+          </button>
+          <button
+            ref={confirmButtonRef}
+            type="button"
+            onClick={onConfirm}
+            className="cursor-pointer rounded-standard bg-primary px-4 py-2 text-neutral-100 hover:brightness-110"
+          >
+            Save and Move to Unplaced
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

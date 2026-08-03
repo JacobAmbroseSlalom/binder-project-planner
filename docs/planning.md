@@ -1060,7 +1060,7 @@ carried over for a later story to close:
 
 ### 26. Move and manage multi-slot art
 
-**Status:** Not started
+**Status:** Done (2026-08-02 22:00 EDT)
 
 #### Acceptance criteria
 

@@ -1,12 +1,13 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
-import { X } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 
 import { resolveCardImageUrl, type Card } from '@/lib/api';
 
 // The shared visual tile both `BinderSlot` (an occupied binder slot) and
 // `UnplacedCard` (a card in the unplaced-cards section, story 15) render
 // for a card: an aspect-ratio-constrained image with a hover-revealed
-// top-right X remove action. Extracted here once both call sites' markup
+// top-right remove action (the same trash-can icon used for art's own
+// delete action). Extracted here once both call sites' markup
 // turned out to be identical apart from how each attaches its own drag
 // (and, for `BinderSlot` only, drop) ref/handlers and highlight styling -
 // each caller keeps owning its own dnd-kit wiring (`useDraggable`, and for
@@ -23,6 +24,8 @@ export function CardTile({
   dragAttributes,
   dragListeners,
   slotAspectRatio,
+  gridRow,
+  gridColumn,
 }: {
   card: Card;
   // True while this specific card is the one currently being dragged -
@@ -45,13 +48,22 @@ export function CardTile({
   // Story 24: the binder's configured single-slot width-to-height ratio,
   // replacing the old fixed `SLOT_WIDTH_CM`/`SLOT_HEIGHT_CM` ratio.
   slotAspectRatio: number;
+  // Story 26: this occupied slot's explicit (1-based) grid position,
+  // supplied only by `BinderSlot` (never by `UnplacedCard`, which isn't in
+  // a grid at all) - needed now that placed multi-slot art tiles are
+  // explicitly positioned in the same grid, and CSS Grid places explicitly
+  // positioned items before any auto-placed ones regardless of DOM order,
+  // which would otherwise shift every subsequent auto-placed slot forward
+  // past cells the art already claimed.
+  gridRow?: number;
+  gridColumn?: number;
 }) {
   if (isDragging) {
     return (
       <div
         ref={tileRef}
         className={`rounded-standard border border-neutral-700 bg-neutral-800 ${highlightClassName}`}
-        style={{ aspectRatio: slotAspectRatio }}
+        style={{ aspectRatio: slotAspectRatio, gridRow, gridColumn }}
       />
     );
   }
@@ -62,7 +74,7 @@ export function CardTile({
       {...dragAttributes}
       {...dragListeners}
       className={`group relative touch-none ${highlightClassName}`}
-      style={{ aspectRatio: slotAspectRatio }}
+      style={{ aspectRatio: slotAspectRatio, gridRow, gridColumn }}
     >
       <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800">
         {/* eslint-disable-next-line @next/next/no-img-element -- the card
@@ -88,7 +100,7 @@ export function CardTile({
           title="Remove card"
           className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <X className="size-4" aria-hidden="true" />
+          <Trash2 className="size-3.5" aria-hidden="true" />
         </button>
       </div>
     </div>

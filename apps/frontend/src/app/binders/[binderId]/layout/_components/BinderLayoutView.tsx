@@ -8,6 +8,7 @@ import {
   useSensors,
   PointerSensor,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { CARD_DRAG_ACTIVATION_DISTANCE_PX } from '@binder-project-planner/shared';
@@ -15,10 +16,11 @@ import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { resolveCardImageUrl, type Card, type TcgDexCatalogCard } from '@/lib/api';
+import { resolveCardImageUrl, type Art, type Card, type TcgDexCatalogCard } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
 import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
+import { getFootprintCells, isFootprintBlocked, isFootprintInBounds } from '../../artFootprint';
 import {
   getMaxPhysicalPage,
   getNextPhysicalPage,
@@ -28,6 +30,7 @@ import {
   resolvePhysicalPageParam,
   resolveSpread,
 } from '../layoutSpread';
+import { ArtTile } from './ArtTile';
 import { BinderSide } from './BinderSide';
 import { CardSelectionModal } from './CardSelectionModal';
 import { CreateArtModal } from './CreateArtModal';
@@ -95,6 +98,15 @@ export function BinderLayoutView() {
     pendingUnplacedArtIds,
     artCreateRestore,
     clearArtCreateRestore,
+    moveArt,
+    editArt,
+    pendingArtEditIds,
+    artEditRestore,
+    clearArtEditRestore,
+    removeArt,
+    pendingArtDeletionIds,
+    duplicateArt,
+    pendingArtDuplicateIds,
   } = useBinderRouteContext();
   const router = useRouter();
   const pathname = usePathname();
@@ -131,11 +143,73 @@ export function BinderLayoutView() {
     // failure, so it doesn't keep reopening itself.
     clearArtCreateRestore();
   }
+
+  // The art item currently targeted by an open edit-art modal (story 26),
+  // set by an `ArtActionsOverlay`'s Edit button; `null` while no edit
+  // modal is open and no edit attempt has failed. A failed edit's restore
+  // clears its own optimistic changes back to the original record in the
+  // route context, so looking the id back up in `art` here (rather than
+  // keeping a stale local copy) always finds the right record to reopen
+  // with, combined with `artEditRestore`'s own preserved form values/file.
+  const [editingArtId, setEditingArtId] = useState<string | null>(null);
+  const editingArtRecordId = editingArtId ?? artEditRestore?.artId ?? null;
+  const editingArt = editingArtRecordId
+    ? (art.find((item) => item.id === editingArtRecordId) ?? null)
+    : null;
+  const showEditArtModal = editingArt !== null;
+
+  function handleCloseEditArtModal() {
+    setEditingArtId(null);
+    clearArtEditRestore();
+  }
+
+  // Story 26's nested "Save and Move to Unplaced" conflict check, passed
+  // to the edit modal: only art that's currently placed on the layout can
+  // conflict at all - unplaced art has nowhere to overlap or go out of
+  // bounds - and the art being edited is excluded from its own overlap
+  // check via `isFootprintBlocked`'s `excludeArtId`.
+  function checkEditPlacementConflict(widthSlots: number, heightSlots: number): boolean {
+    if (!editingArt) return false;
+    const { physicalPage, row, column } = editingArt.placement;
+    if (physicalPage === null || row === null || column === null) return false;
+
+    if (!isFootprintInBounds(row, column, widthSlots, heightSlots, binder.width, binder.height)) {
+      return true;
+    }
+
+    const cells = getFootprintCells(row, column, widthSlots, heightSlots);
+    return isFootprintBlocked(cards, art, physicalPage, cells, editingArt.id);
+  }
+
   // The card currently being dragged (story 14), or `null` while no drag
   // is in progress - drives the `DragOverlay`'s content, the source slot's
   // empty-placeholder rendering (in `BinderSlot`), and disabling page
   // navigation while a drag is active.
   const [activeDragCard, setActiveDragCard] = useState<Card | null>(null);
+  // The art item currently being dragged (story 26), alongside the grabbed
+  // cell's offset from the art's own top-left anchor - captured once at
+  // drag start (planning.md: "Art dragging records the relative footprint
+  // cell under the initial pointer") and reused on every drag-over/drag-end
+  // to derive the destination anchor from whichever cell is hovered/
+  // dropped, by subtracting these offsets back off.
+  const [activeDragArt, setActiveDragArt] = useState<{
+    art: Art;
+    rowOffset: number;
+    columnOffset: number;
+  } | null>(null);
+  // The destination footprint currently being previewed during an art drag
+  // (story 26), or `null` while no art drag is in progress or the pointer
+  // isn't over any slot - computed in `handleDragOver` below and passed
+  // down to whichever `BinderSide` matches its `physicalPage` for the
+  // valid/blocked highlight overlay.
+  const [dragCandidateFootprint, setDragCandidateFootprint] = useState<{
+    physicalPage: number;
+    anchorRow: number;
+    anchorColumn: number;
+    widthSlots: number;
+    heightSlots: number;
+    valid: boolean;
+  } | null>(null);
   // Only a `PointerSensor` (mouse/touch pointer) is wired up for story 14
   // - keyboard dragging is explicitly deferred. `activationConstraint`
   // requires the pointer to move a few pixels before a drag starts, so an
@@ -147,11 +221,94 @@ export function BinderLayoutView() {
     }),
   );
 
-  // Tracks which card is being dragged, once the pointer sensor's
-  // activation distance is exceeded.
+  // Tracks which card or art item is being dragged, once the pointer
+  // sensor's activation distance is exceeded. For art (story 26), also
+  // captures the grabbed cell's offset from the art's own top-left anchor:
+  // the activator event's pointer position within the dragged tile's
+  // initial rect, normalized to a 0-1 fraction and floored into a footprint
+  // cell index (planning.md: "the initial pointer's normalized position
+  // within the thumbnail maps to the corresponding footprint cell").
   function handleDragStart(event: DragStartEvent) {
     const card = event.active.data.current?.card as Card | undefined;
+    const draggedArtItem = event.active.data.current?.art as Art | undefined;
     setActiveDragCard(card ?? null);
+
+    if (!draggedArtItem) {
+      setActiveDragArt(null);
+      return;
+    }
+
+    const rect = event.active.rect.current.initial;
+    let rowOffset = 0;
+    let columnOffset = 0;
+    if (rect && event.activatorEvent instanceof PointerEvent) {
+      const normalizedX = (event.activatorEvent.clientX - rect.left) / rect.width;
+      const normalizedY = (event.activatorEvent.clientY - rect.top) / rect.height;
+      columnOffset = Math.min(
+        Math.max(Math.floor(normalizedX * draggedArtItem.widthSlots), 0),
+        draggedArtItem.widthSlots - 1,
+      );
+      rowOffset = Math.min(
+        Math.max(Math.floor(normalizedY * draggedArtItem.heightSlots), 0),
+        draggedArtItem.heightSlots - 1,
+      );
+    }
+    setActiveDragArt({ art: draggedArtItem, rowOffset, columnOffset });
+  }
+
+  // Live-updates the candidate destination footprint while an art drag is
+  // in progress (story 26: "the client highlights every slot in the
+  // derived candidate footprint and uses distinct valid and blocked
+  // styles"). The hovered slot minus the drag's own captured grab offset
+  // gives the destination top-left anchor; out-of-bounds or occupied
+  // cells (excluding the dragged art's own current footprint) mark it
+  // blocked rather than valid. Hovering the unplaced panel or nothing at
+  // all clears the highlight entirely, since dropping there never
+  // conflicts with anything.
+  function handleDragOver(event: DragOverEvent) {
+    if (!activeDragArt) return;
+
+    const overData = event.over?.data.current as
+      { physicalPage: number; row: number; column: number } | { unplaced: true } | undefined;
+    if (!overData || 'unplaced' in overData) {
+      setDragCandidateFootprint(null);
+      return;
+    }
+
+    const { art: draggedArtItem, rowOffset, columnOffset } = activeDragArt;
+    const anchorRow = overData.row - rowOffset;
+    const anchorColumn = overData.column - columnOffset;
+    const inBounds = isFootprintInBounds(
+      anchorRow,
+      anchorColumn,
+      draggedArtItem.widthSlots,
+      draggedArtItem.heightSlots,
+      binder.width,
+      binder.height,
+    );
+    const blocked =
+      !inBounds ||
+      isFootprintBlocked(
+        cards,
+        art,
+        overData.physicalPage,
+        getFootprintCells(
+          anchorRow,
+          anchorColumn,
+          draggedArtItem.widthSlots,
+          draggedArtItem.heightSlots,
+        ),
+        draggedArtItem.id,
+      );
+
+    setDragCandidateFootprint({
+      physicalPage: overData.physicalPage,
+      anchorRow,
+      anchorColumn,
+      widthSlots: draggedArtItem.widthSlots,
+      heightSlots: draggedArtItem.heightSlots,
+      valid: !blocked,
+    });
   }
 
   // Resolves a completed drag into a move/swap request (story 14), or a
@@ -161,10 +318,52 @@ export function BinderLayoutView() {
   // generalized to the unplaced panel too (story 15): a drop target's
   // `data.current` is either a concrete slot's `{ physicalPage, row,
   // column }` or the unplaced panel's `{ unplaced: true }` marker (see
-  // `UnplacedCardsPanel`), which resolves to an all-null destination.
+  // `UnplacedCardsPanel`), which resolves to an all-null destination. Art
+  // drags (story 26) are resolved the same way, but the destination
+  // anchor is the hovered slot minus the drag's own captured grab offset
+  // rather than the hovered slot itself; a client-known blocked drop
+  // cancels silently (planning.md: "no request or toast") since
+  // `dragCandidateFootprint` already reflects that.
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     setActiveDragCard(null);
+
+    const draggedArtItem = active.data.current?.art as Art | undefined;
+    if (draggedArtItem) {
+      const dragState = activeDragArt;
+      setActiveDragArt(null);
+      setDragCandidateFootprint(null);
+      if (!dragState || !over) return;
+
+      const overData = over.data.current as
+        { physicalPage: number; row: number; column: number } | { unplaced: true } | undefined;
+      if (!overData) return;
+
+      const destination: {
+        physicalPage: number | null;
+        row: number | null;
+        column: number | null;
+      } =
+        'unplaced' in overData
+          ? { physicalPage: null, row: null, column: null }
+          : {
+              physicalPage: overData.physicalPage,
+              row: overData.row - dragState.rowOffset,
+              column: overData.column - dragState.columnOffset,
+            };
+
+      const source = draggedArtItem.placement;
+      if (
+        source.physicalPage === destination.physicalPage &&
+        source.row === destination.row &&
+        source.column === destination.column
+      ) {
+        return;
+      }
+
+      moveArt(draggedArtItem.id, destination);
+      return;
+    }
 
     const draggedCard = active.data.current?.card as Card | undefined;
     if (!draggedCard || !over) return;
@@ -190,6 +389,8 @@ export function BinderLayoutView() {
 
   function handleDragCancel() {
     setActiveDragCard(null);
+    setActiveDragArt(null);
+    setDragCandidateFootprint(null);
   }
 
   // The manual-entry values/file to seed the modal with, only set while
@@ -368,6 +569,7 @@ export function BinderLayoutView() {
       sensors={sensors}
       collisionDetection={pointerWithin}
       onDragStart={handleDragStart}
+      onDragOver={handleDragOver}
       onDragEnd={handleDragEnd}
       onDragCancel={handleDragCancel}
       // Story 15: the unplaced panel's own scroll position must stay
@@ -468,7 +670,7 @@ export function BinderLayoutView() {
               <button
                 type="button"
                 aria-label="Previous page"
-                disabled={isFirstSpread || activeDragCard !== null}
+                disabled={isFirstSpread || activeDragCard !== null || activeDragArt !== null}
                 onClick={() =>
                   navigateToPhysicalPage(getPreviousPhysicalPage(physicalPage, maxPhysicalPage))
                 }
@@ -494,16 +696,25 @@ export function BinderLayoutView() {
                     width={binder.width}
                     height={binder.height}
                     physicalPage={spread.left}
+                    binder={binder}
                     cards={cards}
+                    art={art}
                     pendingPlacementKeys={pendingPlacementKeys}
                     onSlotClick={(row, column) =>
                       setSelectedSlot({ physicalPage: spread.left as number, row, column })
                     }
                     onRemoveCard={removeCard}
                     pendingCardDeletionIds={pendingCardDeletionIds}
+                    pendingArtEditIds={pendingArtEditIds}
+                    pendingArtDeletionIds={pendingArtDeletionIds}
+                    pendingArtDuplicateIds={pendingArtDuplicateIds}
+                    onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
+                    onRemoveArt={removeArt}
+                    onDuplicateArt={duplicateArt}
                     isMovePending={isMovePending}
                     michiIndicatorsVisible={michiIndicatorsVisible}
                     slotAspectRatio={slotAspectRatio}
+                    dragCandidateFootprint={dragCandidateFootprint}
                   />
                 ) : (
                   <div className="w-full min-w-0 flex-1" aria-hidden="true" />
@@ -514,16 +725,25 @@ export function BinderLayoutView() {
                     width={binder.width}
                     height={binder.height}
                     physicalPage={spread.right}
+                    binder={binder}
                     cards={cards}
+                    art={art}
                     pendingPlacementKeys={pendingPlacementKeys}
                     onSlotClick={(row, column) =>
                       setSelectedSlot({ physicalPage: spread.right as number, row, column })
                     }
                     onRemoveCard={removeCard}
                     pendingCardDeletionIds={pendingCardDeletionIds}
+                    pendingArtEditIds={pendingArtEditIds}
+                    pendingArtDeletionIds={pendingArtDeletionIds}
+                    pendingArtDuplicateIds={pendingArtDuplicateIds}
+                    onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
+                    onRemoveArt={removeArt}
+                    onDuplicateArt={duplicateArt}
                     isMovePending={isMovePending}
                     michiIndicatorsVisible={michiIndicatorsVisible}
                     slotAspectRatio={slotAspectRatio}
+                    dragCandidateFootprint={dragCandidateFootprint}
                   />
                 ) : (
                   <div className="w-full min-w-0 flex-1" aria-hidden="true" />
@@ -533,7 +753,7 @@ export function BinderLayoutView() {
               <button
                 type="button"
                 aria-label="Next page"
-                disabled={isLastSpread || activeDragCard !== null}
+                disabled={isLastSpread || activeDragCard !== null || activeDragArt !== null}
                 onClick={() =>
                   navigateToPhysicalPage(getNextPhysicalPage(physicalPage, maxPhysicalPage))
                 }
@@ -549,7 +769,14 @@ export function BinderLayoutView() {
           art={art}
           binder={binder}
           pendingUnplacedArtIds={pendingUnplacedArtIds}
+          pendingArtEditIds={pendingArtEditIds}
+          pendingArtDeletionIds={pendingArtDeletionIds}
+          pendingArtDuplicateIds={pendingArtDuplicateIds}
+          isMovePending={isMovePending}
           onAddArt={() => setIsCreateArtModalOpen(true)}
+          onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
+          onRemoveArt={removeArt}
+          onDuplicateArt={duplicateArt}
         />
       </div>
 
@@ -572,6 +799,14 @@ export function BinderLayoutView() {
             />
           </div>
         )}
+        {/* Story 26: the dragged art item's own tile, filling whatever size
+            dnd-kit auto-sizes this overlay to (the original draggable
+            node's measured rect), mirroring the card branch above. */}
+        {activeDragArt && (
+          <div className="h-full w-full">
+            <ArtTile art={activeDragArt.art} binder={binder} isPendingCreate={false} />
+          </div>
+        )}
       </DragOverlay>
 
       {selectedSlot && (
@@ -589,13 +824,32 @@ export function BinderLayoutView() {
       {showCreateArtModal && (
         <CreateArtModal
           binder={binder}
+          mode="create"
           restore={artCreateRestore}
           onClose={handleCloseCreateArtModal}
           onSubmit={(values, file) => {
+            if (!file) return;
             createArt(values, file);
             setIsCreateArtModalOpen(false);
           }}
           onConsumeRestore={clearArtCreateRestore}
+        />
+      )}
+
+      {showEditArtModal && editingArt && (
+        <CreateArtModal
+          binder={binder}
+          mode="edit"
+          restore={null}
+          editingArt={editingArt}
+          editRestore={artEditRestore}
+          checkPlacementConflict={checkEditPlacementConflict}
+          onClose={handleCloseEditArtModal}
+          onSubmit={(values, file, moveToUnplacedOnConflict) => {
+            editArt(editingArt.id, values, file, moveToUnplacedOnConflict);
+            setEditingArtId(null);
+          }}
+          onConsumeRestore={clearArtEditRestore}
         />
       )}
     </DndContext>

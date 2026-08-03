@@ -291,3 +291,21 @@ export function useImageFromFile(file: File | null): HTMLImageElement | null {
 
   return loaded && loaded.file === file ? loaded.image : null;
 }
+
+// Loads an already-hosted image URL (story 26: editing existing art whose
+// image hasn't been replaced yet) into an `HTMLImageElement`, mirroring
+// `useImageFromFile` above but for a real URL rather than a `File` needing
+// an object URL - no object URL to revoke here since nothing was created.
+export function useImageFromUrl(url: string | null): HTMLImageElement | null {
+  const [loaded, setLoaded] = useState<{ url: string; image: HTMLImageElement } | null>(null);
+
+  useEffect(() => {
+    if (!url) return;
+
+    const nextImage = new window.Image();
+    nextImage.onload = () => setLoaded({ url, image: nextImage });
+    nextImage.src = url;
+  }, [url]);
+
+  return loaded && loaded.url === url ? loaded.image : null;
+}

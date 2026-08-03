@@ -24,6 +24,7 @@ import type { DatabaseConnection } from '../database/client.js';
 import { binders, cardImageAssets, cards } from '../database/schema.js';
 import { detectImageFormat } from '../images/imageFormat.js';
 import { translateEnglishNameToJapanese } from '../integrations/pokeapi.js';
+import { getOccupiedCells } from '../placement/occupancy.js';
 import {
   downloadCardImage,
   searchCardCatalog,
@@ -171,6 +172,27 @@ function validatePlacement(
     return `column must be between 1 and ${binder.width}.`;
   }
   return null;
+}
+
+// Story 26: rejects a card placement that would land on a slot covered by
+// placed multi-slot art (planning.md: "Cards and other multi-slot art
+// cannot be placed in any slot occupied by multi-slot art"). A fully-null
+// placement (the unplaced section) never conflicts, since it isn't a real
+// slot.
+function findArtOccupancyConflict(
+  database: DatabaseConnection['database'],
+  binderId: string,
+  placement: NullablePlacement,
+): string | null {
+  if (placement.physicalPage === null || placement.row === null || placement.column === null) {
+    return null;
+  }
+  const occupied = getOccupiedCells(database, binderId, placement.physicalPage);
+  const blocked = occupied.some(
+    (cell) =>
+      cell.row === placement.row && cell.column === placement.column && cell.occupiedBy === 'art',
+  );
+  return blocked ? 'The destination slot is occupied by multi-slot art.' : null;
 }
 
 // A relaxed variant of `validatePlacement` for custom-card requests (story
@@ -612,6 +634,16 @@ export function createCardsRouter(
         return;
       }
 
+      const artConflict = findArtOccupancyConflict(database, binderId, placementResult.placement);
+      if (artConflict) {
+        removeTemporaryUploads(uploadedFiles);
+        response
+          .status(409)
+          .type('application/problem+json')
+          .json(problem(409, 'Conflict', artConflict));
+        return;
+      }
+
       // Required after trimming (planning.md); the OpenAPI schema's
       // `minLength: 1` only guards the raw untrimmed value, so a
       // whitespace-only name still needs this check. The max-length check
@@ -729,6 +761,15 @@ export function createCardsRouter(
         .status(400)
         .type('application/problem+json')
         .json(problem(400, 'Bad Request', placementError));
+      return;
+    }
+
+    const artConflict = findArtOccupancyConflict(database, binderId, body.placement);
+    if (artConflict) {
+      response
+        .status(409)
+        .type('application/problem+json')
+        .json(problem(409, 'Conflict', artConflict));
       return;
     }
 
@@ -865,6 +906,17 @@ export function createCardsRouter(
           .status(400)
           .type('application/problem+json')
           .json(problem(400, 'Bad Request', placementError));
+        return;
+      }
+
+      // Story 26: a card can never move onto a slot placed multi-slot art
+      // covers, even if the destination isn't held by another card.
+      const artConflict = findArtOccupancyConflict(database, binder.id, update.finalPlacement);
+      if (artConflict) {
+        response
+          .status(409)
+          .type('application/problem+json')
+          .json(problem(409, 'Conflict', artConflict));
         return;
       }
     }

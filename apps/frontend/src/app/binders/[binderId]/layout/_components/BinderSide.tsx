@@ -1,9 +1,10 @@
 import { useMemo } from 'react';
 
-import type { Card } from '@/lib/api';
+import type { Art, Binder, Card } from '@/lib/api';
 
 import { getMichiGapColumns } from '../michiIndicators';
 import { BinderSlot } from './BinderSlot';
+import { PlacedArtTile } from './PlacedArtTile';
 
 // One binder side's slot grid (story 8): a CSS Grid with `width` columns
 // and `height` rows. Sized to fit the available spread area without
@@ -17,14 +18,23 @@ export function BinderSide({
   width,
   height,
   physicalPage,
+  binder,
   cards,
+  art,
   pendingPlacementKeys,
   onSlotClick,
   onRemoveCard,
   pendingCardDeletionIds,
+  pendingArtEditIds,
+  pendingArtDeletionIds,
+  pendingArtDuplicateIds,
+  onEditArt,
+  onRemoveArt,
+  onDuplicateArt,
   isMovePending,
   michiIndicatorsVisible = false,
   slotAspectRatio,
+  dragCandidateFootprint,
 }: {
   side: 'left' | 'right';
   width: number;
@@ -33,11 +43,18 @@ export function BinderSide({
   // match each slot's (row, column) grid position against the binder's
   // cards.
   physicalPage: number;
+  // Needed to compute each art item's own physical aspect ratio/border
+  // styling (story 26), passed straight through to `PlacedArtTile`/
+  // `ArtTile`.
+  binder: Binder;
   // Every card in the binder (story 11); filtered internally to this
   // side's own `physicalPage` rather than requiring the caller to
   // pre-filter, since `BinderLayoutView` renders up to 2 sides from the
   // same full list.
   cards: Card[];
+  // Every art item in the binder (story 26); filtered internally to this
+  // side's own `physicalPage`, mirroring `cards` above.
+  art: Art[];
   // The set of `${physicalPage}-${row}-${column}` keys with an assignment
   // currently in flight, so an in-flight slot can be disabled against
   // further clicks until it settles.
@@ -52,6 +69,14 @@ export function BinderSide({
   // own actions are disabled - and no further actions permitted on it -
   // until the request settles.
   pendingCardDeletionIds: Set<string>;
+  // Art ids with an edit/removal/duplication currently in flight (story
+  // 26), passed straight through to each `PlacedArtTile`.
+  pendingArtEditIds: Set<string>;
+  pendingArtDeletionIds: Set<string>;
+  pendingArtDuplicateIds: Set<string>;
+  onEditArt: (art: Art) => void;
+  onRemoveArt: (artId: string) => void;
+  onDuplicateArt: (artId: string) => void;
   // True while any move/swap request is in flight for this binder (story
   // 14) - disables dragging and dropping on every slot until it settles.
   isMovePending: boolean;
@@ -63,6 +88,19 @@ export function BinderSide({
   // Story 24: the binder's configured single-slot width-to-height ratio
   // (see `BinderLayoutView`), replacing the old fixed 6.35:9 constant.
   slotAspectRatio: number;
+  // The in-progress art drag's candidate destination footprint (story
+  // 26), if it currently targets this side's own physical page - drives
+  // the live valid/blocked highlight overlay drawn on top of the grid.
+  // `null`/`undefined` (no active art drag, or one targeting a different
+  // page/the unplaced sections) renders no overlay at all.
+  dragCandidateFootprint?: {
+    physicalPage: number;
+    anchorRow: number;
+    anchorColumn: number;
+    widthSlots: number;
+    heightSlots: number;
+    valid: boolean;
+  } | null;
 }) {
   // The grid's overall width-to-height ratio (not just one slot's), used by
   // `.binder-side-grid`'s `min()` width formula in globals.css so the
@@ -85,6 +123,34 @@ export function BinderSide({
     }
     return map;
   }, [cards, physicalPage]);
+
+  // Every art item placed on this side's own physical page (story 26),
+  // plus (separately) the exact set of cells its footprint covers - the
+  // latter drives each covered `BinderSlot`'s own `isCoveredByArt` flag,
+  // computed once here rather than per-slot.
+  const artOnThisPage = useMemo(
+    () =>
+      art.filter(
+        (item) =>
+          item.placement.physicalPage === physicalPage &&
+          item.placement.row !== null &&
+          item.placement.column !== null,
+      ),
+    [art, physicalPage],
+  );
+  const coveredByArt = useMemo(() => {
+    const covered = new Set<string>();
+    for (const item of artOnThisPage) {
+      const anchorRow = item.placement.row as number;
+      const anchorColumn = item.placement.column as number;
+      for (let row = anchorRow; row < anchorRow + item.heightSlots; row++) {
+        for (let column = anchorColumn; column < anchorColumn + item.widthSlots; column++) {
+          covered.add(`${row}-${column}`);
+        }
+      }
+    }
+    return covered;
+  }, [artOnThisPage]);
 
   return (
     <div className="binder-side-fit flex w-full min-w-0 flex-1 items-center justify-center">
@@ -174,12 +240,75 @@ export function BinderSide({
                 isPendingPlacement={isPending}
                 isRemovalPending={isRemovalPending}
                 isMovePending={isMovePending}
+                isCoveredByArt={coveredByArt.has(`${row}-${column}`)}
                 onSlotClick={onSlotClick}
                 onRemoveCard={onRemoveCard}
                 slotAspectRatio={slotAspectRatio}
               />
             );
           })}
+
+          {/* Placed multi-slot art (story 26): each item renders as its own
+              grid-spanning overlay, explicitly positioned (rather than
+              relying on CSS Grid auto-placement to skip the
+              already-covered `BinderSlot` cells above) so it lines up
+              exactly with the footprint `coveredByArt` used to suppress
+              those cells' own "+" affordance. */}
+          {artOnThisPage.map((item) => (
+            <div
+              key={item.id}
+              style={{
+                gridRow: `${item.placement.row} / span ${item.heightSlots}`,
+                gridColumn: `${item.placement.column} / span ${item.widthSlots}`,
+              }}
+            >
+              <PlacedArtTile
+                art={item}
+                binder={binder}
+                isMovePending={isMovePending}
+                isEditPending={pendingArtEditIds.has(item.id)}
+                isDeletionPending={pendingArtDeletionIds.has(item.id)}
+                isDuplicatePending={pendingArtDuplicateIds.has(item.id)}
+                onEditArt={onEditArt}
+                onRemoveArt={onRemoveArt}
+                onDuplicateArt={onDuplicateArt}
+              />
+            </div>
+          ))}
+
+          {/* The in-progress art drag's candidate-destination highlight
+              (story 26): a single overlay spanning the whole candidate
+              footprint, styled green (valid) or red (blocked) - drawn
+              above the placed-art tiles above so it stays visible even
+              over a covered cell. `pointer-events-none` and `aria-hidden`
+              keep it out of the way of both dnd-kit's own hit-testing (see
+              `BinderSlot`'s own comment on `pointerWithin` being rect-based)
+              and the accessibility tree. The rendered span is clamped to
+              this grid's own `width`/`height` track count (rather than
+              rendered at the candidate's raw, possibly out-of-bounds
+              anchor/size) - an unclamped span whose end line falls past
+              the last explicit track would make CSS Grid create an extra
+              implicit column/row to fit it, growing this side's rendered
+              size and visibly resizing the whole spread mid-drag. An
+              out-of-bounds candidate is already marked `valid: false` by
+              `handleDragOver`, so clamping its *display* here doesn't
+              affect the blocked styling - it only keeps the highlight
+              from ever extending past the real slots.
+          */}
+          {dragCandidateFootprint && dragCandidateFootprint.physicalPage === physicalPage && (
+            <div
+              aria-hidden="true"
+              className={`pointer-events-none z-20 rounded-standard ${
+                dragCandidateFootprint.valid
+                  ? 'bg-primary/30 ring-2 ring-inset ring-primary'
+                  : 'bg-red-500/30 ring-2 ring-inset ring-red-500'
+              }`}
+              style={{
+                gridRow: `${Math.max(1, dragCandidateFootprint.anchorRow)} / ${Math.min(height + 1, dragCandidateFootprint.anchorRow + dragCandidateFootprint.heightSlots)}`,
+                gridColumn: `${Math.max(1, dragCandidateFootprint.anchorColumn)} / ${Math.min(width + 1, dragCandidateFootprint.anchorColumn + dragCandidateFootprint.widthSlots)}`,
+              }}
+            />
+          )}
         </div>
       </div>
     </div>

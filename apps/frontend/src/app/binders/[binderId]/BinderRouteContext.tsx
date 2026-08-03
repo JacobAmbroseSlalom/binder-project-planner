@@ -11,17 +11,22 @@ import {
   createArt as createArtRequest,
   createCard,
   createCustomCard,
+  deleteArt as deleteArtRequest,
   deleteCard,
+  duplicateArt as duplicateArtRequest,
   getBinder,
   listBinderArt,
   listBinderCards,
+  moveArt as moveArtRequest,
   moveCards,
+  updateArt as updateArtRequest,
   type Art,
   type Binder,
   type Card,
   type CardPositionUpdate,
   type CardSearchLanguage,
   type CreateCardRequest,
+  type PlacementCoordinates,
 } from '@/lib/api';
 import {
   LoadingIndicator,
@@ -31,6 +36,7 @@ import {
   useToastContext,
 } from '@/shared/feedback';
 
+import { getFootprintCells, isFootprintBlocked } from './artFootprint';
 import { BinderTabs } from './BinderTabs';
 
 // Builds the key used to look up a card by slot, and to track a slot's
@@ -93,6 +99,17 @@ export interface ArtCreateRestore {
   values: ArtFormValues;
   file: File;
   previewUrl: string;
+}
+
+// A one-shot signal set by `editArt` when an edit submission fails (story
+// 26, mirroring `ArtCreateRestore`'s "reopen pre-filled" behavior). `file`/
+// `previewUrl` are `null` when the failed edit didn't replace the image -
+// the edit modal then keeps showing the art's existing (unchanged) image.
+export interface ArtEditRestore {
+  artId: string;
+  values: ArtFormValues;
+  file: File | null;
+  previewUrl: string | null;
 }
 
 // Fixed (not per-attempt-random) toast id, matching the pattern established
@@ -210,6 +227,52 @@ interface BinderRouteContextValue {
   // `clearArtCreateRestore`.
   artCreateRestore: ArtCreateRestore | null;
   clearArtCreateRestore: () => void;
+  // Moves multi-slot art to another placement, or to the unplaced-art
+  // section if `destination` is all-null (story 26). Mirrors `moveCard`'s
+  // optimistic-apply/rollback lifecycle, but never swaps (art can only
+  // move into empty, in-bounds space). If the destination footprint is
+  // already known (client-side, from current `art`/`cards` state) to be
+  // occupied, this cancels silently - no optimistic update, no request, no
+  // toast (planning.md: "Dropping on a client-known blocked footprint
+  // cancels locally"). Shares `isMovePending` with `moveCard` (story 26:
+  // "Card and art moves share one binder-scoped movement queue").
+  moveArt: (artId: string, destination: PlacementCoordinates) => void;
+  // Edits an existing art item's metadata, transform, style overrides, and
+  // (optionally) its image (story 26): optimistically applies the changes
+  // immediately, then replaces with the backend's authoritative
+  // representation on success, or restores the prior values and sets
+  // `artEditRestore` on failure. `moveToUnplacedOnConflict` confirms
+  // saving edited dimensions that no longer fit the art's current
+  // placement by moving it to the unplaced-art section in the same
+  // request.
+  editArt: (
+    artId: string,
+    values: ArtFormValues,
+    file: File | null,
+    moveToUnplacedOnConflict?: boolean,
+  ) => void;
+  // The set of art ids with an edit currently in flight, so the layout tab
+  // can disable that one item's own actions until the request settles.
+  pendingArtEditIds: Set<string>;
+  // Set once by `editArt` when a submission fails, so the edit modal can
+  // reopen pre-filled with the failed attempt's values/file rather than
+  // losing them. Consumed exactly once via `clearArtEditRestore`.
+  artEditRestore: ArtEditRestore | null;
+  clearArtEditRestore: () => void;
+  // Permanently removes an art item from the binder (story 26), mirroring
+  // `removeCard`'s optimistic-remove/restore-on-failure lifecycle.
+  removeArt: (artId: string) => void;
+  // The set of art ids with a removal currently in flight, so the layout
+  // tab can disable that item's own actions until the request settles.
+  pendingArtDeletionIds: Set<string>;
+  // Duplicates an art item into the unplaced-art section (story 26):
+  // inserts an optimistic copy immediately, then replaces it with the
+  // backend's authoritative representation on success, or removes it on
+  // failure.
+  duplicateArt: (artId: string) => void;
+  // The set of optimistic art ids currently being duplicated, so the panel
+  // can disable that one pending item until its request settles.
+  pendingArtDuplicateIds: Set<string>;
 }
 
 const BinderRouteContext = createContext<BinderRouteContextValue | null>(null);
@@ -288,6 +351,15 @@ export function BinderRouteProvider({
   // value type's own doc comment above) - `null` whenever there's no
   // failed art submission awaiting correction.
   const [artCreateRestore, setArtCreateRestore] = useState<ArtCreateRestore | null>(null);
+  // Story 26's in-flight-art-edit/deletion/duplication ids, mirroring
+  // `pendingCardDeletionIds`/`pendingUnplacedArtIds`.
+  const [pendingArtEditIds, setPendingArtEditIds] = useState<Set<string>>(new Set());
+  const [pendingArtDeletionIds, setPendingArtDeletionIds] = useState<Set<string>>(new Set());
+  const [pendingArtDuplicateIds, setPendingArtDuplicateIds] = useState<Set<string>>(new Set());
+  // Story 26's one-shot edit-art failure restore signal, mirroring
+  // `artCreateRestore` - `null` whenever there's no failed art edit
+  // awaiting correction.
+  const [artEditRestore, setArtEditRestore] = useState<ArtEditRestore | null>(null);
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -586,6 +658,226 @@ export function BinderRouteProvider({
     });
   }, []);
 
+  // Moves multi-slot art to a new placement, or to the unplaced-art
+  // section (story 26). Cancels silently before any state change if the
+  // destination footprint is already known - from the current `art`/
+  // `cards` state - to be occupied, matching planning.md's "Dropping on a
+  // client-known blocked footprint cancels locally ... sends no request or
+  // toast" (the backend's own occupancy check still guards against a
+  // destination that changed since this client last loaded it).
+  const moveArt = useCallback(
+    (artId: string, destination: PlacementCoordinates) => {
+      const draggedArt = art.find((item) => item.id === artId);
+      if (!draggedArt) return;
+
+      if (
+        destination.physicalPage !== null &&
+        destination.row !== null &&
+        destination.column !== null
+      ) {
+        const footprintCells = getFootprintCells(
+          destination.row,
+          destination.column,
+          draggedArt.widthSlots,
+          draggedArt.heightSlots,
+        );
+        if (isFootprintBlocked(cards, art, destination.physicalPage, footprintCells, artId)) return;
+      }
+
+      const previousPlacement = draggedArt.placement;
+      setArt((previous) =>
+        previous.map((item) => (item.id === artId ? { ...item, placement: destination } : item)),
+      );
+      setIsMovePending(true);
+
+      const toast = start(`move-art-${artId}`);
+
+      moveArtRequest(artId, previousPlacement, destination)
+        .then((updated) => {
+          setArt((previous) => previous.map((item) => (item.id === artId ? updated : item)));
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setArt((previous) =>
+            previous.map((item) =>
+              item.id === artId ? { ...item, placement: previousPlacement } : item,
+            ),
+          );
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setIsMovePending(false);
+        });
+    },
+    [art, cards, start],
+  );
+
+  // Edits an existing art item's metadata, transform, style overrides, and
+  // (optionally) its image (story 26), mirroring `assignCustomCard`'s
+  // optimistic-apply/restore-on-failure lifecycle. `file` is `null` when
+  // the edit keeps the art's current image.
+  const editArt = useCallback(
+    (
+      artId: string,
+      values: ArtFormValues,
+      file: File | null,
+      moveToUnplacedOnConflict?: boolean,
+    ) => {
+      const existing = art.find((item) => item.id === artId);
+      if (!existing) return;
+
+      const previousArt = existing;
+      const previewUrl = file ? URL.createObjectURL(file) : null;
+
+      setArt((previous) =>
+        previous.map((item) =>
+          item.id === artId
+            ? {
+                ...item,
+                title: values.title,
+                description: values.description,
+                widthSlots: values.widthSlots,
+                heightSlots: values.heightSlots,
+                imageRotationDegrees: values.imageRotationDegrees,
+                focalX: values.focalX,
+                focalY: values.focalY,
+                scaleX: values.scaleX,
+                scaleY: values.scaleY,
+                borderColor: values.borderColor,
+                borderRadius: values.borderRadius,
+                borderWidth: values.borderWidth,
+                imageUrl: previewUrl ?? item.imageUrl,
+              }
+            : item,
+        ),
+      );
+      setPendingArtEditIds((previous) => new Set(previous).add(artId));
+
+      const toast = start(`edit-art-${artId}`);
+
+      updateArtRequest(artId, {
+        ...values,
+        moveToUnplacedOnConflict,
+        ...(file ? { image: file } : {}),
+      })
+        .then((updated) => {
+          setArt((previous) => previous.map((item) => (item.id === artId ? updated : item)));
+          toast.markSaved();
+          if (previewUrl) URL.revokeObjectURL(previewUrl);
+        })
+        .catch((error) => {
+          setArt((previous) => previous.map((item) => (item.id === artId ? previousArt : item)));
+          // Retains `previewUrl` (rather than revoking it here) so the
+          // reopened edit modal can reuse it, mirroring
+          // `ArtCreateRestore`'s own comment above - revoked once
+          // `clearArtEditRestore` runs.
+          setArtEditRestore({ artId, values, file, previewUrl });
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingArtEditIds((previous) => {
+            const next = new Set(previous);
+            next.delete(artId);
+            return next;
+          });
+        });
+    },
+    [art, start],
+  );
+
+  // Clears the one-shot edit-art restore signal once the edit modal has
+  // consumed it, revoking its retained object URL (if any) now that the
+  // restored preview no longer needs it.
+  const clearArtEditRestore = useCallback(() => {
+    setArtEditRestore((previous) => {
+      if (previous?.previewUrl) URL.revokeObjectURL(previous.previewUrl);
+      return null;
+    });
+  }, []);
+
+  // Permanently removes an art item from the binder (story 26), mirroring
+  // `removeCard`'s exact-list-index restore-on-failure lifecycle.
+  const removeArt = useCallback(
+    (artId: string) => {
+      const index = art.findIndex((item) => item.id === artId);
+      if (index === -1) return;
+      const removedArt = art[index];
+
+      setArt((previous) => previous.filter((item) => item.id !== artId));
+      setPendingArtDeletionIds((previous) => new Set(previous).add(artId));
+
+      const toast = start(`remove-art-${artId}`);
+
+      deleteArtRequest(artId)
+        .then(() => {
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setArt((previous) => {
+            const restored = [...previous];
+            restored.splice(index, 0, removedArt);
+            return restored;
+          });
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingArtDeletionIds((previous) => {
+            const next = new Set(previous);
+            next.delete(artId);
+            return next;
+          });
+        });
+    },
+    [art, start],
+  );
+
+  // Duplicates an art item into the unplaced-art section (story 26),
+  // mirroring `createArt`'s optimistic-insert/replace-or-remove lifecycle.
+  // A fresh `crypto.randomUUID()` idempotency key accompanies the request
+  // (not reused across retries within this simple fire-once action) so a
+  // dropped response the backend actually processed is still replayed
+  // rather than silently duplicated if this action is ever retried.
+  const duplicateArt = useCallback(
+    (artId: string) => {
+      const source = art.find((item) => item.id === artId);
+      if (!source) return;
+
+      const optimisticId = `optimistic-${crypto.randomUUID()}`;
+      const idempotencyKey = crypto.randomUUID();
+      const now = new Date().toISOString();
+      const optimisticArt: Art = {
+        ...source,
+        id: optimisticId,
+        placement: { physicalPage: null, row: null, column: null },
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      setArt((previous) => [...previous, optimisticArt]);
+      setPendingArtDuplicateIds((previous) => new Set(previous).add(optimisticId));
+
+      const toast = start(`duplicate-art-${optimisticId}`);
+
+      duplicateArtRequest(artId, idempotencyKey)
+        .then((created) => {
+          setArt((previous) => previous.map((item) => (item.id === optimisticId ? created : item)));
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setArt((previous) => previous.filter((item) => item.id !== optimisticId));
+          toast.markFailed(error);
+        })
+        .finally(() => {
+          setPendingArtDuplicateIds((previous) => {
+            const next = new Set(previous);
+            next.delete(optimisticId);
+            return next;
+          });
+        });
+    },
+    [art, start],
+  );
+
   // Permanently removes a card from a binder slot (story 13). Sending X
   // immediately: no confirmation dialog. Captures the card's current list
   // index and full record before removing it so a failed delete restores
@@ -750,6 +1042,15 @@ export function BinderRouteProvider({
       pendingUnplacedArtIds,
       artCreateRestore,
       clearArtCreateRestore,
+      moveArt,
+      editArt,
+      pendingArtEditIds,
+      artEditRestore,
+      clearArtEditRestore,
+      removeArt,
+      pendingArtDeletionIds,
+      duplicateArt,
+      pendingArtDuplicateIds,
     };
   }, [
     binder,
@@ -773,6 +1074,15 @@ export function BinderRouteProvider({
     pendingUnplacedArtIds,
     artCreateRestore,
     clearArtCreateRestore,
+    moveArt,
+    editArt,
+    pendingArtEditIds,
+    artEditRestore,
+    clearArtEditRestore,
+    removeArt,
+    pendingArtDeletionIds,
+    duplicateArt,
+    pendingArtDuplicateIds,
   ]);
 
   if (status === 'loading') {

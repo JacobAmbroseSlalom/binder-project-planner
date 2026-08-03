@@ -135,3 +135,9 @@ export const ART_DESCRIPTION_MAX_LENGTH = 10_000;
 // output size to avoid the create-art modal's nonblocking image-quality
 // warning (story 25).
 export const MIN_ART_PRINT_RESOLUTION_PPI = 300;
+
+// Story 26: "Move and manage multi-slot art". How long a completed
+// mutation's outcome (keyed by a client-generated idempotency key, e.g.
+// art duplication) is retained so a retried request replays the original
+// outcome instead of repeating the mutation.
+export const MUTATION_IDEMPOTENCY_RETENTION_MS = 86_400_000; // 24 hours

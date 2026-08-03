@@ -32,7 +32,11 @@ export function ArtTile({
   // every art tile is sized proportionally to the unplaced cards grid's
   // own column width (a shared physical cm-to-px scale derived from one
   // slot's width) rather than always stretching to the full panel width.
-  widthPx: number;
+  // Omitted (story 26) when this tile is placed on the binder layout -
+  // its size then comes entirely from the CSS Grid area `PlacedArtTile`
+  // spans it across, and this component just fills that area instead of
+  // forcing its own fixed size/aspect ratio.
+  widthPx?: number;
 }) {
   const [containerRef, { width, height }] = useElementSize<HTMLDivElement>();
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
@@ -99,8 +103,17 @@ export function ArtTile({
   return (
     <div
       ref={containerRef}
-      className={`relative shrink-0 ${isPendingCreate ? 'opacity-50' : ''}`}
-      style={{ width: widthPx, aspectRatio }}
+      // `widthPx` set (unplaced-panel usage): a fixed-size, `shrink-0`
+      // tile with its own physical `aspectRatio` forced, so it renders at
+      // a consistent thumbnail size regardless of its parent's layout.
+      // `widthPx` omitted (placed-on-layout usage, story 26): fills
+      // `PlacedArtTile`'s own already-correctly-sized CSS Grid area
+      // instead - forcing this art's own physical aspect ratio there
+      // would fight the grid's own (slot-count-derived) sizing, and
+      // `PlacedArtTile`'s grid span already reflects this art's
+      // `widthSlots`/`heightSlots` footprint.
+      className={`relative ${widthPx !== undefined ? 'shrink-0' : 'h-full w-full'} ${isPendingCreate ? 'opacity-50' : ''}`}
+      style={widthPx !== undefined ? { width: widthPx, aspectRatio } : undefined}
     >
       <div
         className="relative h-full w-full"

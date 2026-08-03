@@ -294,3 +294,20 @@ export const art = sqliteTable(
     ),
   ],
 );
+
+// A completed mutation's replayable outcome, keyed by a client-generated
+// idempotency key (story 26: art duplication is the first mutation to use
+// this; later stories reuse the same table for bulk card creation and
+// binder/card duplication). `scope` namespaces the key so two different
+// endpoints can't collide if a client ever reused a key across them by
+// mistake. Retained for `MUTATION_IDEMPOTENCY_RETENTION_MS` (24 hours) and
+// pruned opportunistically rather than by a background scheduler
+// (planning.md).
+export const mutationIdempotency = sqliteTable('mutation_idempotency', {
+  key: text().primaryKey(),
+  scope: text().notNull(),
+  responseStatus: integer().notNull(),
+  responseBody: text().notNull(),
+  locationHeader: text(),
+  createdAt: text().notNull(),
+});
