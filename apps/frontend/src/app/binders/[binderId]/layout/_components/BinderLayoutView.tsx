@@ -12,7 +12,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { CARD_DRAG_ACTIVATION_DISTANCE_PX } from '@binder-project-planner/shared';
-import { Check, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Images, Printer } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -38,6 +38,7 @@ import {
 } from '../layoutSpread';
 import { ArtTile } from './art/ArtTile';
 import { CreateArtModal } from './art/CreateArtModal';
+import { PrintArtModal } from './art/PrintArtModal';
 import { UnplacedArtPanel } from './art/UnplacedArtPanel';
 import { BinderSide } from './BinderSide';
 import { CardSelectionModal } from './card/CardSelectionModal';
@@ -575,6 +576,16 @@ export function BinderLayoutView() {
   // enough since only one binder's layout tab renders at a time.
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
+  // Story 30's print-art button opens a selection modal rather than
+  // immediately generating a PDF; the modal itself owns the in-flight
+  // export state (see `PrintArtModal.tsx`).
+  const [isPrintArtModalOpen, setIsPrintArtModalOpen] = useState(false);
+
+  // The print-art button/modal only ever consider currently PLACED art
+  // (planning.md: "Unplaced multi-slot art is never listed in the modal
+  // and is never included in the PDF").
+  const placedArt = art.filter((item) => item.placement.physicalPage !== null);
+
   // Story 29: "The frontend sets `includeVariations` from the layout
   // route's current `variations=true` toggle state" - read defensively
   // now (mirroring the `michi=true` toggle above) even though story 16
@@ -708,6 +719,26 @@ export function BinderLayoutView() {
               className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Printer className="size-5" />
+            </button>
+
+            {/* Story 30's print-art button: opens the selection modal
+                rather than immediately generating a PDF, and (like
+                `Printer` above) is available regardless of lock state.
+                Disabled with an explanatory tooltip when the binder has
+                no placed multi-slot art at all (planning.md: "the modal
+                cannot be opened"). Icon-only, so it relies on
+                `aria-label`/`title` for its accessible name. */}
+            <button
+              type="button"
+              onClick={() => setIsPrintArtModalOpen(true)}
+              disabled={placedArt.length === 0}
+              aria-label="Print art to PDF"
+              title={
+                placedArt.length === 0 ? 'Place multi-slot art to enable this' : 'Print art to PDF'
+              }
+              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Images className="size-5" />
             </button>
           </div>
 
@@ -911,6 +942,14 @@ export function BinderLayoutView() {
             setEditingArtId(null);
           }}
           onConsumeRestore={clearArtEditRestore}
+        />
+      )}
+
+      {isPrintArtModalOpen && (
+        <PrintArtModal
+          binder={binder}
+          placedArt={placedArt}
+          onClose={() => setIsPrintArtModalOpen(false)}
         />
       )}
     </DndContext>

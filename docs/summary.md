@@ -29,6 +29,7 @@ agressive use of comments
 Story #26 was wayyyyy tooo big
 
 # Title
+
 30 Export multi-slot art for printing
 16 Add card variations
 17 Add more cards

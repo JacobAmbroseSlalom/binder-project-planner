@@ -188,6 +188,35 @@ export async function exportBinderLayoutPdf(
   return { blob: data, filename };
 }
 
+// Generates and downloads a PDF of only the request's selected, currently
+// placed multi-slot art through `POST /binders/{binderId}/exports/art-pdf`
+// (story 30) - see `exportBinderLayoutPdf`'s comment above for why
+// `parseAs: 'blob'` doesn't affect Problem Details error handling. Throws
+// the Problem Details body on failure, matching every other mutation here.
+export async function exportArtPrintPdf(
+  binderId: string,
+  selectedArtIds: string[],
+): Promise<ExportedBinderPdf> {
+  const { data, error, response } = await apiClient.POST('/binders/{binderId}/exports/art-pdf', {
+    params: { path: { binderId } },
+    body: { selectedArtIds },
+    parseAs: 'blob',
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  // Extracts the suggested filename from `Content-Disposition:
+  // attachment; filename="<name>-art.pdf"`; falls back to a generic name
+  // in the (unexpected) case the header is missing or doesn't match.
+  const contentDisposition = response.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = /filename="([^"]+)"/.exec(contentDisposition);
+  const filename = filenameMatch?.[1] ?? 'binder-art.pdf';
+
+  return { blob: data, filename };
+}
+
 // Fetches every binder-owned card through `GET /binders/{binderId}/cards`
 // (story 7, populated by story 11's card creation).
 export async function listBinderCards(binderId: string, signal?: AbortSignal): Promise<Card[]> {

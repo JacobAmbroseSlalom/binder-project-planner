@@ -149,3 +149,17 @@ export const MUTATION_IDEMPOTENCY_RETENTION_MS = 86_400_000; // 24 hours
 // reducing the stored page count makes the previously saved value
 // invalid for the new page count.
 export const DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE = 2;
+
+// Story 30: "Export multi-slot art for printing". Every art-print PDF page
+// is US Letter landscape (11 x 8.5 in); this margin is reserved on every
+// edge and treated as unavailable area by the packing algorithm.
+export const ART_PRINT_PAGE_MARGIN_INCHES = 0.1;
+// The minimum white space the packing algorithm enforces between two
+// distinct art regions placed on the same page (including other art
+// packed beside an oversized-art tile region).
+export const ART_PRINT_ITEM_GAP_INCHES = 0.25;
+// The repeated horizontal/vertical content overlap between adjacent tile
+// pages of one piece of art that's too large to fit one page in either
+// orientation, so the printed tiles can be trimmed and aligned during
+// physical assembly without losing any of the reconstructed image.
+export const ART_PRINT_TILE_OVERLAP_INCHES = 0.25;

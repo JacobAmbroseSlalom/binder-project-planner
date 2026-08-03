@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
+  ART_PRINT_ITEM_GAP_INCHES,
+  ART_PRINT_PAGE_MARGIN_INCHES,
+  ART_PRINT_TILE_OVERLAP_INCHES,
   BINDER_NAME_MAX_LENGTH,
   DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
   DEFAULT_BORDER_COLOR,
@@ -26,6 +29,7 @@ import {
   findIdempotentOutcome,
   saveIdempotentOutcome,
 } from '../idempotency/mutationIdempotency.js';
+import { generateArtPrintPdf } from '../pdf/artPrintPdf.js';
 import { generateBinderLayoutPdf } from '../pdf/binderLayoutPdf.js';
 import { listArtForBinder, listPlacedArtForPreview } from './art.js';
 import { listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
@@ -912,6 +916,159 @@ export function createBindersRouter(
         request.log.error(
           { err: cleanupError, path: tempFilePath },
           'Failed to remove a completed PDF export temporary file.',
+        );
+      }
+    });
+  });
+
+  // Story 30: exports the request's selected, currently placed multi-slot
+  // art as a print-ready PDF, packed across as many pages as needed - never
+  // the fixed one-page-per-spread layout `exports/pdf` above uses, and
+  // never including any card. Read-only, so (like `exports/pdf`) it's never
+  // restricted by binder lock state.
+  router.post('/binders/:binderId/exports/art-pdf', async (request, response, next) => {
+    const { binderId } = request.params;
+    const { selectedArtIds } = request.body as { selectedArtIds: string[] };
+
+    // One transactionally consistent snapshot read, matching `exports/pdf`
+    // above - `placedArtRows` is every currently placed art item in this
+    // binder (not just the selected ones), so the handler below can tell
+    // apart "id doesn't exist at all"/"id exists but isn't placed" from "id
+    // is placed but wasn't selected" when validating `selectedArtIds`.
+    const snapshot = database.transaction((tx) => {
+      const binderRow = tx.select().from(binders).where(eq(binders.id, binderId)).get() as
+        BinderRow | undefined;
+      if (!binderRow) return null;
+
+      const placedArtRows = tx
+        .select({
+          id: art.id,
+          widthSlots: art.widthSlots,
+          heightSlots: art.heightSlots,
+          imageRotationDegrees: art.imageRotationDegrees,
+          focalXTenThousandths: art.focalXTenThousandths,
+          focalYTenThousandths: art.focalYTenThousandths,
+          scaleXTenThousandths: art.scaleXTenThousandths,
+          scaleYTenThousandths: art.scaleYTenThousandths,
+          borderColor: art.borderColor,
+          borderRadiusHundredths: art.borderRadiusHundredths,
+          borderWidthHundredths: art.borderWidthHundredths,
+          storageFilename: artImageAssets.storageFilename,
+          normalizedStorageFilename: artImageAssets.normalizedStorageFilename,
+          pixelWidth: artImageAssets.pixelWidth,
+          pixelHeight: artImageAssets.pixelHeight,
+        })
+        .from(art)
+        .innerJoin(artImageAssets, eq(art.imageAssetId, artImageAssets.id))
+        .where(and(eq(art.binderId, binderId), isNotNull(art.physicalPage)))
+        .all();
+
+      return { binderRow, placedArtRows };
+    });
+
+    if (!snapshot) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    // Every submitted id must currently identify placed art in this binder
+    // (planning.md: "a submitted UUID that is not currently placed art in
+    // the binder, or an empty array, returns a request-validation Problem
+    // Details response and does not generate a PDF").
+    const placedArtById = new Map(snapshot.placedArtRows.map((row) => [row.id, row]));
+    if (selectedArtIds.length === 0) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(badRequestProblem('selectedArtIds must include at least one placed art id.'));
+      return;
+    }
+    const unknownArtId = selectedArtIds.find((id) => !placedArtById.has(id));
+    if (unknownArtId !== undefined) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          badRequestProblem(
+            `Art id "${unknownArtId}" does not currently identify placed art in this binder.`,
+          ),
+        );
+      return;
+    }
+
+    const selectedArtRows = selectedArtIds.map((id) => placedArtById.get(id)!);
+
+    const sanitizedName =
+      snapshot.binderRow.name.replace(/[^A-Za-z0-9 _-]/g, '_').trim() || 'binder';
+    const tempFilePath = join(tmpdir(), `art-pdf-export-${randomUUID()}.pdf`);
+
+    try {
+      await generateArtPrintPdf({
+        outputPath: tempFilePath,
+        art: selectedArtRows.map((row) => ({
+          id: row.id,
+          imagePath: join(imagesDirectory, row.normalizedStorageFilename ?? row.storageFilename),
+          naturalWidth: row.pixelWidth,
+          naturalHeight: row.pixelHeight,
+          imageRotationDegrees: row.imageRotationDegrees as 0 | 90 | 180 | 270,
+          focalX: fromTenThousandths(row.focalXTenThousandths),
+          focalY: fromTenThousandths(row.focalYTenThousandths),
+          scaleX: fromTenThousandths(row.scaleXTenThousandths),
+          scaleY: fromTenThousandths(row.scaleYTenThousandths),
+          // A null override falls back to the binder's own current border
+          // setting at render time, matching `exports/pdf`'s identical
+          // resolution above.
+          borderColor: row.borderColor ?? snapshot.binderRow.borderColor,
+          borderRadius: fromHundredths(
+            row.borderRadiusHundredths ?? snapshot.binderRow.borderRadiusHundredths,
+          ),
+          borderWidth: fromHundredths(
+            row.borderWidthHundredths ?? snapshot.binderRow.borderWidthHundredths,
+          ),
+          physicalWidthCm:
+            row.widthSlots * fromHundredths(snapshot.binderRow.widthPerSlotHundredths) +
+            fromHundredths(snapshot.binderRow.widthBaseHundredths),
+          physicalHeightCm:
+            row.heightSlots * fromHundredths(snapshot.binderRow.heightPerSlotHundredths) +
+            fromHundredths(snapshot.binderRow.heightBaseHundredths),
+        })),
+        marginIn: ART_PRINT_PAGE_MARGIN_INCHES,
+        gapIn: ART_PRINT_ITEM_GAP_INCHES,
+        tileOverlapIn: ART_PRINT_TILE_OVERLAP_INCHES,
+      });
+    } catch (error) {
+      if (existsSync(tempFilePath)) {
+        try {
+          unlinkSync(tempFilePath);
+        } catch (cleanupError) {
+          request.log.error(
+            { err: cleanupError, path: tempFilePath },
+            'Failed to remove a failed art PDF export temporary file.',
+          );
+        }
+      }
+      next(error);
+      return;
+    }
+
+    response
+      .status(200)
+      .type('application/pdf')
+      .set('Content-Disposition', `attachment; filename="${sanitizedName}-art.pdf"`);
+
+    const readStream = createReadStream(tempFilePath);
+    readStream.pipe(response);
+
+    // Cleans up the temporary file once the response is done, matching
+    // `exports/pdf`'s identical cleanup above.
+    response.once('close', () => {
+      if (!existsSync(tempFilePath)) return;
+      try {
+        unlinkSync(tempFilePath);
+      } catch (cleanupError) {
+        request.log.error(
+          { err: cleanupError, path: tempFilePath },
+          'Failed to remove a completed art PDF export temporary file.',
         );
       }
     });

@@ -116,6 +116,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/binders/{binderId}/exports/art-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export selected placed multi-slot art as a print-ready PDF
+         * @description Generates a print-ready PDF containing only the submitted, currently placed multi-slot art (story 30) from one transactionally consistent snapshot of the persisted binder and art data, packed across as many US Letter landscape pages as needed by a documented deterministic rectangle-packing heuristic - never a fixed one-page-per-spread layout, and never including any card. A piece of art too large to fit one page in either orientation is tiled across multiple pages with a fixed physical overlap between adjacent tiles; tiled pages add no assembly text (no titles, tile numbers, or row/column labels). The backend finishes generation in a request-scoped temporary file before sending response headers, then streams the completed file; a missing, unreadable, or unsupported local image fails the complete export with Problem Details rather than omitting the item or generating a partial file. Binder lock state never restricts this read-only endpoint.
+         */
+        post: operations["exportArtPrintPdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/binders/{binderId}/cards": {
         parameters: {
             query?: never;
@@ -419,6 +441,11 @@ export interface components {
              * @default false
              */
             includeVariations: boolean;
+        };
+        /** @description `POST /binders/{binderId}/exports/art-pdf`'s request body (story 30) - the print-art selection modal's currently checked art ids. */
+        ExportArtPdfRequest: {
+            /** @description The ids of the binder's currently placed multi-slot art to include in the generated PDF. Every id must currently identify placed art in this binder; the array must not be empty. */
+            selectedArtIds: string[];
         };
         Binder: {
             /** Format: uuid */
@@ -1028,6 +1055,61 @@ export interface operations {
                 };
             };
             /** @description PDF generation failed - for example, a placed card or art item's local image file is missing, unreadable, or not a supported format. No temporary file is left behind. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    exportArtPrintPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportArtPdfRequest"];
+            };
+        };
+        responses: {
+            /** @description The generated print-art PDF. */
+            200: {
+                headers: {
+                    /** @description `attachment` with the sanitized binder name followed by `-art.pdf` as the suggested download filename. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, the request body did not match the documented schema, `selectedArtIds` was empty, or an id in `selectedArtIds` does not currently identify placed art in this binder. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PDF generation failed - for example, a selected art item's local image file is missing, unreadable, or not a supported format. No temporary file is left behind. */
             500: {
                 headers: {
                     [name: string]: unknown;

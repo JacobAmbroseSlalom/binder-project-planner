@@ -119,7 +119,7 @@ export interface GenerateBinderLayoutPdfOptions {
 // format. `sharp().rotate()` with no arguments auto-orients from EXIF and
 // strips the tag; it's a safe no-op for images that already have no
 // orientation tag (e.g. art's pre-normalized `normalizedStorageFilename`).
-async function loadImageForEmbedding(imagePath: string): Promise<Buffer> {
+export async function loadImageForEmbedding(imagePath: string): Promise<Buffer> {
   try {
     return await sharp(imagePath).rotate().png().toBuffer();
   } catch {
@@ -129,16 +129,18 @@ async function loadImageForEmbedding(imagePath: string): Promise<Buffer> {
   }
 }
 
-// Traces a rounded rectangle's outline path with independently-sized
-// corner radii (`rx` horizontal, `ry` vertical) - matching `ArtTile.tsx`'s
-// CSS `border-radius: ${x}px / ${y}px` elliptical-corner treatment, which
-// PDFKit's own single-radius `roundedRect()` can't reproduce whenever the
-// frame isn't square. Uses the standard cubic-bezier quarter-ellipse
-// approximation (the `0.5523` "kappa" constant). Only traces the path -
-// the caller still calls `.fill()`/`.clip()`/`.stroke()` afterward.
+// Traces a rounded rectangle's outline path, accepting independently-sized
+// corner radii (`rx` horizontal, `ry` vertical) for generality - callers
+// currently always pass equal `rx`/`ry` (a circular corner capped by the
+// frame's shorter dimension, matching `ArtTile.tsx`), but PDFKit's own
+// single-radius `roundedRect()` couldn't express distinct axis radii if a
+// future caller ever needed them. Uses the standard cubic-bezier
+// quarter-ellipse approximation (the `0.5523` "kappa" constant). Only
+// traces the path - the caller still calls `.fill()`/`.clip()`/`.stroke()`
+// afterward.
 const BEZIER_ELLIPSE_KAPPA = 0.5522847498307936;
 
-function traceRoundedRectPath(
+export function traceRoundedRectPath(
   doc: PDFKit.PDFDocument,
   x: number,
   y: number,
@@ -378,15 +380,16 @@ async function drawSide({
     const ptPerCm = frameWidth / physicalWidthCm;
     const borderWidthPt = item.borderWidth * ptPerCm;
 
-    // Outer radius is a percentage of the full frame (elliptical - X from
-    // width, Y from height, matching `ArtTile.tsx`); inner radius is
-    // reduced by the border thickness so the image's own rounded corners
-    // stay concentric with the border's, clamped so it never goes
-    // negative for a thick border with a small radius.
-    const outerRadiusX = (item.borderRadius / 100) * frameWidth;
-    const outerRadiusY = (item.borderRadius / 100) * frameHeight;
-    const innerRadiusX = Math.max(0, outerRadiusX - borderWidthPt);
-    const innerRadiusY = Math.max(0, outerRadiusY - borderWidthPt);
+    // Outer radius is a percentage of the SHORTER of the frame's two
+    // dimensions (not each axis independently), matching `ArtTile.tsx` -
+    // this keeps corners circular instead of stretching them into an
+    // extreme, lopsided-looking ellipse on a tall/narrow or short/wide
+    // frame (e.g. a 1x2 multi-slot art item's ~1:2.8 aspect ratio). Inner
+    // radius is reduced by the border thickness so the image's own
+    // rounded corners stay concentric with the border's, clamped so it
+    // never goes negative for a thick border with a small radius.
+    const outerRadius = (item.borderRadius / 100) * Math.min(frameWidth, frameHeight);
+    const innerRadius = Math.max(0, outerRadius - borderWidthPt);
 
     const innerX = x + borderWidthPt;
     const innerY = y + borderWidthPt;
@@ -401,7 +404,7 @@ async function drawSide({
     // (which draws its stroke straddling the path itself rather than
     // fully inside it, and doesn't support elliptical corners in PDFKit).
     doc.save();
-    traceRoundedRectPath(doc, x, y, frameWidth, frameHeight, outerRadiusX, outerRadiusY);
+    traceRoundedRectPath(doc, x, y, frameWidth, frameHeight, outerRadius, outerRadius);
     doc.fill(item.borderColor);
     doc.restore();
 
@@ -421,7 +424,7 @@ async function drawSide({
     });
 
     doc.save();
-    traceRoundedRectPath(doc, innerX, innerY, innerWidth, innerHeight, innerRadiusX, innerRadiusY);
+    traceRoundedRectPath(doc, innerX, innerY, innerWidth, innerHeight, innerRadius, innerRadius);
     doc.clip();
     doc.translate(innerX + geometry.centerX, innerY + geometry.centerY);
     if (item.imageRotationDegrees !== 0) doc.rotate(item.imageRotationDegrees);

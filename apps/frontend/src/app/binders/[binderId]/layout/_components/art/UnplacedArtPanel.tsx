@@ -125,6 +125,16 @@ export function UnplacedArtPanel({
     getScrollElement: () => scrollContainerRef.current,
     estimateSize: () => ESTIMATED_UNPLACED_ART_ROW_HEIGHT_PX,
     overscan: 5,
+    // Without this, the virtualizer keys its measured-height cache by
+    // plain array index (its default) - since each art item's height
+    // varies, unplacing/placing/adding/removing an item shifts every
+    // later item to a different index than the one its height was
+    // measured at, so stale cached heights (from whatever item used to
+    // sit at that index) get reused, producing the wrong row spacing seen
+    // after a move until a full remount. Keying by the item's own stable
+    // `id` instead ties each measurement to the item it actually belongs
+    // to, regardless of where it moves to in the list.
+    getItemKey: (index) => unplacedArt[index].id,
   });
 
   // Scrolls a newly added art item into view, mirroring

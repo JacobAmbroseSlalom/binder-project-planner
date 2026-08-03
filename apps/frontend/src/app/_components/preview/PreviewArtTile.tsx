@@ -57,10 +57,13 @@ export function PreviewArtTile({
   const pxPerCm = width > 0 ? width / physicalWidthCm : 0;
   const borderWidthPx = resolvedBorderWidth * pxPerCm;
 
-  const outerRadiusXPx = (resolvedBorderRadius / 100) * width;
-  const outerRadiusYPx = (resolvedBorderRadius / 100) * height;
-  const innerRadiusXPx = Math.max(0, outerRadiusXPx - borderWidthPx);
-  const innerRadiusYPx = Math.max(0, outerRadiusYPx - borderWidthPx);
+  // Capped by the SHORTER of the tile's two dimensions (rather than
+  // computed independently against each axis) so corners stay circular
+  // instead of stretching into an extreme, lopsided-looking ellipse on a
+  // tall/narrow or short/wide frame - matching `ArtTile.tsx`'s own
+  // treatment.
+  const outerRadiusPx = (resolvedBorderRadius / 100) * Math.min(width, height);
+  const innerRadiusPx = Math.max(0, outerRadiusPx - borderWidthPx);
 
   const geometry =
     naturalSize && width > 0 && height > 0
@@ -84,7 +87,13 @@ export function PreviewArtTile({
       <div
         className="relative h-full w-full"
         style={{
-          borderRadius: `${resolvedBorderRadius}%`,
+          // An explicit pixel value (not a plain `${resolvedBorderRadius}%`)
+          // because CSS always resolves a percentage `border-radius`
+          // per-axis (horizontal against width, vertical against height)
+          // even for a single shorthand value - which would silently
+          // reintroduce the lopsided ellipse `outerRadiusPx` above exists
+          // to avoid.
+          borderRadius: `${outerRadiusPx}px`,
           border: `${borderWidthPx}px solid ${resolvedBorderColor}`,
           boxSizing: 'border-box',
           overflow: 'hidden',
@@ -98,7 +107,7 @@ export function PreviewArtTile({
         ) : (
           <div
             className="absolute inset-0 overflow-hidden"
-            style={{ borderRadius: `${innerRadiusXPx}px / ${innerRadiusYPx}px` }}
+            style={{ borderRadius: `${innerRadiusPx}px` }}
           >
             {/* eslint-disable-next-line @next/next/no-img-element -- the
                 art image comes from the backend's own arbitrary-origin

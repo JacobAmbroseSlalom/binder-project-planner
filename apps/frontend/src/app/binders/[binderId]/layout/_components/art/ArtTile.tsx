@@ -71,16 +71,18 @@ export function ArtTile({
   // CSS-transformed child like the `<img>` below - without this, the
   // image's corner is clipped to the *outer* (unreduced) radius, leaving
   // a visible sharp seam where it meets the border's true (correctly
-  // reduced) inner curve. `width`/`height` are already the tile's full
-  // outer size (see above), matching what CSS's `%` radius on the
-  // bordered div is relative to; the standard reduction formula (outer
-  // radius minus border thickness, clamped to zero) then gives the
-  // matching inner curve, in pixels since the inner box's dimensions
-  // differ from the outer box's.
-  const outerRadiusXPx = (resolvedBorderRadius / 100) * width;
-  const outerRadiusYPx = (resolvedBorderRadius / 100) * height;
-  const innerRadiusXPx = Math.max(0, outerRadiusXPx - borderWidthPx);
-  const innerRadiusYPx = Math.max(0, outerRadiusYPx - borderWidthPx);
+  // reduced) inner curve.
+  //
+  // The radius is capped by the SHORTER of the tile's two dimensions
+  // (rather than computed independently against each axis) so corners
+  // stay circular instead of stretching into an extreme, lopsided-looking
+  // ellipse on a tall/narrow or short/wide frame - e.g. a 1x2 multi-slot
+  // art item's roughly 1:2.8 aspect ratio previously produced a radius
+  // nearly 3x taller than it was wide. The standard reduction formula
+  // (outer radius minus border thickness, clamped to zero) then gives the
+  // matching inner curve.
+  const outerRadiusPx = (resolvedBorderRadius / 100) * Math.min(width, height);
+  const innerRadiusPx = Math.max(0, outerRadiusPx - borderWidthPx);
 
   const geometry =
     naturalSize && width > 0 && height > 0
@@ -117,7 +119,13 @@ export function ArtTile({
       <div
         className="relative h-full w-full"
         style={{
-          borderRadius: `${resolvedBorderRadius}%`,
+          // An explicit pixel value (not a plain `${resolvedBorderRadius}%`)
+          // because CSS always resolves a percentage `border-radius`
+          // per-axis (horizontal against width, vertical against height)
+          // even for a single shorthand value - which would silently
+          // reintroduce the lopsided ellipse `outerRadiusPx` above exists
+          // to avoid.
+          borderRadius: `${outerRadiusPx}px`,
           border: `${borderWidthPx}px solid ${resolvedBorderColor}`,
           boxSizing: 'border-box',
           overflow: 'hidden',
@@ -134,7 +142,7 @@ export function ArtTile({
           // wide on every side.
           className="absolute inset-0 overflow-hidden"
           style={{
-            borderRadius: `${innerRadiusXPx}px / ${innerRadiusYPx}px`,
+            borderRadius: `${innerRadiusPx}px`,
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- the art

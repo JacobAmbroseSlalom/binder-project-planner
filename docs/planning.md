@@ -956,7 +956,7 @@ frame-relative "basis" to define, unlike a percentage).
 - Width-per-slot and height-per-slot values must be greater than zero; base values may be negative only when the corresponding one-slot formula produces a result greater than zero.
 - Border radius must be between `0%` and `100%`, inclusive. Border width must be `0` cm or greater, with no fixed upper bound.
 - Border color uses a color input paired with an editable text value, accepts only six-digit `#RRGGBB` hexadecimal colors, and normalizes hexadecimal letters to uppercase before saving.
-- Border radius follows CSS percentage semantics: horizontal radii are relative to the frame width and vertical radii are relative to the frame height across editor, layout, preview, and print rendering.
+- Border radius is a percentage of the SHORTER of the frame's width/height, applied equally on both axes (a circular, not elliptical, corner), across editor, layout, preview, and print rendering - avoiding a lopsided, extremely-stretched corner on aspect ratios far from square (e.g. a 1x2 multi-slot art item).
 - Border width is a physical centimeters measurement rather than a percentage or a fixed pixel count, converted to pixels at render time using the same cm-to-px scale factor as the art's own image, so it renders physically consistently across different art sizes and preview scales.
 - The configured one-slot width and height define the binder's on-screen slot and card aspect ratio and are also the basis for multi-slot-art and print dimensions; the default formulas retain the initial `6.35:9` one-slot ratio.
 
@@ -1270,15 +1270,19 @@ carried over for a later story to close:
 
 ### 30. Export multi-slot art for printing
 
-**Status:** Not started
+**Status:** Done (2026-08-03 12:40 EDT)
 
 #### Acceptance criteria
 
-- The binder has a print-art PDF button that generates a PDF containing all of its placed multi-slot art and no cards.
-- Unplaced multi-slot art is not included in the PDF.
-- When the binder has no placed multi-slot art, the print-art PDF button is disabled and its tooltip explains that placed art is required.
+- The binder has a print-art PDF button that opens an art-selection modal rather than immediately generating a PDF.
+- The modal lists every piece of the binder's currently placed multi-slot art, with every listed piece pre-selected for inclusion.
+- Unplaced multi-slot art is never listed in the modal and is never included in the PDF.
+- The user can deselect and reselect individual pieces of listed art before confirming.
+- The modal has a Print button that generates a PDF containing only the currently selected art and no cards.
+- Closing or cancelling the modal without selecting Print changes nothing and generates no PDF.
+- When the binder has no placed multi-slot art, the print-art PDF button is disabled and its tooltip explains that placed art is required, and the modal cannot be opened.
 - The print-art PDF button remains available when the binder is locked and placed art exists.
-- Generating the art PDF uses the shared save-status toast, downloads the file when generation succeeds, and displays the provided error if generation fails.
+- Selecting Print in the modal uses the shared save-status toast, downloads the file when generation succeeds, and displays the provided error if generation fails.
 - PDF pages use a landscape orientation.
 - Each piece of art is rendered at its configured physical dimensions rather than scaled to fit a binder view.
 - The configured physical width and height measure the complete outside edge of the bordered art frame.
@@ -1303,8 +1307,11 @@ carried over for a later story to close:
 - The backend generates multi-slot-art print PDFs using PDFKit and authoritative persisted binder, art, transform, style, and local image data.
 - PDFKit draws the resolved art border inward from the configured frame boundary, so border width does not increase the printed footprint used for packing or tiling.
 - The backend reads one transactionally consistent snapshot of the persisted binder and placed-art graph when generation starts; changes committed afterward do not appear in that PDF and are not blocked by the export.
-- The export query includes only art with non-null placement coordinates in the selected binder and renders each included art record exactly once; binder cards and unplaced art are excluded.
+- The export query includes only art with non-null placement coordinates in the selected binder, further restricted to the request's selected art UUIDs, and renders each included art record exactly once; binder cards, unplaced art, and deselected placed art are excluded.
 - If no placed art exists when the export request is processed, the backend returns a request-validation Problem Details response and does not generate a PDF.
+- `POST /binders/{binderId}/exports/art-pdf` accepts a JSON request body containing the array of selected placed-art UUIDs to include.
+- The backend validates that every submitted UUID currently identifies placed art in the binder; a submitted UUID that is not currently placed art in the binder, or an empty array, returns a request-validation Problem Details response and does not generate a PDF.
+- The modal's art list and pre-selected state are derived entirely from the placed multi-slot art already loaded in the binder-scoped React context; opening the modal makes no additional backend request.
 - Every art-print PDF page uses US Letter landscape dimensions (`11 x 8.5` inches).
 - `ART_PRINT_PAGE_MARGIN_INCHES` defaults to `0.1` and `ART_PRINT_ITEM_GAP_INCHES` defaults to `0.25` in the canonical shared `defaults.ts`.
 - The packing algorithm treats the page margins as unavailable area and enforces the item gap between distinct art regions, including other art packed beside an oversized-art tile region.
@@ -1324,8 +1331,8 @@ carried over for a later story to close:
 - A generation failure before streaming returns the applicable Problem Details response and removes the temporary file without starting a download.
 - A missing, unreadable, or unsupported local image for any included art record fails the complete export before download; the backend returns Problem Details rather than skipping the art or rendering a placeholder.
 - The backend removes the temporary PDF after the response completes or the client disconnects; cleanup failures are logged for maintenance and do not change a completed response.
-- Selecting print-art PDF displays one persistent generating toast and disables that binder's art-export button until the request succeeds or fails.
-- A successful response starts the browser download and replaces the generating toast with the shared saved toast; a failure replaces it with the shared persistent failed toast using the returned Problem Details `detail`.
+- Selecting Print in the modal displays one persistent generating toast and disables that binder's art-export button and the modal's Print button until the request succeeds or fails.
+- A successful response starts the browser download, closes the modal, and replaces the generating toast with the shared saved toast; a failure keeps the modal open with its selections intact and replaces the generating toast with the shared persistent failed toast using the returned Problem Details `detail`.
 
 ### 31. Search and filter unplaced items
 
