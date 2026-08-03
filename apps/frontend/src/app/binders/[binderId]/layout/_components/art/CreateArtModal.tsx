@@ -8,7 +8,7 @@ import { useForm } from 'react-hook-form';
 
 import { resolveArtImageUrl, type Art, type Binder } from '@/lib/api';
 
-import type { ArtCreateRestore, ArtEditRestore, ArtFormValues } from '../../BinderRouteContext';
+import type { ArtCreateRestore, ArtEditRestore, ArtFormValues } from '../../../BinderRouteContext';
 import { ArtGridSelector } from './ArtGridSelector';
 import {
   ArtImageEditor,

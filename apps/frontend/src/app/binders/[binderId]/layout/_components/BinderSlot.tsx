@@ -3,7 +3,7 @@ import { Plus } from 'lucide-react';
 
 import type { Card } from '@/lib/api';
 
-import { CardTile } from './CardTile';
+import { CardTile } from './card/CardTile';
 
 // One binder slot (story 11), extracted out of `BinderSide`'s render loop
 // so `useDraggable`/`useDroppable` (story 14) can be called once per slot

@@ -18,7 +18,7 @@ import {
   useToastContext,
 } from '@/shared/feedback';
 
-import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
+import { useBinderRouteContext, type CustomCardFormValues } from '../../../BinderRouteContext';
 import { ManualCardForm } from './ManualCardForm';
 import {
   defaultManualCardFormValues,

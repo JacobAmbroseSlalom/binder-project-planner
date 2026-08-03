@@ -30,12 +30,12 @@ import {
   resolvePhysicalPageParam,
   resolveSpread,
 } from '../layoutSpread';
-import { ArtTile } from './ArtTile';
+import { ArtTile } from './art/ArtTile';
+import { CreateArtModal } from './art/CreateArtModal';
+import { UnplacedArtPanel } from './art/UnplacedArtPanel';
 import { BinderSide } from './BinderSide';
-import { CardSelectionModal } from './CardSelectionModal';
-import { CreateArtModal } from './CreateArtModal';
-import { UnplacedArtPanel } from './UnplacedArtPanel';
-import { UnplacedCardsPanel } from './UnplacedCardsPanel';
+import { CardSelectionModal } from './card/CardSelectionModal';
+import { UnplacedCardsPanel } from './card/UnplacedCardsPanel';
 
 // The slot (or unplaced-panel target) currently targeted by an open
 // card-selection modal (story 11; unplaced target added in story 15):

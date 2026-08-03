@@ -8,7 +8,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Art, Binder } from '@/lib/api';
 
 import { UnplacedArt } from './UnplacedArt';
-import { UNPLACED_GRID_COLUMNS, UNPLACED_GRID_GAP_PX } from './UnplacedCardsPanel';
+import { UNPLACED_GRID_COLUMNS, UNPLACED_GRID_GAP_PX } from '../card/UnplacedCardsPanel';
 
 // A rough guess for a single-column art row's height before the
 // virtualizer measures its real rendered height (story 25: "the unplaced

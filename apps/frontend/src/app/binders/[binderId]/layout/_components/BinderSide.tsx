@@ -3,8 +3,8 @@ import { useMemo } from 'react';
 import type { Art, Binder, Card } from '@/lib/api';
 
 import { getMichiGapColumns } from '../michiIndicators';
+import { PlacedArtTile } from './art/PlacedArtTile';
 import { BinderSlot } from './BinderSlot';
-import { PlacedArtTile } from './PlacedArtTile';
 
 // One binder side's slot grid (story 8): a CSS Grid with `width` columns
 // and `height` rows. Sized to fit the available spread area without
