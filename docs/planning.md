@@ -1125,6 +1125,36 @@ carried over for a later story to close:
 - Missing art, image metadata, or local rendering files return `404 Not Found` using Problem Details.
 - Art image responses use long-lived immutable caching, and the persisted art representation supplies a different image URL whenever its underlying rendering asset changes.
 
+### 42. Preview binder layout and multi-slot art while editing binder settings
+
+**Status:** Not started
+
+#### Acceptance criteria
+
+- The reusable binder-details form on the new binder page and the "Edit Details" tab displays a live preview next to its width, height, dimension, and multi-slot art style fields.
+- The preview shows a representative binder-side grid sized from the form's current width and height (in slots) and its current width-per-slot, width base, height-per-slot, and height base values.
+- The preview includes one representative piece of multi-slot art placed in the grid, rendered with the form's current border color, border radius, and border width values.
+- The preview updates immediately as the width, height, or any dimension or multi-slot art style field changes, without saving the form.
+- The preview appears identically on the new binder page, which has no saved binder or existing cards or art, and on the "Edit Details" tab of an existing binder.
+- The preview uses placeholder slot and art content rather than the binder's actual saved cards or multi-slot art, even on the "Edit Details" tab.
+- The preview is read-only: it does not accept dragging, dropping, or any other layout-editing interaction.
+- An invalid or incomplete field value while the user is typing does not remove or break the preview; the preview continues to reflect the most recently valid values for the field being edited.
+
+#### Technical requirements
+
+- The preview is computed entirely from the reusable binder-details form's current React Hook Form field values; it makes no backend request and is not part of any saved binder data.
+- The preview reuses the same binder-side and slot rendering primitives as the full layout (Story 8) and the home-page preview (Story 20), configured with placeholder content instead of real cards or art.
+- The preview's binder-side grid uses the form's current width for its column count and current height for its row count, matching the full layout's CSS Grid approach.
+- The representative multi-slot art is anchored at row 1, column 1 and spans `min(BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN, current width)` columns by `min(BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN, current height)` rows.
+- `BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN` defaults to `2` in the canonical shared `defaults.ts`.
+- The representative art renders using the same border-frame rendering primitive as real multi-slot art (Story 25 and Story 26), using the form's current border color, border radius, and border width values and a neutral placeholder fill in place of an uploaded image.
+- All other grid slots render as empty slots using the same empty-slot rendering as the full layout; no placeholder card content is shown in them.
+- The preview frame uses stable on-screen dimensions defined by the frontend styling system, independent of the home-page preview frame's dimensions (Story 20); the current grid scales proportionally to contain within that frame without cropping.
+- The preview recalculates on every relevant field change (width, height, width-per-slot, width base, height-per-slot, height base, border color, border radius, border width) without a debounce, since rendering is CSS-driven and inexpensive.
+- While a field's current input is blank or fails validation, the preview uses that field's last valid parsed value rather than clearing or erroring; the preview only uses the canonical `defaults.ts` values as its very first render, before the form's own default values are applied.
+- The preview does not depend on and is not affected by the binder name, page count, or preview-physical-page (Story 20) fields.
+- The preview mounts identically whether the binder-details form is in its new-binder (no `binderId`) or edit (existing `binderId`) mode; no additional data is fetched for it in either mode.
+
 ### 27. Handle binder size and page-count changes
 
 **Status:** Not started
