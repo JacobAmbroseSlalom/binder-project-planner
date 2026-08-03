@@ -210,6 +210,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/maintenance/orphaned-images": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete orphaned image files and asset records
+         * @description Operator-only maintenance endpoint with no frontend usage (see the project README's "Maintenance" section). Deletes cardImageAssets/ artImageAssets database rows that no card or art row references, along with their file(s), then deletes any remaining file in the local images directory with no asset row at all. Skips any asset row or file younger than 5 minutes so a request still in flight is never affected.
+         */
+        delete: operations["deleteOrphanedImages"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -219,6 +239,13 @@ export interface components {
             status: "ok";
             /** @constant */
             database: "connected";
+        };
+        OrphanedImagesCleanupResult: {
+            deletedFileCount: number;
+            /** @description Filenames (not full paths) deleted from the local images directory. */
+            deletedFiles: string[];
+            /** @description Number of cardImageAssets/artImageAssets database rows deleted because no card or art row referenced them. */
+            deletedAssetRecordCount: number;
         };
         ProblemDetails: {
             /** Format: uri-reference */
@@ -1118,6 +1145,26 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    deleteOrphanedImages: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The cleanup ran (even if there was nothing to delete). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrphanedImagesCleanupResult"];
                 };
             };
         };

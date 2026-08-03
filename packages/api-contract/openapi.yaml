@@ -536,6 +536,25 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /maintenance/orphaned-images:
+    delete:
+      operationId: deleteOrphanedImages
+      summary: Delete orphaned image files and asset records
+      description: >-
+        Operator-only maintenance endpoint with no frontend usage (see the
+        project README's "Maintenance" section). Deletes cardImageAssets/
+        artImageAssets database rows that no card or art row references,
+        along with their file(s), then deletes any remaining file in the
+        local images directory with no asset row at all. Skips any asset
+        row or file younger than 5 minutes so a request still in flight is
+        never affected.
+      responses:
+        '200':
+          description: The cleanup ran (even if there was nothing to delete).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrphanedImagesCleanupResult'
 components:
   parameters:
     binderId:
@@ -576,6 +595,30 @@ components:
         database:
           type: string
           const: connected
+    OrphanedImagesCleanupResult:
+      type: object
+      additionalProperties: false
+      required:
+        - deletedFileCount
+        - deletedFiles
+        - deletedAssetRecordCount
+      properties:
+        deletedFileCount:
+          type: integer
+          minimum: 0
+        deletedFiles:
+          type: array
+          items:
+            type: string
+          description: >-
+            Filenames (not full paths) deleted from the local images
+            directory.
+        deletedAssetRecordCount:
+          type: integer
+          minimum: 0
+          description: >-
+            Number of cardImageAssets/artImageAssets database rows deleted
+            because no card or art row referenced them.
     ProblemDetails:
       type: object
       additionalProperties: true

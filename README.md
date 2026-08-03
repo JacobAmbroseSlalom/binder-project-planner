@@ -90,6 +90,30 @@ The frontend supports this environment variable:
 | ------------------------- | ----------------------- | ---------------------------------- |
 | `NEXT_PUBLIC_BACKEND_URL` | `http://127.0.0.1:3001` | Backend origin the frontend calls. |
 
+## Maintenance
+
+`DELETE /maintenance/orphaned-images` is an operator-only endpoint with no frontend
+hookup. It deletes `cardImageAssets`/`artImageAssets` database rows that no card or art
+row actually references (for example, rows left behind by a since-fixed bug that wrote
+an image asset without ever creating its owning card/art record), along with their
+file(s), then deletes any remaining file in the local images directory with no asset row
+at all. Any asset row or file younger than 5 minutes is skipped so a request still in
+flight is never affected. Run it from the terminal while the backend is running:
+
+```sh
+curl -X DELETE http://127.0.0.1:3001/maintenance/orphaned-images
+```
+
+The response reports how many files and database rows were deleted:
+
+```json
+{
+  "deletedFileCount": 2,
+  "deletedFiles": ["a1b2c3d4.jpg", "e5f6a7b8.png"],
+  "deletedAssetRecordCount": 2
+}
+```
+
 ## Project documentation
 
 - [Product planning and story backlog](docs/planning.md)

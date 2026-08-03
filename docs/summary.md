@@ -19,6 +19,4 @@ Code review as copilot is coding
 
 Had it delete downstream dependencies with cascade delete while doing database migrations.
 
-Keep Scroll
-Image asset Clean up
 give example of multi-art sizes
