@@ -20,6 +20,7 @@ Code review as copilot is coding
 Had it delete downstream dependencies with cascade delete while doing database migrations.
 
 The art was a headache to get right
+Pdfs also useful for it to do
 
 ai struggled with the ui aspect, thats where a lot of back and forth happened. UX Designs would have probably helped.
 
@@ -28,9 +29,6 @@ agressive use of comments
 Story #26 was wayyyyy tooo big
 
 # Title
-
-21 Manage binders from the home page
-29 Export a binder as a PDF
 30 Export multi-slot art for printing
 16 Add card variations
 17 Add more cards

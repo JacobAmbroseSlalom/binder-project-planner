@@ -94,6 +94,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/binders/{binderId}/exports/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export a binder's layout as a PDF
+         * @description Generates a print-ready PDF of the binder's complete layout (story 29) from one transactionally consistent snapshot of the persisted binder, card, art, transform, and style data - never from the browser's own DOM/context. Each displayed spread (the first/last single-sided page, and every intermediate left-right spread) renders as one US Letter landscape PDF page, proportionally scaled to fit within a 0.25-inch margin. The backend finishes generation in a request-scoped temporary file before sending response headers, then streams the completed file; a missing, unreadable, or unsupported local image fails the complete export with Problem Details rather than omitting the item or generating a partial file. Binder lock state never restricts this read-only endpoint.
+         */
+        post: operations["exportBinderLayoutPdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/binders/{binderId}/cards": {
         parameters: {
             query?: never;
@@ -389,6 +411,14 @@ export interface components {
             borderRadius?: components["schemas"]["BinderBorderRadius"];
             borderWidth?: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage?: components["schemas"]["BinderPreviewPhysicalPage"];
+        };
+        /** @description `POST /binders/{binderId}/exports/pdf`'s request body (story 29). */
+        ExportBinderPdfRequest: {
+            /**
+             * @description When true, renders each card's saved variation label below it in the generated PDF, mirroring the layout route's own `variations=true` toggle. The frontend sends `false` (or omits the field) whenever that toggle is off.
+             * @default false
+             */
+            includeVariations: boolean;
         };
         Binder: {
             /** Format: uuid */
@@ -944,6 +974,61 @@ export interface operations {
             };
             /** @description No binder exists with the given id. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    exportBinderLayoutPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportBinderPdfRequest"];
+            };
+        };
+        responses: {
+            /** @description The generated binder-layout PDF. */
+            200: {
+                headers: {
+                    /** @description `attachment` with the sanitized binder name followed by `.pdf` as the suggested download filename. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PDF generation failed - for example, a placed card or art item's local image file is missing, unreadable, or not a supported format. No temporary file is left behind. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

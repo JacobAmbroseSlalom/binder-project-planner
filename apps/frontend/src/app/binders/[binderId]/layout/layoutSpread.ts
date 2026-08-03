@@ -11,16 +11,19 @@
 // even left page paired with the following odd right page. That's why a
 // binder with `pages` stored pages has `pages + 1` displayed spreads.
 //
-// `BinderSpread`, `getMaxPhysicalPage`, and `resolveSpread` themselves now
-// live in `@binder-project-planner/shared` (story 20 needs the backend to
-// resolve the same spread for the binder-list preview) and are re-exported
-// here so this route's existing imports keep working unchanged.
+// `BinderSpread`, `getMaxPhysicalPage`, `resolveSpread`, and
+// `getSpreadLabel` themselves now live in `@binder-project-planner/shared`
+// (story 20 needs the backend to resolve the same spread for the
+// binder-list preview; story 29 needs the backend to reuse the exact same
+// spread label for the PDF exporter) and are re-exported here so this
+// route's existing imports keep working unchanged.
 export {
   type BinderSpread,
   getMaxPhysicalPage,
+  getSpreadLabel,
   resolveSpread,
 } from '@binder-project-planner/shared';
-import { resolveSpread, type BinderSpread } from '@binder-project-planner/shared';
+import { resolveSpread } from '@binder-project-planner/shared';
 
 // The physical page the right/next arrow navigates to: the left page of
 // the next spread, or the single last physical page at the binder's final
@@ -42,15 +45,6 @@ export function getPreviousPhysicalPage(physicalPage: number, maxPhysicalPage: n
 
   const previousRight = spread.left - 1;
   return previousRight <= 1 ? 1 : previousRight;
-}
-
-// The human-readable label for a spread (story 9): a single-sided spread
-// (the binder's first or last) reads as "Page N", and a two-sided spread
-// reads as "Pages L–R" using its even left page and odd right page.
-export function getSpreadLabel(spread: BinderSpread): string {
-  if (spread.left === null) return `Page ${spread.right}`;
-  if (spread.right === null) return `Page ${spread.left}`;
-  return `Pages ${spread.left}\u2013${spread.right}`;
 }
 
 // The result of resolving the layout route's `page` query parameter.

@@ -216,6 +216,69 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}/exports/pdf:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    post:
+      operationId: exportBinderLayoutPdf
+      summary: Export a binder's layout as a PDF
+      description: >-
+        Generates a print-ready PDF of the binder's complete layout (story
+        29) from one transactionally consistent snapshot of the persisted
+        binder, card, art, transform, and style data - never from the
+        browser's own DOM/context. Each displayed spread (the first/last
+        single-sided page, and every intermediate left-right spread)
+        renders as one US Letter landscape PDF page, proportionally scaled
+        to fit within a 0.25-inch margin. The backend finishes generation
+        in a request-scoped temporary file before sending response
+        headers, then streams the completed file; a missing, unreadable,
+        or unsupported local image fails the complete export with Problem
+        Details rather than omitting the item or generating a partial
+        file. Binder lock state never restricts this read-only endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportBinderPdfRequest'
+      responses:
+        '200':
+          description: The generated binder-layout PDF.
+          headers:
+            Content-Disposition:
+              description: >-
+                `attachment` with the sanitized binder name followed by
+                `.pdf` as the suggested download filename.
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, or the
+            request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: >-
+            PDF generation failed - for example, a placed card or art item's
+            local image file is missing, unreadable, or not a supported
+            format. No temporary file is left behind.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /binders/{binderId}/cards:
     parameters:
       - $ref: '#/components/parameters/binderId'
@@ -1012,6 +1075,20 @@ components:
           $ref: '#/components/schemas/BinderBorderWidth'
         previewPhysicalPage:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
+    ExportBinderPdfRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `POST /binders/{binderId}/exports/pdf`'s request body (story 29).
+      properties:
+        includeVariations:
+          type: boolean
+          default: false
+          description: >-
+            When true, renders each card's saved variation label below it in
+            the generated PDF, mirroring the layout route's own
+            `variations=true` toggle. The frontend sends `false` (or omits
+            the field) whenever that toggle is off.
     Binder:
       type: object
       additionalProperties: false

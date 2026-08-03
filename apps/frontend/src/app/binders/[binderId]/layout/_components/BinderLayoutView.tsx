@@ -12,11 +12,17 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core';
 import { CARD_DRAG_ACTIVATION_DISTANCE_PX } from '@binder-project-planner/shared';
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Printer } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { resolveCardImageUrl, type Art, type Card, type TcgDexCatalogCard } from '@/lib/api';
+import {
+  exportBinderLayoutPdf,
+  resolveCardImageUrl,
+  type Art,
+  type Card,
+  type TcgDexCatalogCard,
+} from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
 import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
@@ -564,6 +570,45 @@ export function BinderLayoutView() {
     router.replace(`${pathname}?${params.toString()}`);
   }
 
+  // Story 29's print-to-PDF button disables itself while its own export is
+  // in flight; a fresh `useState` (rather than a shared pending-set) is
+  // enough since only one binder's layout tab renders at a time.
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  // Story 29: "The frontend sets `includeVariations` from the layout
+  // route's current `variations=true` toggle state" - read defensively
+  // now (mirroring the `michi=true` toggle above) even though story 16
+  // hasn't added the actual toggle control yet, so this starts working
+  // automatically once it does.
+  const includeVariations = searchParams.get('variations') === 'true';
+
+  // Generates and downloads the binder's layout PDF (story 29): drives the
+  // shared save-status toast exactly like every other mutation (a
+  // persistent "saving" toast the whole time, replaced by "saved" on
+  // success or the persistent "failed" toast with the backend's Problem
+  // Details detail on failure), and triggers the browser's native download
+  // via a throwaway anchor element once the blob arrives.
+  async function handleExportPdf() {
+    setIsExportingPdf(true);
+    const toast = start();
+    try {
+      const { blob, filename } = await exportBinderLayoutPdf(binder.id, includeVariations);
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+      toast.markSaved();
+    } catch (error) {
+      toast.markFailed(error);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  }
+
   return (
     <DndContext
       sensors={sensors}
@@ -648,6 +693,22 @@ export function BinderLayoutView() {
                 className={PAGE_INPUT_CLASS_NAME}
               />
             </div>
+
+            {/* Story 29's print-to-PDF button: available regardless of
+                lock state (no lock feature exists yet - see story 32),
+                disabled only while its own export is in flight. Icon-only,
+                so it relies on `aria-label`/`title` for its accessible
+                name rather than visible text. */}
+            <button
+              type="button"
+              onClick={handleExportPdf}
+              disabled={isExportingPdf}
+              aria-label="Print to PDF"
+              title="Print to PDF"
+              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Printer className="size-5" />
+            </button>
           </div>
 
           {/* The current spread's label (story 9) lives on its own row,

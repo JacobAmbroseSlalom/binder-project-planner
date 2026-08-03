@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync, unlinkSync } from 'node:fs';
+import { createReadStream, existsSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import {
@@ -16,7 +17,7 @@ import {
   getMaxPhysicalPage,
   resolveSpread,
 } from '@binder-project-planner/shared';
-import { asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
@@ -25,6 +26,7 @@ import {
   findIdempotentOutcome,
   saveIdempotentOutcome,
 } from '../idempotency/mutationIdempotency.js';
+import { generateBinderLayoutPdf } from '../pdf/binderLayoutPdf.js';
 import { listArtForBinder, listPlacedArtForPreview } from './art.js';
 import { listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
 
@@ -100,6 +102,14 @@ function toHundredths(value: number): number {
 
 function fromHundredths(value: number): number {
   return value / 100;
+}
+
+// Story 25/29: art's normalized focal/scale fields are stored as integer
+// ten-thousandths (see routes/art.ts's own copy of this helper); needed
+// here too so the PDF exporter can convert them back to the decimals
+// `computeArtDisplayGeometry` expects.
+function fromTenThousandths(value: number): number {
+  return value / 10_000;
 }
 
 // Strips internal-only columns (`normalizedName`, the `*Hundredths` storage
@@ -743,6 +753,168 @@ export function createBindersRouter(
     });
 
     response.status(201).location(locationHeader).json(summary);
+  });
+
+  // Story 29: exports the binder's complete layout as a print-ready PDF.
+  // Read-only, so it's never restricted by binder lock state (once story
+  // 32 adds one) - unlike every other mutation above, nothing here writes
+  // to the database.
+  router.post('/binders/:binderId/exports/pdf', async (request, response, next) => {
+    const { binderId } = request.params;
+    const { includeVariations = false } = request.body as { includeVariations?: boolean };
+
+    // One transactionally consistent snapshot read (planning.md: "changes
+    // committed afterward do not appear in that PDF and are not blocked by
+    // the export") - kept synchronous and short-lived, per this app's
+    // existing transaction convention; the (potentially slow) PDF
+    // generation itself happens afterward, outside the transaction, from
+    // the already-fetched snapshot.
+    const snapshot = database.transaction((tx) => {
+      const binderRow = tx.select().from(binders).where(eq(binders.id, binderId)).get() as
+        BinderRow | undefined;
+      if (!binderRow) return null;
+
+      const cardRows = tx
+        .select({
+          physicalPage: cards.physicalPage,
+          row: cards.row,
+          column: cards.column,
+          variation: cards.variation,
+          storageFilename: cardImageAssets.storageFilename,
+        })
+        .from(cards)
+        .innerJoin(cardImageAssets, eq(cards.imageAssetId, cardImageAssets.id))
+        .where(and(eq(cards.binderId, binderId), isNotNull(cards.physicalPage)))
+        .all();
+
+      const artRows = tx
+        .select({
+          physicalPage: art.physicalPage,
+          row: art.row,
+          column: art.column,
+          widthSlots: art.widthSlots,
+          heightSlots: art.heightSlots,
+          imageRotationDegrees: art.imageRotationDegrees,
+          focalXTenThousandths: art.focalXTenThousandths,
+          focalYTenThousandths: art.focalYTenThousandths,
+          scaleXTenThousandths: art.scaleXTenThousandths,
+          scaleYTenThousandths: art.scaleYTenThousandths,
+          borderColor: art.borderColor,
+          borderRadiusHundredths: art.borderRadiusHundredths,
+          borderWidthHundredths: art.borderWidthHundredths,
+          storageFilename: artImageAssets.storageFilename,
+          normalizedStorageFilename: artImageAssets.normalizedStorageFilename,
+          pixelWidth: artImageAssets.pixelWidth,
+          pixelHeight: artImageAssets.pixelHeight,
+        })
+        .from(art)
+        .innerJoin(artImageAssets, eq(art.imageAssetId, artImageAssets.id))
+        .where(and(eq(art.binderId, binderId), isNotNull(art.physicalPage)))
+        .all();
+
+      return { binderRow, cardRows, artRows };
+    });
+
+    if (!snapshot) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    // A filesystem-safe download filename derived from the binder's name
+    // (which otherwise allows any character): non-alphanumeric characters
+    // (other than space/hyphen/underscore) become underscores, falling
+    // back to a generic name for the unlikely case that strips everything.
+    const sanitizedName =
+      snapshot.binderRow.name.replace(/[^A-Za-z0-9 _-]/g, '_').trim() || 'binder';
+    const tempFilePath = join(tmpdir(), `binder-pdf-export-${randomUUID()}.pdf`);
+
+    try {
+      await generateBinderLayoutPdf({
+        outputPath: tempFilePath,
+        binder: {
+          name: snapshot.binderRow.name,
+          width: snapshot.binderRow.width,
+          height: snapshot.binderRow.height,
+          pages: snapshot.binderRow.pages,
+          widthPerSlot: fromHundredths(snapshot.binderRow.widthPerSlotHundredths),
+          widthBase: fromHundredths(snapshot.binderRow.widthBaseHundredths),
+          heightPerSlot: fromHundredths(snapshot.binderRow.heightPerSlotHundredths),
+          heightBase: fromHundredths(snapshot.binderRow.heightBaseHundredths),
+        },
+        cards: snapshot.cardRows.map((row) => ({
+          physicalPage: row.physicalPage as number,
+          row: row.row as number,
+          column: row.column as number,
+          variation: row.variation,
+          imagePath: join(imagesDirectory, row.storageFilename),
+        })),
+        art: snapshot.artRows.map((row) => ({
+          physicalPage: row.physicalPage as number,
+          row: row.row as number,
+          column: row.column as number,
+          widthSlots: row.widthSlots,
+          heightSlots: row.heightSlots,
+          imagePath: join(imagesDirectory, row.normalizedStorageFilename ?? row.storageFilename),
+          naturalWidth: row.pixelWidth,
+          naturalHeight: row.pixelHeight,
+          imageRotationDegrees: row.imageRotationDegrees as 0 | 90 | 180 | 270,
+          focalX: fromTenThousandths(row.focalXTenThousandths),
+          focalY: fromTenThousandths(row.focalYTenThousandths),
+          scaleX: fromTenThousandths(row.scaleXTenThousandths),
+          scaleY: fromTenThousandths(row.scaleYTenThousandths),
+          // A null override falls back to the binder's own current border
+          // setting at render time, mirroring `ArtTile.tsx`'s own
+          // `art.borderColor ?? binder.borderColor` resolution (see
+          // schema.ts's comment on `art.borderColor`).
+          borderColor: row.borderColor ?? snapshot.binderRow.borderColor,
+          borderRadius: fromHundredths(
+            row.borderRadiusHundredths ?? snapshot.binderRow.borderRadiusHundredths,
+          ),
+          borderWidth: fromHundredths(
+            row.borderWidthHundredths ?? snapshot.binderRow.borderWidthHundredths,
+          ),
+        })),
+        includeVariations,
+      });
+    } catch (error) {
+      if (existsSync(tempFilePath)) {
+        try {
+          unlinkSync(tempFilePath);
+        } catch (cleanupError) {
+          request.log.error(
+            { err: cleanupError, path: tempFilePath },
+            'Failed to remove a failed PDF export temporary file.',
+          );
+        }
+      }
+      next(error);
+      return;
+    }
+
+    response
+      .status(200)
+      .type('application/pdf')
+      .set('Content-Disposition', `attachment; filename="${sanitizedName}.pdf"`);
+
+    const readStream = createReadStream(tempFilePath);
+    readStream.pipe(response);
+
+    // Cleans up the temporary file once the response is done, whether it
+    // completed normally or the client disconnected early - 'close' fires
+    // in both cases (planning.md: "removes the temporary PDF after the
+    // response completes or the client disconnects"). A cleanup failure
+    // here is logged only; the already-sent response is unaffected.
+    response.once('close', () => {
+      if (!existsSync(tempFilePath)) return;
+      try {
+        unlinkSync(tempFilePath);
+      } catch (cleanupError) {
+        request.log.error(
+          { err: cleanupError, path: tempFilePath },
+          'Failed to remove a completed PDF export temporary file.',
+        );
+      }
+    });
   });
 
   // Story 7 requires the shared binder context to load details, cards, and

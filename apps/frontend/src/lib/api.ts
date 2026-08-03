@@ -148,6 +148,46 @@ export async function duplicateBinder(
   return data;
 }
 
+// The result of a successful binder-layout PDF export: the generated file
+// itself plus the filename the backend suggested via its
+// `Content-Disposition` header, for the caller to use when triggering the
+// browser download.
+export interface ExportedBinderPdf {
+  blob: Blob;
+  filename: string;
+}
+
+// Generates and downloads a binder's layout PDF through
+// `POST /binders/{binderId}/exports/pdf` (story 29). `parseAs: 'blob'`
+// only changes how the *success* response body is parsed - openapi-fetch
+// still parses an error response as Problem Details JSON regardless of
+// `parseAs`, so the shared save-status toast's error handling keeps
+// working unchanged. Throws the Problem Details body on failure, matching
+// every other mutation here.
+export async function exportBinderLayoutPdf(
+  binderId: string,
+  includeVariations: boolean,
+): Promise<ExportedBinderPdf> {
+  const { data, error, response } = await apiClient.POST('/binders/{binderId}/exports/pdf', {
+    params: { path: { binderId } },
+    body: { includeVariations },
+    parseAs: 'blob',
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  // Extracts the suggested filename from `Content-Disposition:
+  // attachment; filename="<name>.pdf"`; falls back to a generic name in
+  // the (unexpected) case the header is missing or doesn't match.
+  const contentDisposition = response.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = /filename="([^"]+)"/.exec(contentDisposition);
+  const filename = filenameMatch?.[1] ?? 'binder.pdf';
+
+  return { blob: data, filename };
+}
+
 // Fetches every binder-owned card through `GET /binders/{binderId}/cards`
 // (story 7, populated by story 11's card creation).
 export async function listBinderCards(binderId: string, signal?: AbortSignal): Promise<Card[]> {

@@ -36,7 +36,13 @@ export function createApp({
   const app = express();
 
   app.use(pinoHttp({ logger: pino({ enabled: process.env.NODE_ENV !== 'test' }) }));
-  app.use(cors({ origin: frontendOrigin }));
+  // `Content-Disposition` isn't one of the CORS-safelisted response headers
+  // browsers expose to JS by default, so story 29's PDF export (whose
+  // frontend `fetch` reads this header to recover the binder-name-derived
+  // download filename) needs it explicitly exposed here - otherwise
+  // `response.headers.get('Content-Disposition')` always returns null
+  // cross-origin and the frontend silently falls back to a generic name.
+  app.use(cors({ origin: frontendOrigin, exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json());
   app.use(
     OpenApiValidator.middleware({

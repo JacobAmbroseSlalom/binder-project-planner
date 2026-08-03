@@ -43,3 +43,31 @@ export function resolveSpread(physicalPage: number, maxPhysicalPage: number): Bi
   const left = physicalPage % 2 === 0 ? physicalPage : physicalPage - 1;
   return { left, right: left + 1 };
 }
+
+// The human-readable label for a spread (story 9): a single-sided spread
+// (the binder's first or last) reads as "Page N", and a two-sided spread
+// reads as "Pages L–R" using its even left page and odd right page. Story
+// 29 (export a binder as a PDF) reuses this so each generated PDF page's
+// label matches the layout tab's own labels exactly.
+export function getSpreadLabel(spread: BinderSpread): string {
+  if (spread.left === null) return `Page ${spread.right}`;
+  if (spread.right === null) return `Page ${spread.left}`;
+  return `Pages ${spread.left}\u2013${spread.right}`;
+}
+
+// Every displayed spread for a binder with `storedPages` stored pages, in
+// display order (story 29: the PDF exporter renders one page per spread,
+// front to back, and needs the complete list up front rather than walking
+// physical pages one at a time like the interactive layout tab does).
+export function listBinderSpreads(storedPages: number): BinderSpread[] {
+  const maxPhysicalPage = getMaxPhysicalPage(storedPages);
+  const spreads: BinderSpread[] = [];
+  for (let physicalPage = 1; physicalPage <= maxPhysicalPage; physicalPage++) {
+    const spread = resolveSpread(physicalPage, maxPhysicalPage);
+    spreads.push(spread);
+    // Advance past this spread's right page too when it has one so a
+    // two-page spread isn't pushed twice for both of its physical pages.
+    if (spread.right !== null) physicalPage = spread.right;
+  }
+  return spreads;
+}
