@@ -15,7 +15,7 @@ import {
   CARD_DRAG_ACTIVATION_DISTANCE_PX,
   DEFAULT_BINDER_NOTES_VISIBLE,
 } from '@binder-project-planner/shared';
-import { Check, ChevronLeft, ChevronRight, Images, Printer } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Images, Printer, Redo2, Undo2 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
@@ -117,6 +117,10 @@ export function BinderLayoutView() {
     pendingCardDuplicateIds,
     moveCard,
     isMovePending,
+    canUndoLayoutMovement = false,
+    canRedoLayoutMovement = false,
+    undoLayoutMovement = async () => null,
+    redoLayoutMovement = async () => null,
     pendingUnplacedCardIds,
     art,
     createArt,
@@ -663,6 +667,50 @@ export function BinderLayoutView() {
   // export state (see `PrintArtModal.tsx`).
   const [isPrintArtModalOpen, setIsPrintArtModalOpen] = useState(false);
 
+  // Story 28 post-undo/redo unplaced navigation: when the resulting focal
+  // placement is unplaced, keep the current spread and ask the matching
+  // unplaced panel to reveal that specific item.
+  const [pendingHistoryCardRevealId, setPendingHistoryCardRevealId] = useState<string | null>(null);
+  const [pendingHistoryArtRevealId, setPendingHistoryArtRevealId] = useState<string | null>(null);
+
+  async function handleUndoLayoutMovement() {
+    const result = await undoLayoutMovement();
+    if (!result) return;
+
+    if (result.placement.physicalPage !== null) {
+      navigateToPhysicalPage(result.placement.physicalPage);
+      return;
+    }
+
+    if (result.itemType === 'card') {
+      setPendingHistoryArtRevealId(null);
+      setPendingHistoryCardRevealId(result.itemId);
+      return;
+    }
+
+    setPendingHistoryCardRevealId(null);
+    setPendingHistoryArtRevealId(result.itemId);
+  }
+
+  async function handleRedoLayoutMovement() {
+    const result = await redoLayoutMovement();
+    if (!result) return;
+
+    if (result.placement.physicalPage !== null) {
+      navigateToPhysicalPage(result.placement.physicalPage);
+      return;
+    }
+
+    if (result.itemType === 'card') {
+      setPendingHistoryArtRevealId(null);
+      setPendingHistoryCardRevealId(result.itemId);
+      return;
+    }
+
+    setPendingHistoryCardRevealId(null);
+    setPendingHistoryArtRevealId(result.itemId);
+  }
+
   // The print-art button/modal only ever consider currently PLACED art
   // (planning.md: "Unplaced multi-slot art is never listed in the modal
   // and is never included in the PDF").
@@ -762,6 +810,8 @@ export function BinderLayoutView() {
           variationsVisible={variationsVisible}
           onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
           slotAspectRatio={slotAspectRatio}
+          scrollToCardId={pendingHistoryCardRevealId}
+          onScrollToCardHandled={() => setPendingHistoryCardRevealId(null)}
         />
 
         <div className={`flex h-full min-h-0 flex-col gap-4`}>
@@ -854,6 +904,28 @@ export function BinderLayoutView() {
                 className={PAGE_INPUT_CLASS_NAME}
               />
             </div>
+
+            <button
+              type="button"
+              onClick={() => void handleUndoLayoutMovement()}
+              disabled={!canUndoLayoutMovement || isMovePending}
+              aria-label="Undo layout movement"
+              title="Undo"
+              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Undo2 className="size-5" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => void handleRedoLayoutMovement()}
+              disabled={!canRedoLayoutMovement || isMovePending}
+              aria-label="Redo layout movement"
+              title="Redo"
+              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Redo2 className="size-5" />
+            </button>
 
             {/* Story 29's print-to-PDF button: available regardless of
                 lock state (no lock feature exists yet - see story 32),
@@ -1039,6 +1111,8 @@ export function BinderLayoutView() {
           onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
           onRemoveArt={removeArt}
           onDuplicateArt={duplicateArt}
+          scrollToArtId={pendingHistoryArtRevealId}
+          onScrollToArtHandled={() => setPendingHistoryArtRevealId(null)}
         />
       </div>
 

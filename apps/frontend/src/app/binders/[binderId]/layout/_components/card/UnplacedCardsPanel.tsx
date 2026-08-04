@@ -87,6 +87,8 @@ export function UnplacedCardsPanel({
   variationsVisible = false,
   onAddCard,
   slotAspectRatio,
+  scrollToCardId,
+  onScrollToCardHandled,
 }: {
   // Every card in the binder; filtered internally to the unplaced subset
   // (all-null placement), mirroring `BinderSide`'s own "pass the full list,
@@ -114,6 +116,11 @@ export function UnplacedCardsPanel({
   // Story 24: the binder's configured single-slot width-to-height ratio,
   // threaded down from `BinderLayoutView` to each `UnplacedCard` tile.
   slotAspectRatio: number;
+  // Story 28: one-shot target card id to reveal in this panel after a
+  // successful undo/redo action whose focal result is unplaced.
+  scrollToCardId?: string | null;
+  // Called once a pending `scrollToCardId` request has been fulfilled.
+  onScrollToCardHandled?: () => void;
 }) {
   // Story 31: local-per-panel text state that resets whenever this layout
   // tab unmounts/remounts. Keystrokes update immediately while filtering
@@ -191,6 +198,41 @@ export function UnplacedCardsPanel({
       });
     }
   }, [unplacedCards, filteredUnplacedCards, rowVirtualizer]);
+
+  // Story 28: reveals a requested unplaced focal card after undo/redo. If
+  // an active search currently hides it, clear the search first so the
+  // requested card can be rendered and scrolled to.
+  useEffect(() => {
+    if (!scrollToCardId) return;
+
+    const unplacedIndex = unplacedCards.findIndex((card) => card.id === scrollToCardId);
+    if (unplacedIndex === -1) {
+      onScrollToCardHandled?.();
+      return;
+    }
+
+    const filteredIndex = filteredUnplacedCards.findIndex((card) => card.id === scrollToCardId);
+    if (filteredIndex === -1) {
+      if (searchQuery.trim().length > 0) {
+        setSearchQuery('');
+        return;
+      }
+      onScrollToCardHandled?.();
+      return;
+    }
+
+    rowVirtualizer.scrollToIndex(Math.floor(filteredIndex / UNPLACED_GRID_COLUMNS), {
+      align: 'center',
+    });
+    onScrollToCardHandled?.();
+  }, [
+    filteredUnplacedCards,
+    onScrollToCardHandled,
+    rowVirtualizer,
+    scrollToCardId,
+    searchQuery,
+    unplacedCards,
+  ]);
 
   return (
     <div

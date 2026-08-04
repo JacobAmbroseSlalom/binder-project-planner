@@ -1206,7 +1206,7 @@ carried over for a later story to close:
 
 ### 28. Undo and redo layout movements
 
-**Status:** Not started
+**Status:** Done (2026-08-04 11:51 EDT)
 
 #### Acceptance criteria
 

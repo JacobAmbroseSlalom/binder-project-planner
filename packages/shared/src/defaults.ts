@@ -105,6 +105,12 @@ export const CUSTOM_CARD_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp';
 // get mistaken for a drag attempt.
 export const CARD_DRAG_ACTIVATION_DISTANCE_PX = 8;
 
+// Story 28: "Undo and redo layout movements". The maximum number of
+// successful drag-and-drop actions retained in the undo stack for one
+// binder route session. When this limit is reached, adding one new action
+// discards the oldest retained action.
+export const LAYOUT_MOVEMENT_HISTORY_LIMIT = 50;
+
 // Story 24: "Configure card and multi-slot art dimensions". Per-binder
 // configurable formulas replace the fixed `SLOT_WIDTH_CM`/`SLOT_HEIGHT_CM`
 // one-slot dimensions above: displayed width is

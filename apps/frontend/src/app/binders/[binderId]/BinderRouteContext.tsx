@@ -3,9 +3,18 @@
 import {
   CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
   CARD_SEARCH_LANGUAGE_DEFAULT,
+  LAYOUT_MOVEMENT_HISTORY_LIMIT,
 } from '@binder-project-planner/shared';
 import { useRouter } from 'next/navigation';
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 
 import {
   createArt as createArtRequest,
@@ -168,6 +177,62 @@ const OPEN_BINDER_TOAST_ID = 'open-binder';
 // handling in the effect below rather than as a 4th status).
 type BinderLoadStatus = 'loading' | 'success' | 'error';
 
+interface CardMovementActionEntry {
+  cardId: string;
+  from: PlacementCoordinates;
+  to: PlacementCoordinates;
+}
+
+type CardMovementActionEntries =
+  [CardMovementActionEntry] | [CardMovementActionEntry, CardMovementActionEntry];
+
+interface CardMovementHistoryAction {
+  id: string;
+  kind: 'card';
+  // Story 28: a swap's focal item is the originally dragged card.
+  focalCardId: string;
+  updates: CardMovementActionEntries;
+}
+
+interface ArtMovementHistoryAction {
+  id: string;
+  kind: 'art';
+  focalArtId: string;
+  artId: string;
+  from: PlacementCoordinates;
+  to: PlacementCoordinates;
+}
+
+type LayoutMovementHistoryAction = CardMovementHistoryAction | ArtMovementHistoryAction;
+
+// Story 28: the focal item placement produced by one successful undo/redo
+// action, used by the layout view to reveal the resulting page or unplaced
+// panel location.
+export interface LayoutMovementResultFocus {
+  itemType: 'card' | 'art';
+  itemId: string;
+  placement: PlacementCoordinates;
+}
+
+function didLayoutBoundsChange(previous: Binder, next: Binder): boolean {
+  return (
+    previous.width !== next.width ||
+    previous.height !== next.height ||
+    previous.pages !== next.pages
+  );
+}
+
+function isConflictProblem(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { status?: unknown };
+  return candidate.status === 409;
+}
+
+function actionTouchesItem(action: LayoutMovementHistoryAction, itemId: string): boolean {
+  if (action.kind === 'art') return action.artId === itemId;
+  return action.updates.some((update) => update.cardId === itemId);
+}
+
 // The shared binder route context value (story 7): the binder details,
 // cards, and multi-slot art loaded in parallel by the route's provider, plus
 // a setter the Edit Details tab uses to sync the context after a successful
@@ -309,6 +374,20 @@ interface BinderRouteContextValue {
   // binder until it settles - new movement operations are never queued
   // behind it.
   isMovePending: boolean;
+  // Story 28: true when there is at least one successful movement action
+  // available to undo.
+  canUndoLayoutMovement?: boolean;
+  // Story 28: true when there is at least one movement action in the redo
+  // stack.
+  canRedoLayoutMovement?: boolean;
+  // Story 28: applies the newest undoable action through the existing
+  // movement PATCH contract. Returns the focal item's resulting placement
+  // only when the request succeeds.
+  undoLayoutMovement?: () => Promise<LayoutMovementResultFocus | null>;
+  // Story 28: reapplies the newest redoable action through the existing
+  // movement PATCH contract. Returns the focal item's resulting placement
+  // only when the request succeeds.
+  redoLayoutMovement?: () => Promise<LayoutMovementResultFocus | null>;
   // Story 41's card-selection modal language toggle: ephemeral React state
   // that lives above the modal so it survives the modal closing and
   // reopening within the same binder visit, but resets (back to
@@ -463,6 +542,9 @@ export function BinderRouteProvider({
   // Story 14's single in-flight-movement flag (see the context value's own
   // doc comment above for why one flag suffices instead of a per-card set).
   const [isMovePending, setIsMovePending] = useState(false);
+  // Story 28's binder-scoped movement history stacks.
+  const [undoMovementStack, setUndoMovementStack] = useState<LayoutMovementHistoryAction[]>([]);
+  const [redoMovementStack, setRedoMovementStack] = useState<LayoutMovementHistoryAction[]>([]);
   // Story 15's in-flight-unplaced-create ids (see the context value's own
   // doc comment above).
   const [pendingUnplacedCardIds, setPendingUnplacedCardIds] = useState<Set<string>>(new Set());
@@ -498,6 +580,57 @@ export function BinderRouteProvider({
   // away. `null` until the binder loads.
   useSetAppHeaderTitle(binder?.name ?? null);
 
+  // Live refs let callbacks that intentionally avoid large dependency lists
+  // still read the latest binder/cards/art stacks when they run.
+  const binderRef = useRef<Binder | null>(binder);
+  const cardsRef = useRef<Card[]>(cards);
+  const artRef = useRef<Art[]>(art);
+  const undoStackRef = useRef<LayoutMovementHistoryAction[]>(undoMovementStack);
+  const redoStackRef = useRef<LayoutMovementHistoryAction[]>(redoMovementStack);
+
+  useEffect(() => {
+    binderRef.current = binder;
+  }, [binder]);
+
+  useEffect(() => {
+    cardsRef.current = cards;
+  }, [cards]);
+
+  useEffect(() => {
+    artRef.current = art;
+  }, [art]);
+
+  useEffect(() => {
+    undoStackRef.current = undoMovementStack;
+  }, [undoMovementStack]);
+
+  useEffect(() => {
+    redoStackRef.current = redoMovementStack;
+  }, [redoMovementStack]);
+
+  const clearLayoutMovementHistory = useCallback(() => {
+    setUndoMovementStack([]);
+    setRedoMovementStack([]);
+  }, []);
+
+  const recordSuccessfulMovement = useCallback((action: LayoutMovementHistoryAction) => {
+    setUndoMovementStack((previous) => {
+      const next = [...previous, action];
+      if (next.length <= LAYOUT_MOVEMENT_HISTORY_LIMIT) return next;
+      return next.slice(next.length - LAYOUT_MOVEMENT_HISTORY_LIMIT);
+    });
+    setRedoMovementStack([]);
+  }, []);
+
+  const pruneHistoryEntriesForItem = useCallback((itemId: string) => {
+    setUndoMovementStack((previous) =>
+      previous.filter((action) => !actionTouchesItem(action, itemId)),
+    );
+    setRedoMovementStack((previous) =>
+      previous.filter((action) => !actionTouchesItem(action, itemId)),
+    );
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
 
@@ -515,6 +648,7 @@ export function BinderRouteProvider({
         setBinder(binderResult);
         setCards(cardsResult);
         setArt(artResult);
+        clearLayoutMovementHistory();
         setStatus('success');
         dismiss(OPEN_BINDER_TOAST_ID);
       } catch (error) {
@@ -545,20 +679,32 @@ export function BinderRouteProvider({
     return () => {
       controller.abort();
     };
-  }, [binderId, retryToken, router, markFailed, dismiss]);
+  }, [binderId, retryToken, router, markFailed, dismiss, clearLayoutMovementHistory]);
 
   // Lets the Edit Details tab sync the context with the backend's
   // authoritative binder after a successful `PATCH`, without re-fetching
   // cards/art or discarding the rest of the loaded route state.
-  const updateBinder = useCallback((updated: Binder) => {
-    setBinder(updated);
-  }, []);
+  const updateBinder = useCallback(
+    (updated: Binder) => {
+      const previous = binderRef.current;
+      if (previous && didLayoutBoundsChange(previous, updated)) {
+        clearLayoutMovementHistory();
+      }
+      setBinder(updated);
+    },
+    [clearLayoutMovementHistory],
+  );
 
   // Story 27 reconciliation helper: updates binder details and folds in
   // any moved card/art records returned by the same successful resize
   // update response, without refetching either collection.
   const applyBinderResizeUpdate = useCallback(
     (result: Pick<UpdateBinderResult, 'binder' | 'movedCards' | 'movedArt'>) => {
+      const previous = binderRef.current;
+      if (previous && didLayoutBoundsChange(previous, result.binder)) {
+        clearLayoutMovementHistory();
+      }
+
       setBinder(result.binder);
 
       if (result.movedCards.length > 0) {
@@ -575,7 +721,7 @@ export function BinderRouteProvider({
         setArt((previous) => previous.map((artItem) => movedArtById.get(artItem.id) ?? artItem));
       }
     },
-    [],
+    [clearLayoutMovementHistory],
   );
 
   // A failed (non-404/400) load's retry action: re-runs all 3 requests per
@@ -978,6 +1124,8 @@ export function BinderRouteProvider({
   // destination that changed since this client last loaded it).
   const moveArt = useCallback(
     (artId: string, destination: PlacementCoordinates) => {
+      if (isMovePending) return;
+
       const draggedArt = art.find((item) => item.id === artId);
       if (!draggedArt) return;
 
@@ -1006,6 +1154,14 @@ export function BinderRouteProvider({
       moveArtRequest(artId, previousPlacement, destination)
         .then((updated) => {
           setArt((previous) => previous.map((item) => (item.id === artId ? updated : item)));
+          recordSuccessfulMovement({
+            id: crypto.randomUUID(),
+            kind: 'art',
+            focalArtId: artId,
+            artId,
+            from: previousPlacement,
+            to: destination,
+          });
           toast.markSaved();
         })
         .catch((error) => {
@@ -1020,7 +1176,7 @@ export function BinderRouteProvider({
           setIsMovePending(false);
         });
     },
-    [art, cards, start],
+    [art, cards, isMovePending, recordSuccessfulMovement, start],
   );
 
   // Edits an existing art item's metadata, transform, style overrides, and
@@ -1073,6 +1229,7 @@ export function BinderRouteProvider({
       })
         .then((updated) => {
           setArt((previous) => previous.map((item) => (item.id === artId ? updated : item)));
+          pruneHistoryEntriesForItem(artId);
           toast.markSaved();
           if (previewUrl) URL.revokeObjectURL(previewUrl);
         })
@@ -1093,7 +1250,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [art, start],
+    [art, pruneHistoryEntriesForItem, start],
   );
 
   // Clears the one-shot edit-art restore signal once the edit modal has
@@ -1121,6 +1278,7 @@ export function BinderRouteProvider({
 
       deleteArtRequest(artId)
         .then(() => {
+          pruneHistoryEntriesForItem(artId);
           toast.markSaved();
         })
         .catch((error) => {
@@ -1139,7 +1297,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [art, start],
+    [art, pruneHistoryEntriesForItem, start],
   );
 
   // Duplicates an art item into the unplaced-art section (story 26),
@@ -1208,6 +1366,7 @@ export function BinderRouteProvider({
 
       deleteCard(cardId)
         .then(() => {
+          pruneHistoryEntriesForItem(cardId);
           toast.markSaved();
         })
         .catch((error) => {
@@ -1226,7 +1385,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [cards, start],
+    [cards, pruneHistoryEntriesForItem, start],
   );
 
   // Edits an existing card's saved variation (story 16), mirroring
@@ -1251,6 +1410,7 @@ export function BinderRouteProvider({
       updateCardVariationRequest(cardId, variation)
         .then((updated) => {
           setCards((previous) => previous.map((card) => (card.id === cardId ? updated : card)));
+          pruneHistoryEntriesForItem(cardId);
           toast.markSaved();
         })
         .catch((error) => {
@@ -1269,7 +1429,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [cards, start],
+    [cards, pruneHistoryEntriesForItem, start],
   );
 
   // Duplicates a card into the unplaced-cards section (story 19),
@@ -1342,6 +1502,8 @@ export function BinderRouteProvider({
       cardId: string,
       destination: { physicalPage: number | null; row: number | null; column: number | null },
     ) => {
+      if (isMovePending) return;
+
       const draggedCard = cards.find((card) => card.id === cardId);
       if (!draggedCard) return;
 
@@ -1392,6 +1554,22 @@ export function BinderRouteProvider({
           setCards((previous) =>
             previous.map((card) => updatedCards.find((updated) => updated.id === card.id) ?? card),
           );
+          const historyUpdates: CardMovementActionEntries = occupyingCard
+            ? [
+                { cardId: draggedCard.id, from: previousDraggedPlacement, to: destination },
+                {
+                  cardId: occupyingCard.id,
+                  from: previousOccupyingPlacement!,
+                  to: previousDraggedPlacement,
+                },
+              ]
+            : [{ cardId: draggedCard.id, from: previousDraggedPlacement, to: destination }];
+          recordSuccessfulMovement({
+            id: crypto.randomUUID(),
+            kind: 'card',
+            focalCardId: draggedCard.id,
+            updates: historyUpdates,
+          });
           toast.markSaved();
         })
         .catch((error) => {
@@ -1415,14 +1593,122 @@ export function BinderRouteProvider({
           setIsMovePending(false);
         });
     },
-    [cards, start],
+    [cards, isMovePending, recordSuccessfulMovement, start],
+  );
+
+  // Story 28 shared executor for undo/redo: applies one action from the
+  // chosen source stack, mutates visible placement only on success, and
+  // transfers stack ownership only after persistence succeeds.
+  const applyLayoutHistoryAction = useCallback(
+    async (direction: 'undo' | 'redo'): Promise<LayoutMovementResultFocus | null> => {
+      if (isMovePending) return null;
+
+      const sourceStack = direction === 'undo' ? undoStackRef.current : redoStackRef.current;
+      const action = sourceStack[sourceStack.length - 1];
+      if (!action) return null;
+
+      setIsMovePending(true);
+      const toast = start(`${direction}-layout-movement`);
+
+      try {
+        if (action.kind === 'card') {
+          const updates: CardPositionUpdate[] = action.updates.map((update) => ({
+            cardId: update.cardId,
+            expectedPlacement: direction === 'undo' ? update.to : update.from,
+            finalPlacement: direction === 'undo' ? update.from : update.to,
+          }));
+
+          const updatedCards = await moveCards(action.focalCardId, updates);
+          const updatedCardsById = new Map(updatedCards.map((cardItem) => [cardItem.id, cardItem]));
+          setCards((previous) =>
+            previous.map((cardItem) => updatedCardsById.get(cardItem.id) ?? cardItem),
+          );
+
+          const focalUpdate = action.updates.find((update) => update.cardId === action.focalCardId);
+          if (!focalUpdate) {
+            throw new Error('Unable to resolve card movement focus for history action.');
+          }
+
+          const resultPlacement = direction === 'undo' ? focalUpdate.from : focalUpdate.to;
+          if (direction === 'undo') {
+            setUndoMovementStack((previous) => previous.filter((entry) => entry.id !== action.id));
+            setRedoMovementStack((previous) => [...previous, action]);
+          } else {
+            setRedoMovementStack((previous) => previous.filter((entry) => entry.id !== action.id));
+            setUndoMovementStack((previous) => {
+              const next = [...previous, action];
+              if (next.length <= LAYOUT_MOVEMENT_HISTORY_LIMIT) return next;
+              return next.slice(next.length - LAYOUT_MOVEMENT_HISTORY_LIMIT);
+            });
+          }
+
+          toast.markSaved();
+          return {
+            itemType: 'card',
+            itemId: action.focalCardId,
+            placement: resultPlacement,
+          };
+        }
+
+        const expectedPlacement = direction === 'undo' ? action.to : action.from;
+        const finalPlacement = direction === 'undo' ? action.from : action.to;
+        const updatedArt = await moveArtRequest(action.artId, expectedPlacement, finalPlacement);
+        setArt((previous) =>
+          previous.map((artItem) => (artItem.id === action.artId ? updatedArt : artItem)),
+        );
+
+        if (direction === 'undo') {
+          setUndoMovementStack((previous) => previous.filter((entry) => entry.id !== action.id));
+          setRedoMovementStack((previous) => [...previous, action]);
+        } else {
+          setRedoMovementStack((previous) => previous.filter((entry) => entry.id !== action.id));
+          setUndoMovementStack((previous) => {
+            const next = [...previous, action];
+            if (next.length <= LAYOUT_MOVEMENT_HISTORY_LIMIT) return next;
+            return next.slice(next.length - LAYOUT_MOVEMENT_HISTORY_LIMIT);
+          });
+        }
+
+        toast.markSaved();
+        return {
+          itemType: 'art',
+          itemId: action.focalArtId,
+          placement: finalPlacement,
+        };
+      } catch (error) {
+        if (isConflictProblem(error)) {
+          if (direction === 'undo') {
+            setUndoMovementStack((previous) => previous.filter((entry) => entry.id !== action.id));
+          } else {
+            setRedoMovementStack((previous) => previous.filter((entry) => entry.id !== action.id));
+          }
+        }
+        toast.markFailed(error);
+        return null;
+      } finally {
+        setIsMovePending(false);
+      }
+    },
+    [isMovePending, start],
+  );
+
+  // Applies the newest undoable movement action, or no-ops when none exist.
+  const undoLayoutMovement = useCallback(
+    () => applyLayoutHistoryAction('undo'),
+    [applyLayoutHistoryAction],
+  );
+
+  // Reapplies the newest redoable movement action, or no-ops when none exist.
+  const redoLayoutMovement = useCallback(
+    () => applyLayoutHistoryAction('redo'),
+    [applyLayoutHistoryAction],
   );
 
   // Only meaningful once `status === 'success'`; computed unconditionally
   // (rather than after an early return) so hook call order stays stable
   // across renders.
   const value = useMemo<BinderRouteContextValue | null>(() => {
-    if (!binder) return null;
+    if (status !== 'success' || !binder) return null;
     return {
       binder,
       cards,
@@ -1451,6 +1737,10 @@ export function BinderRouteProvider({
       pendingCardDuplicateIds,
       moveCard,
       isMovePending,
+      canUndoLayoutMovement: undoMovementStack.length > 0,
+      canRedoLayoutMovement: redoMovementStack.length > 0,
+      undoLayoutMovement,
+      redoLayoutMovement,
       cardSearchLanguage,
       setCardSearchLanguage,
       includeTcgPocket,
@@ -1470,6 +1760,7 @@ export function BinderRouteProvider({
       pendingArtDuplicateIds,
     };
   }, [
+    status,
     binder,
     cards,
     art,
@@ -1496,6 +1787,10 @@ export function BinderRouteProvider({
     pendingCardDuplicateIds,
     moveCard,
     isMovePending,
+    undoMovementStack,
+    redoMovementStack,
+    undoLayoutMovement,
+    redoLayoutMovement,
     cardSearchLanguage,
     includeTcgPocket,
     createArt,
@@ -1532,12 +1827,8 @@ export function BinderRouteProvider({
     );
   }
 
-  // Unreachable in practice (status is only 'success' once `binder` is set),
-  // but keeps the render function total instead of asserting `value!` below.
-  if (!value) return null;
-
   return (
-    <BinderRouteContext.Provider value={value}>
+    <BinderRouteContext.Provider value={value as BinderRouteContextValue}>
       {/* The binder name is shown in the app header bar (via
           `useSetAppHeaderTitle` above) rather than as an in-page heading. */}
       <BinderTabs binderId={binderId} />

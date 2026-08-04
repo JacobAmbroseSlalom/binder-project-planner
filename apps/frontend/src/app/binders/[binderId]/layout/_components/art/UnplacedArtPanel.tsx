@@ -71,6 +71,8 @@ export function UnplacedArtPanel({
   onEditArt,
   onRemoveArt,
   onDuplicateArt,
+  scrollToArtId,
+  onScrollToArtHandled,
 }: {
   // Every art item in the binder; filtered internally to the unplaced
   // subset (all-null placement), mirroring `UnplacedCardsPanel`'s own
@@ -89,6 +91,11 @@ export function UnplacedArtPanel({
   onEditArt: (art: Art) => void;
   onRemoveArt: (artId: string) => void;
   onDuplicateArt: (artId: string) => void;
+  // Story 28: one-shot target art id to reveal in this panel after a
+  // successful undo/redo action whose focal result is unplaced.
+  scrollToArtId?: string | null;
+  // Called once a pending `scrollToArtId` request has been fulfilled.
+  onScrollToArtHandled?: () => void;
 }) {
   // Story 31: local-per-panel text state that resets whenever this layout
   // tab unmounts/remounts. Keystrokes update immediately while filtering
@@ -186,6 +193,39 @@ export function UnplacedArtPanel({
       rowVirtualizer.scrollToIndex(newlyUnplacedIndex, { align: 'auto' });
     }
   }, [unplacedArt, filteredUnplacedArt, rowVirtualizer]);
+
+  // Story 28: reveals a requested unplaced focal art item after undo/redo.
+  // If an active search currently hides it, clear the search first so the
+  // requested item can be rendered and scrolled to.
+  useEffect(() => {
+    if (!scrollToArtId) return;
+
+    const unplacedIndex = unplacedArt.findIndex((item) => item.id === scrollToArtId);
+    if (unplacedIndex === -1) {
+      onScrollToArtHandled?.();
+      return;
+    }
+
+    const filteredIndex = filteredUnplacedArt.findIndex((item) => item.id === scrollToArtId);
+    if (filteredIndex === -1) {
+      if (searchQuery.trim().length > 0) {
+        setSearchQuery('');
+        return;
+      }
+      onScrollToArtHandled?.();
+      return;
+    }
+
+    rowVirtualizer.scrollToIndex(filteredIndex, { align: 'center' });
+    onScrollToArtHandled?.();
+  }, [
+    filteredUnplacedArt,
+    onScrollToArtHandled,
+    rowVirtualizer,
+    scrollToArtId,
+    searchQuery,
+    unplacedArt,
+  ]);
 
   return (
     <div
