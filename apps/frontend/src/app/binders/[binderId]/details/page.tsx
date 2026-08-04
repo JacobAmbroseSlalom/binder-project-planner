@@ -1,10 +1,16 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { updateBinder as updateBinderRequest, type UpdateBinderRequest } from '@/lib/api';
+import {
+  previewBinderResize,
+  updateBinderWithRelocations,
+  type Binder,
+  type UpdateBinderRequest,
+  type UpdateBinderResult,
+} from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 import {
   BinderDetailsForm,
@@ -14,37 +20,106 @@ import {
 } from '@/shared/forms';
 
 import { useBinderRouteContext } from '../BinderRouteContext';
+import { ResizeRelocationConfirmDialog } from './_components/ResizeRelocationConfirmDialog';
 
 // Fixed toast id, matching the pattern used by the other save/load
 // operations in this app (e.g. `CREATE_BINDER_TOAST_ID`): a later save
 // replaces this operation's own toast instead of stacking a new one.
 const EDIT_BINDER_DETAILS_TOAST_ID = 'edit-binder-details';
 
+interface ResizeReductionValues {
+  width: number;
+  height: number;
+  pages: number;
+}
+
+interface ResizeRelocationConfirmation {
+  patch: UpdateBinderRequest;
+  affectedCardCount: number;
+  affectedArtCount: number;
+}
+
+function getBinderFormValues(binder: Binder): BinderDetailsFormInput {
+  return {
+    name: binder.name,
+    width: binder.width,
+    height: binder.height,
+    pages: binder.pages,
+    widthPerSlot: binder.widthPerSlot,
+    widthBase: binder.widthBase,
+    heightPerSlot: binder.heightPerSlot,
+    heightBase: binder.heightBase,
+    borderColor: binder.borderColor,
+    borderRadius: binder.borderRadius,
+    borderWidth: binder.borderWidth,
+    previewPhysicalPage: binder.previewPhysicalPage,
+  };
+}
+
+// Reads effective width/height/pages for this pending patch (dirty fields
+// override current persisted binder values), used to determine whether the
+// patch is a potentially reducing resize.
+function getEffectiveResizeValues(
+  binder: Binder,
+  patch: UpdateBinderRequest,
+): ResizeReductionValues {
+  return {
+    width: patch.width ?? binder.width,
+    height: patch.height ?? binder.height,
+    pages: patch.pages ?? binder.pages,
+  };
+}
+
+// Story 27 preview is only needed when any slot-coverage dimension
+// decreases; non-reducing updates use the normal save path.
+function isReducingResize(binder: Binder, next: ResizeReductionValues): boolean {
+  return next.width < binder.width || next.height < binder.height || next.pages < binder.pages;
+}
+
+// Best-effort extraction of story 27's `409 Conflict` counts payload from a
+// failed update response.
+function getResizeConflictCounts(error: unknown): {
+  affectedCardCount: number;
+  affectedArtCount: number;
+} | null {
+  if (!error || typeof error !== 'object') return null;
+
+  const candidate = error as {
+    status?: unknown;
+    affectedCardCount?: unknown;
+    affectedArtCount?: unknown;
+  };
+
+  if (
+    candidate.status === 409 &&
+    typeof candidate.affectedCardCount === 'number' &&
+    typeof candidate.affectedArtCount === 'number'
+  ) {
+    return {
+      affectedCardCount: candidate.affectedCardCount,
+      affectedArtCount: candidate.affectedArtCount,
+    };
+  }
+
+  return null;
+}
+
 // The "Edit Details" tab (story 7): reuses the same `BinderDetailsForm` as
 // the new-binder page, but instead of a Create button, a field blur saves
 // all currently valid dirty fields automatically.
 export default function BinderDetailsPage() {
-  const { binder, updateBinder } = useBinderRouteContext();
-  const { start } = useSaveStatusToast();
+  const { binder, updateBinder, applyBinderResizeUpdate } = useBinderRouteContext();
+  const { start, dismiss } = useSaveStatusToast();
+  const [resizeConfirmation, setResizeConfirmation] = useState<ResizeRelocationConfirmation | null>(
+    null,
+  );
+  const [isResizeConfirmSavePending, setIsResizeConfirmSavePending] = useState(false);
 
   const form = useForm<BinderDetailsFormInput, unknown, BinderDetailsFormValues>({
     resolver: zodResolver(binderDetailsSchema),
     // Seeded from the already-loaded binder context (never refetched here),
     // so switching to this tab never triggers its own loading state.
-    defaultValues: {
-      name: binder.name,
-      width: binder.width,
-      height: binder.height,
-      pages: binder.pages,
-      widthPerSlot: binder.widthPerSlot,
-      widthBase: binder.widthBase,
-      heightPerSlot: binder.heightPerSlot,
-      heightBase: binder.heightBase,
-      borderColor: binder.borderColor,
-      borderRadius: binder.borderRadius,
-      borderWidth: binder.borderWidth,
-      previewPhysicalPage: binder.previewPhysicalPage,
-    },
+    defaultValues: getBinderFormValues(binder),
   });
 
   // RHF's `formState` is a Proxy that only tracks (and keeps up to date) the
@@ -61,6 +136,67 @@ export default function BinderDetailsPage() {
   // second overlapping request.
   const savingRef = useRef(false);
   const queuedRef = useRef(false);
+
+  // Applies one successful binder-details update response to both the form
+  // and binder route context.
+  const applyUpdateResult = useCallback(
+    (result: UpdateBinderResult, patch: UpdateBinderRequest) => {
+      const updatedBinder = result.binder;
+
+      // Marks exactly the submitted fields clean using authoritative backend
+      // values; fields not part of this request remain untouched.
+      (Object.keys(patch) as (keyof BinderDetailsFormInput)[]).forEach((field) => {
+        form.resetField(field, { defaultValue: updatedBinder[field] });
+      });
+
+      // A page-count change can reset previewPhysicalPage server-side even
+      // when that field wasn't in the patch.
+      if (form.getValues('previewPhysicalPage') !== updatedBinder.previewPhysicalPage) {
+        form.resetField('previewPhysicalPage', { defaultValue: updatedBinder.previewPhysicalPage });
+      }
+
+      if (applyBinderResizeUpdate) {
+        applyBinderResizeUpdate(result);
+      } else {
+        updateBinder(updatedBinder);
+      }
+    },
+    [applyBinderResizeUpdate, form, updateBinder],
+  );
+
+  // Runs the final PATCH request. For story 27 conflicts where consent is
+  // still absent, the saving toast is dismissed and a relocation-confirm
+  // modal is opened instead of showing a failed toast.
+  const submitPatch = useCallback(
+    async (patch: UpdateBinderRequest, moveAffectedItemsToUnplaced: boolean): Promise<boolean> => {
+      const requestPatch = moveAffectedItemsToUnplaced
+        ? { ...patch, moveAffectedItemsToUnplaced: true }
+        : patch;
+
+      const toast = start(EDIT_BINDER_DETAILS_TOAST_ID);
+      try {
+        const result = await updateBinderWithRelocations(binder.id, requestPatch);
+        applyUpdateResult(result, patch);
+        toast.markSaved();
+        return true;
+      } catch (error) {
+        const conflictCounts = getResizeConflictCounts(error);
+        if (!moveAffectedItemsToUnplaced && conflictCounts) {
+          dismiss(toast.operationId);
+          setResizeConfirmation({
+            patch,
+            affectedCardCount: conflictCounts.affectedCardCount,
+            affectedArtCount: conflictCounts.affectedArtCount,
+          });
+          return false;
+        }
+
+        toast.markFailed(error);
+        return false;
+      }
+    },
+    [applyUpdateResult, binder.id, dismiss, start],
+  );
 
   const runSave = useCallback(async () => {
     savingRef.current = true;
@@ -96,33 +232,20 @@ export default function BinderDetailsPage() {
         return;
       }
 
-      const toast = start(EDIT_BINDER_DETAILS_TOAST_ID);
-      try {
-        const updated = await updateBinderRequest(binder.id, patch);
-
-        // Marks exactly the submitted fields clean using the backend's
-        // returned values (per story 7); fields the user has since changed
-        // again (and thus aren't in `patch`) are left untouched.
-        (Object.keys(patch) as (keyof BinderDetailsFormInput)[]).forEach((field) => {
-          form.resetField(field, { defaultValue: updated[field] });
-        });
-        // Story 20: reducing `pages` can make the previously saved
-        // previewPhysicalPage invalid, causing the backend to reset it to
-        // the shared default in this same response - even when
-        // `previewPhysicalPage` itself wasn't part of this patch. Syncing
-        // the field here (rather than only via the loop above) keeps the
-        // form showing the same value the backend just saved instead of a
-        // stale, now-invalid one until the next reload.
-        if (form.getValues('previewPhysicalPage') !== updated.previewPhysicalPage) {
-          form.resetField('previewPhysicalPage', { defaultValue: updated.previewPhysicalPage });
+      const nextResizeValues = getEffectiveResizeValues(binder, patch);
+      if (isReducingResize(binder, nextResizeValues)) {
+        const preview = await previewBinderResize(binder.id, nextResizeValues);
+        if (preview.affectedCardCount + preview.affectedArtCount > 0) {
+          setResizeConfirmation({
+            patch,
+            affectedCardCount: preview.affectedCardCount,
+            affectedArtCount: preview.affectedArtCount,
+          });
+          return;
         }
-        updateBinder(updated);
-        toast.markSaved();
-      } catch (error) {
-        // Submitted fields remain dirty with the user's values so they can
-        // be corrected or retried on the next blur.
-        toast.markFailed(error);
       }
+
+      await submitPatch(patch, false);
     } finally {
       savingRef.current = false;
       if (queuedRef.current) {
@@ -130,15 +253,38 @@ export default function BinderDetailsPage() {
         void runSave();
       }
     }
-  }, [binder.id, form, start, updateBinder]);
+  }, [binder, form, submitPatch]);
 
   const handleBlur = useCallback(() => {
+    if (resizeConfirmation || isResizeConfirmSavePending) {
+      return;
+    }
     if (savingRef.current) {
       queuedRef.current = true;
       return;
     }
     void runSave();
-  }, [runSave]);
+  }, [isResizeConfirmSavePending, resizeConfirmation, runSave]);
+
+  const handleCancelResizeConfirmation = useCallback(() => {
+    if (isResizeConfirmSavePending) return;
+
+    // Story 27 UX: canceling relocation confirmation abandons the pending
+    // reducing edits and restores the form to persisted binder values.
+    form.reset(getBinderFormValues(binder));
+    setResizeConfirmation(null);
+  }, [binder, form, isResizeConfirmSavePending]);
+
+  const handleConfirmResizeRelocation = useCallback(async () => {
+    if (!resizeConfirmation) return;
+
+    setIsResizeConfirmSavePending(true);
+    const didSave = await submitPatch(resizeConfirmation.patch, true);
+    if (didSave) {
+      setResizeConfirmation(null);
+    }
+    setIsResizeConfirmSavePending(false);
+  }, [resizeConfirmation, submitPatch]);
 
   return (
     <div className="flex flex-col items-center gap-8 p-8">
@@ -148,6 +294,15 @@ export default function BinderDetailsPage() {
       <form onBlur={handleBlur} className="flex w-full max-w-2xl flex-col gap-8">
         <BinderDetailsForm form={form} />
       </form>
+      {resizeConfirmation && (
+        <ResizeRelocationConfirmDialog
+          affectedCardCount={resizeConfirmation.affectedCardCount}
+          affectedArtCount={resizeConfirmation.affectedArtCount}
+          pending={isResizeConfirmSavePending}
+          onCancel={handleCancelResizeConfirmation}
+          onConfirm={handleConfirmResizeRelocation}
+        />
+      )}
     </div>
   );
 }

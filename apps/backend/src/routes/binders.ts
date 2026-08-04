@@ -22,7 +22,7 @@ import {
   getTotalSlots,
   resolveSpread,
 } from '@binder-project-planner/shared';
-import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
@@ -77,6 +77,14 @@ interface UpdateBinderRequestBody {
   borderWidth?: number;
   previewPhysicalPage?: number;
   notes?: string | null;
+  moveAffectedItemsToUnplaced?: boolean;
+}
+
+// Story 27's dry-run resize preview request body.
+interface ResizePreviewRequestBody {
+  width: number;
+  height: number;
+  pages: number;
 }
 
 // The raw database row shape (includes the internal `normalizedName`
@@ -197,6 +205,86 @@ function notFoundProblem(binderId: string) {
     status: 404,
     detail: `No binder exists with id "${binderId}".`,
   };
+}
+
+// Story 27: identifies which currently placed cards and multi-slot art
+// would no longer fit a proposed width/height/stored-page-count change.
+function findResizeAffectedPlacements(
+  database: DatabaseConnection['database'],
+  binderId: string,
+  proposed: { width: number; height: number; pages: number },
+) {
+  const maxPhysicalPage = getMaxPhysicalPage(proposed.pages);
+
+  const placedCards = database
+    .select({
+      id: cards.id,
+      physicalPage: cards.physicalPage,
+      row: cards.row,
+      column: cards.column,
+    })
+    .from(cards)
+    .where(and(eq(cards.binderId, binderId), isNotNull(cards.physicalPage)))
+    .all();
+
+  const affectedCardIds = placedCards
+    .filter((cardRow) => {
+      if (cardRow.physicalPage === null || cardRow.row === null || cardRow.column === null) {
+        return false;
+      }
+      return (
+        cardRow.physicalPage > maxPhysicalPage ||
+        cardRow.row > proposed.height ||
+        cardRow.column > proposed.width
+      );
+    })
+    .map((cardRow) => cardRow.id);
+
+  const placedArt = database
+    .select({
+      id: art.id,
+      physicalPage: art.physicalPage,
+      row: art.row,
+      column: art.column,
+      widthSlots: art.widthSlots,
+      heightSlots: art.heightSlots,
+    })
+    .from(art)
+    .where(and(eq(art.binderId, binderId), isNotNull(art.physicalPage)))
+    .all();
+
+  const affectedArtIds = placedArt
+    .filter((artRow) => {
+      if (artRow.physicalPage === null || artRow.row === null || artRow.column === null) {
+        return false;
+      }
+
+      const bottomRow = artRow.row + artRow.heightSlots - 1;
+      const rightColumn = artRow.column + artRow.widthSlots - 1;
+
+      return (
+        artRow.physicalPage > maxPhysicalPage ||
+        bottomRow > proposed.height ||
+        rightColumn > proposed.width
+      );
+    })
+    .map((artRow) => artRow.id);
+
+  return {
+    affectedCardIds,
+    affectedArtIds,
+    affectedCardCount: affectedCardIds.length,
+    affectedArtCount: affectedArtIds.length,
+  };
+}
+
+class ResizeConflictError extends Error {
+  constructor(
+    public readonly affectedCardCount: number,
+    public readonly affectedArtCount: number,
+  ) {
+    super('The proposed binder size or page-count reduction affects placed items.');
+  }
 }
 
 // Builds one binder's home-page summary (story 5's list shape plus story
@@ -418,6 +506,28 @@ export function createBindersRouter(
     response.status(200).json(serializeBinder(row));
   });
 
+  // Story 27's read-only dry run: identifies currently placed card/art
+  // records that would be invalid under the proposed dimensions/pages
+  // without changing any persisted data.
+  router.post('/binders/:binderId/resize-preview', (request, response) => {
+    const { binderId } = request.params;
+    const body = request.body as ResizePreviewRequestBody;
+
+    const existing = database.select().from(binders).where(eq(binders.id, binderId)).get();
+    if (!existing) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    const affected = findResizeAffectedPlacements(database, binderId, {
+      width: body.width,
+      height: body.height,
+      pages: body.pages,
+    });
+
+    response.status(200).json(affected);
+  });
+
   router.patch('/binders/:binderId', (request, response) => {
     const { binderId } = request.params;
     const body = request.body as UpdateBinderRequestBody;
@@ -552,17 +662,88 @@ export function createBindersRouter(
       updates.previewPhysicalPage = DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE;
     }
 
-    updates.updatedAt = new Date().toISOString();
+    const effectiveDimensions = {
+      width: body.width ?? existing.width,
+      height: body.height ?? existing.height,
+      pages: body.pages ?? existing.pages,
+    };
+
+    // Story 27: resize-preview and relocation handling apply only to
+    // potentially reducing updates. Increasing dimensions/pages preserves
+    // placements without any relocation path.
+    const isReducingResize =
+      effectiveDimensions.width < existing.width ||
+      effectiveDimensions.height < existing.height ||
+      effectiveDimensions.pages < existing.pages;
+
+    const now = new Date().toISOString();
+    updates.updatedAt = now;
 
     let updated: BinderRow;
+    let movedCardIds: string[] = [];
+    let movedArtIds: string[] = [];
+    let affectedCardCount = 0;
+    let affectedArtCount = 0;
     try {
-      updated = database
-        .update(binders)
-        .set(updates)
-        .where(eq(binders.id, binderId))
-        .returning()
-        .get();
+      const transactionResult = database.transaction((tx) => {
+        if (isReducingResize) {
+          const affected = findResizeAffectedPlacements(
+            tx as unknown as DatabaseConnection['database'],
+            binderId,
+            effectiveDimensions,
+          );
+          affectedCardCount = affected.affectedCardCount;
+          affectedArtCount = affected.affectedArtCount;
+
+          if (
+            affectedCardCount + affectedArtCount > 0 &&
+            body.moveAffectedItemsToUnplaced !== true
+          ) {
+            throw new ResizeConflictError(affectedCardCount, affectedArtCount);
+          }
+
+          movedCardIds = affected.affectedCardIds;
+          movedArtIds = affected.affectedArtIds;
+
+          if (movedCardIds.length > 0) {
+            tx.update(cards)
+              .set({ physicalPage: null, row: null, column: null, updatedAt: now })
+              .where(and(eq(cards.binderId, binderId), inArray(cards.id, movedCardIds)))
+              .run();
+          }
+          if (movedArtIds.length > 0) {
+            tx.update(art)
+              .set({ physicalPage: null, row: null, column: null, updatedAt: now })
+              .where(and(eq(art.binderId, binderId), inArray(art.id, movedArtIds)))
+              .run();
+          }
+        }
+
+        const updatedRow = tx
+          .update(binders)
+          .set(updates)
+          .where(eq(binders.id, binderId))
+          .returning()
+          .get() as BinderRow;
+
+        return updatedRow;
+      });
+
+      updated = transactionResult;
     } catch (error) {
+      if (error instanceof ResizeConflictError) {
+        response.status(409).type('application/problem+json').json({
+          type: 'about:blank',
+          title: 'Conflict',
+          status: 409,
+          detail:
+            'The proposed binder size or page-count reduction affects placed items. Confirm relocation to continue.',
+          affectedCardCount: error.affectedCardCount,
+          affectedArtCount: error.affectedArtCount,
+        });
+        return;
+      }
+
       if (isUniqueConstraintError(error)) {
         response
           .status(409)
@@ -580,7 +761,29 @@ export function createBindersRouter(
       throw error;
     }
 
-    response.status(200).json(serializeBinder(updated));
+    // Story 27: a successful affecting resize returns complete binder
+    // details plus complete representations of every moved card/art item,
+    // so the client can reconcile layout state without a refetch.
+    const movedCardIdSet = new Set(movedCardIds);
+    const movedArtIdSet = new Set(movedArtIds);
+    const movedCards =
+      movedCardIdSet.size === 0
+        ? []
+        : listCardsForBinder(database, binderId).filter((cardItem) =>
+            movedCardIdSet.has(cardItem.id),
+          );
+    const movedArt =
+      movedArtIdSet.size === 0
+        ? []
+        : listArtForBinder(database, binderId).filter((artItem) => movedArtIdSet.has(artItem.id));
+
+    response.status(200).json({
+      binder: serializeBinder(updated),
+      movedCards,
+      movedArt,
+      affectedCardCount,
+      affectedArtCount,
+    });
   });
 
   // Story 21's binder-deletion endpoint: permanently deletes the binder

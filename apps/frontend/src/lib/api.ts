@@ -34,6 +34,9 @@ export type Binder = components['schemas']['Binder'];
 export type BinderSummary = components['schemas']['BinderSummary'];
 export type CreateBinderRequest = components['schemas']['CreateBinderRequest'];
 export type UpdateBinderRequest = components['schemas']['UpdateBinderRequest'];
+export type UpdateBinderResult = components['schemas']['UpdateBinderResult'];
+export type ResizePreviewRequest = components['schemas']['ResizePreviewRequest'];
+export type ResizePreviewResult = components['schemas']['ResizePreviewResult'];
 export type Card = components['schemas']['Card'];
 export type TcgDexCatalogCard = components['schemas']['TcgDexCatalogCard'];
 export type CardSearchLanguage = components['schemas']['CardSearchLanguage'];
@@ -99,13 +102,41 @@ export async function getBinder(binderId: string, signal?: AbortSignal): Promise
 }
 
 // Applies a partial update through `PATCH /binders/{binderId}` (story 7),
-// used by the Edit Details tab's save-on-blur logic. Returns the complete
-// persisted binder so the caller can reset form/context state from the
-// backend's authoritative values.
+// returning just the complete persisted binder for existing callers.
 export async function updateBinder(binderId: string, patch: UpdateBinderRequest): Promise<Binder> {
+  const result = await updateBinderWithRelocations(binderId, patch);
+  return result.binder;
+}
+
+// Story 27-aware variant of binder update: returns the complete persisted
+// binder plus any moved card/art representations included by an affecting
+// resize response.
+export async function updateBinderWithRelocations(
+  binderId: string,
+  patch: UpdateBinderRequest,
+): Promise<UpdateBinderResult> {
   const { data, error } = await apiClient.PATCH('/binders/{binderId}', {
     params: { path: { binderId } },
     body: patch,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+// Story 27's read-only dry run for a proposed binder resize. Returns every
+// currently placed card/art id that would be affected, plus separate counts,
+// without changing data.
+export async function previewBinderResize(
+  binderId: string,
+  request: ResizePreviewRequest,
+): Promise<ResizePreviewResult> {
+  const { data, error } = await apiClient.POST('/binders/{binderId}/resize-preview', {
+    params: { path: { binderId } },
+    body: request,
   });
 
   if (error) {

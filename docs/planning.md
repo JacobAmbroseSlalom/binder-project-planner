@@ -1174,7 +1174,7 @@ carried over for a later story to close:
 
 ### 27. Handle binder size and page-count changes
 
-**Status:** Not started
+**Status:** Done (2026-08-04 11:30 EDT)
 
 #### Acceptance criteria
 
@@ -1353,7 +1353,7 @@ carried over for a later story to close:
 
 ### 31. Search and filter unplaced items
 
-**Status:** Not started
+**Status:** Done (2026-08-04 11:12 EDT)
 
 #### Acceptance criteria
 

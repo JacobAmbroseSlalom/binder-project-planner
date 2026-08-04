@@ -27,6 +27,7 @@ import {
   type Card,
   type CardPositionUpdate,
   type CardSearchLanguage,
+  type UpdateBinderResult,
   type TcgDexCatalogCard,
   type PlacementCoordinates,
 } from '@/lib/api';
@@ -178,6 +179,13 @@ interface BinderRouteContextValue {
   // Replaces the context's binder with the backend's authoritative
   // representation, e.g. after the Edit Details tab's `PATCH` succeeds.
   updateBinder: (binder: Binder) => void;
+  // Story 27: applies one successful `PATCH /binders/{binderId}` resize
+  // result atomically in route context, including the updated binder and
+  // every card/art representation moved to unplaced by that same
+  // transaction.
+  applyBinderResizeUpdate?: (
+    result: Pick<UpdateBinderResult, 'binder' | 'movedCards' | 'movedArt'>,
+  ) => void;
   // The most recently displayed one-based physical page on the "Edit
   // Layout" tab (story 8), or `null` if that tab hasn't been visited yet
   // this route mount. Retained here (rather than in the layout tab's own
@@ -545,6 +553,30 @@ export function BinderRouteProvider({
   const updateBinder = useCallback((updated: Binder) => {
     setBinder(updated);
   }, []);
+
+  // Story 27 reconciliation helper: updates binder details and folds in
+  // any moved card/art records returned by the same successful resize
+  // update response, without refetching either collection.
+  const applyBinderResizeUpdate = useCallback(
+    (result: Pick<UpdateBinderResult, 'binder' | 'movedCards' | 'movedArt'>) => {
+      setBinder(result.binder);
+
+      if (result.movedCards.length > 0) {
+        const movedCardsById = new Map(
+          result.movedCards.map((cardItem) => [cardItem.id, cardItem]),
+        );
+        setCards((previous) =>
+          previous.map((cardItem) => movedCardsById.get(cardItem.id) ?? cardItem),
+        );
+      }
+
+      if (result.movedArt.length > 0) {
+        const movedArtById = new Map(result.movedArt.map((artItem) => [artItem.id, artItem]));
+        setArt((previous) => previous.map((artItem) => movedArtById.get(artItem.id) ?? artItem));
+      }
+    },
+    [],
+  );
 
   // A failed (non-404/400) load's retry action: re-runs all 3 requests per
   // story 7's "retry starts all three requests again".
@@ -1396,6 +1428,7 @@ export function BinderRouteProvider({
       cards,
       art,
       updateBinder,
+      applyBinderResizeUpdate,
       layoutFocalPage,
       setLayoutFocalPage,
       assignCards,
@@ -1441,6 +1474,7 @@ export function BinderRouteProvider({
     cards,
     art,
     updateBinder,
+    applyBinderResizeUpdate,
     layoutFocalPage,
     assignCards,
     isBulkAddPending,

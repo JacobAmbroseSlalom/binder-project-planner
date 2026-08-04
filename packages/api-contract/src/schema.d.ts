@@ -72,6 +72,28 @@ export interface paths {
         patch: operations["updateBinder"];
         trace?: never;
     };
+    "/binders/{binderId}/resize-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview affected placements for a proposed binder resize
+         * @description Read-only dry run for story 27. Validates the proposed width, height, and stored page count against currently persisted placed cards and multi-slot art, returning every affected id plus separate card/art counts without changing any data.
+         */
+        post: operations["previewBinderResize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/binders/{binderId}/duplicate": {
         parameters: {
             query?: never;
@@ -575,6 +597,32 @@ export interface components {
             borderWidth?: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage?: components["schemas"]["BinderPreviewPhysicalPage"];
             notes?: components["schemas"]["BinderNotes"];
+            /** @description Story 27: include only after the user confirms relocation for an affecting resize. When true, the backend atomically updates binder details and clears placement coordinates for every item affected at transaction time. */
+            moveAffectedItemsToUnplaced?: boolean;
+        };
+        /** @description Story 27's dry-run request body for `POST /binders/{binderId}/resize-preview`. */
+        ResizePreviewRequest: {
+            /** @description Proposed number of slot columns per binder side. */
+            width: number;
+            /** @description Proposed number of slot rows per binder side. */
+            height: number;
+            /** @description Proposed stored binder-page count. */
+            pages: number;
+        };
+        /** @description Story 27 dry-run response: every currently placed card/art id that would no longer fit the proposed dimensions/pages, plus separate counts for each type. */
+        ResizePreviewResult: {
+            affectedCardIds: string[];
+            affectedArtIds: string[];
+            affectedCardCount: number;
+            affectedArtCount: number;
+        };
+        /** @description Story 27 update result. For non-affecting updates, `movedCards`/`movedArt` are empty and counts are zero. For confirmed affecting resizes, includes complete updated representations of every card/art moved to unplaced in the same transaction as the binder update. */
+        UpdateBinderResult: {
+            binder: components["schemas"]["Binder"];
+            movedCards: components["schemas"]["Card"][];
+            movedArt: components["schemas"]["Art"][];
+            affectedCardCount: number;
+            affectedArtCount: number;
         };
         /** @description `POST /binders/{binderId}/exports/pdf`'s request body (story 29). */
         ExportBinderPdfRequest: {
@@ -1091,13 +1139,13 @@ export interface operations {
             };
         };
         responses: {
-            /** @description The complete persisted binder after applying the update. */
+            /** @description The complete persisted binder plus any card/art items moved to unplaced by a confirmed affecting resize (story 27). */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Binder"];
+                    "application/json": components["schemas"]["UpdateBinderResult"];
                 };
             };
             /** @description The binderId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
@@ -1118,8 +1166,52 @@ export interface operations {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
-            /** @description A binder with the same case-insensitively normalized name already exists. */
+            /** @description A binder with the same case-insensitively normalized name already exists, or a reducing resize affects currently placed items and relocation consent was not supplied. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    previewBinderResize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResizePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description The affected placed card/art ids and separate counts. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResizePreviewResult"];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
