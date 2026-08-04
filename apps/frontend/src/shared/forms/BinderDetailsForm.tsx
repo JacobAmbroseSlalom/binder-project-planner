@@ -13,6 +13,7 @@ import { RotateCcw } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
 import type { BinderDetailsFormInput, BinderDetailsFormValues } from './binderDetailsSchema';
+import { BinderSettingsArtPreview, BinderSettingsLayoutPreview } from './BinderSettingsPreview';
 
 // The filled-input treatment documented in styling.instructions.md's "Forms &
 // inputs" section: neutral-800 fill, no visible resting border, primary
@@ -232,6 +233,47 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
           {...register('name')}
         />
       </Field>
+      {/* Page-count fields first (story 42 reorder): the stored page count
+          and, per story 20, the physical page (1-based, either page of a
+          two-page spread) the home-page preview renders - validated as an
+          integer from 1 through twice the stored page count (see
+          binderDetailsSchema.ts's cross-field refinement). */}
+      <div className="flex flex-wrap gap-6">
+        <Field
+          label="Pages (front and back)"
+          htmlFor="binder-pages"
+          error={errors.pages?.message}
+          className="flex-1"
+        >
+          <input
+            id="binder-pages"
+            type="number"
+            min={1}
+            step={1}
+            disabled={disabled}
+            className={errors.pages ? errorInputClassName : inputClassName}
+            {...register('pages', { valueAsNumber: true })}
+          />
+        </Field>
+        <Field
+          label="Preview page"
+          htmlFor="binder-preview-physical-page"
+          error={errors.previewPhysicalPage?.message}
+          className="flex-1"
+        >
+          <input
+            id="binder-preview-physical-page"
+            type="number"
+            min={1}
+            step={1}
+            disabled={disabled}
+            className={errors.previewPhysicalPage ? errorInputClassName : inputClassName}
+            {...register('previewPhysicalPage', { valueAsNumber: true })}
+          />
+        </Field>
+      </div>
+      {/* Width/height next, immediately above the live layout-spread
+          preview they drive (story 42 reorder). */}
       <div className="flex flex-wrap gap-6">
         <Field
           label="Width (slots)"
@@ -265,47 +307,11 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
             {...register('height', { valueAsNumber: true })}
           />
         </Field>
-        <Field
-          label="Pages (front and back)"
-          htmlFor="binder-pages"
-          error={errors.pages?.message}
-          className="flex-1"
-        >
-          <input
-            id="binder-pages"
-            type="number"
-            min={1}
-            step={1}
-            disabled={disabled}
-            className={errors.pages ? errorInputClassName : inputClassName}
-            {...register('pages', { valueAsNumber: true })}
-          />
-        </Field>
-        {/* Story 20: the physical page (1-based, either page of a
-            two-page spread) the home-page preview renders. Validated as
-            an integer from 1 through twice the form's current stored page
-            count (see binderDetailsSchema.ts's cross-field refinement) -
-            there's no fixed `max` here since it depends on the live
-            `pages` value above. Grouped into this row (rather than its
-            own section further down) since it's conceptually just
-            another page-count-derived field alongside `pages` itself. */}
-        <Field
-          label="Preview page"
-          htmlFor="binder-preview-physical-page"
-          error={errors.previewPhysicalPage?.message}
-          className="flex-1"
-        >
-          <input
-            id="binder-preview-physical-page"
-            type="number"
-            min={1}
-            step={1}
-            disabled={disabled}
-            className={errors.previewPhysicalPage ? errorInputClassName : inputClassName}
-            {...register('previewPhysicalPage', { valueAsNumber: true })}
-          />
-        </Field>
       </div>
+
+      {/* Story 42: the live layout-spread preview, directly below the
+          width/height fields that size it. */}
+      <BinderSettingsLayoutPreview form={form} />
 
       {/* Separates the original story-4 identity/layout fields above from
           story 24's card/multi-slot-art dimension and border-style fields
@@ -468,6 +474,10 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
           onClick={resetBorderStyleRow}
         />
       </div>
+
+      {/* Story 42: the live art border-outline example, directly below
+            the border-style fields that drive it. */}
+      <BinderSettingsArtPreview form={form} />
     </div>
   );
 }

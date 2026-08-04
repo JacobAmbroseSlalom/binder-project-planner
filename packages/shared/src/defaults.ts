@@ -170,6 +170,14 @@ export const BULK_CARD_CREATE_CONCURRENCY = 5;
 // invalid for the new page count.
 export const DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE = 2;
 
+// Story 42: "Preview binder layout and multi-slot art while editing binder
+// settings". The reusable binder-details form's live preview shows one
+// representative piece of multi-slot art anchored at row 1, column 1,
+// spanning `min(BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN, current width)`
+// columns by `min(BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN, current height)`
+// rows.
+export const BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN = 2;
+
 // Story 30: "Export multi-slot art for printing". Every art-print PDF page
 // is US Letter landscape (11 x 8.5 in); this margin is reserved on every
 // edge and treated as unavailable area by the packing algorithm.

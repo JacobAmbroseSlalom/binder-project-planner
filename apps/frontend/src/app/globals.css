@@ -179,4 +179,16 @@
     container-type: size;
     height: 100%;
   }
+
+  /* The reusable binder-details form's live settings preview's (story 42)
+     equivalent of `.binder-side-fit`/`.preview-side-fit` above: the same
+     "contain, don't crop" container-query technique, sized to the settings
+     preview's own fixed frame height. Kept as its own class - rather than
+     reusing `.preview-side-fit` - because story 42's frame dimensions are
+     explicitly independent of the home-page preview's frame (story 20), so
+     a future change to either size can't accidentally resize the other. */
+  .settings-preview-side-fit {
+    container-type: size;
+    height: 100%;
+  }
 }

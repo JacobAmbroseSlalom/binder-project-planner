@@ -11,3 +11,6 @@ export {
 // Story 16's card variation combobox, shared by the add-card modal and the
 // edit-variation modal.
 export { VariationCombobox } from './VariationCombobox';
+// Story 42's live, read-only previews (layout spread + art border outline),
+// rendered by `BinderDetailsForm` itself.
+export { BinderSettingsLayoutPreview, BinderSettingsArtPreview } from './BinderSettingsPreview';
