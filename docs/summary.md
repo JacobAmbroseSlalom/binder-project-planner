@@ -30,7 +30,6 @@ Story #26 was wayyyyy tooo big
 
 # Title
 
-bidners sort by last updated should include the last updated on cards/art any changes
 Move bidner name into title bar
     make the binder and other areas bigger
 

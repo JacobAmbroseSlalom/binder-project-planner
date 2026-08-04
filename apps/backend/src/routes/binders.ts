@@ -22,7 +22,7 @@ import {
   getTotalSlots,
   resolveSpread,
 } from '@binder-project-planner/shared';
-import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
+import { and, asc, desc, eq, isNotNull, sql } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
@@ -262,16 +262,28 @@ export function createBindersRouter(
   const router = Router();
 
   // Story 5: "List binders". Returns the complete binder-summary collection
-  // (no pagination), sorted by `updatedAt` descending and then by binder
-  // UUID ascending as a deterministic tie-breaker per planning.md. Story 20
-  // embeds each binder's own saved preview spread (cards/art placed within
-  // it) directly in its summary, so the home page needs no separate
-  // preview requests.
+  // (no pagination), sorted by most recent activity descending and then by
+  // binder UUID ascending as a deterministic tie-breaker. Story 20 embeds
+  // each binder's own saved preview spread (cards/art placed within it)
+  // directly in its summary, so the home page needs no separate preview
+  // requests.
   router.get('/binders', (_request, response) => {
+    // A binder's effective "last activity" is the newest of its own
+    // `updatedAt` and the newest `updatedAt` among its cards and art, so
+    // adding/moving/editing a card or art item floats the binder to the top
+    // of the list - not just edits to the binder's own details. ISO-8601
+    // timestamps sort correctly as strings, and SQLite's variadic `max()`
+    // returns the greatest of its arguments. (A card/art deletion doesn't
+    // change any remaining row's timestamp, so it isn't reflected here.)
+    const lastActivity = sql`max(
+      ${binders.updatedAt},
+      coalesce((select max(${cards.updatedAt}) from ${cards} where ${cards.binderId} = ${binders.id}), ${binders.updatedAt}),
+      coalesce((select max(${art.updatedAt}) from ${art} where ${art.binderId} = ${binders.id}), ${binders.updatedAt})
+    )`;
     const rows = database
       .select()
       .from(binders)
-      .orderBy(desc(binders.updatedAt), asc(binders.id))
+      .orderBy(desc(lastActivity), asc(binders.id))
       .all() as BinderRow[];
 
     const summaries = rows.map((row) => buildBinderSummary(database, row));
