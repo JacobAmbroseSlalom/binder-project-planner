@@ -30,8 +30,6 @@ Story #26 was wayyyyy tooo big
 
 # Title
 
-42 Preview binder layout and multi-slot art while editing binder settings
-22 Show binder completion metrics
 40 Add summary stats on Binder Layout Page
 23 Add binder notes
 31 Search and filter unplaced items

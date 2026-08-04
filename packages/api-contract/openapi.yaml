@@ -1384,6 +1384,9 @@ components:
         - borderRadius
         - borderWidth
         - previewPhysicalPage
+        - totalSlots
+        - occupiedSlots
+        - emptySlots
         - preview
         - createdAt
         - updatedAt
@@ -1422,6 +1425,25 @@ components:
           $ref: '#/components/schemas/BinderBorderWidth'
         previewPhysicalPage:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
+        totalSlots:
+          type: integer
+          minimum: 0
+          description: >-
+            Story 22: the total number of card slots in the binder
+            (width * height * 2 * pages). The client derives the
+            slot-completion percentage as occupiedSlots / totalSlots * 100.
+        occupiedSlots:
+          type: integer
+          minimum: 0
+          description: >-
+            Story 22: how many slots hold a card or are covered by placed
+            multi-slot art, deduplicated across overlaps. Unplaced cards and
+            art are excluded.
+        emptySlots:
+          type: integer
+          minimum: 0
+          description: >-
+            Story 22: totalSlots minus occupiedSlots.
         preview:
           $ref: '#/components/schemas/BinderPreview'
         createdAt:

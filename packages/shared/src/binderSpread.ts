@@ -28,6 +28,15 @@ export function getMaxPhysicalPage(storedPages: number): number {
   return storedPages * 2;
 }
 
+// The total number of card slots a binder contains (story 22: "Show binder
+// completion metrics"). Each of the binder's `2 * storedPages` physical
+// pages is a `width * height` grid, so the total is
+// `width * height * getMaxPhysicalPage(storedPages)`. Shared so the backend
+// summary aggregation and any client-side display agree on one definition.
+export function getTotalSlots(width: number, height: number, storedPages: number): number {
+  return width * height * getMaxPhysicalPage(storedPages);
+}
+
 // Resolves which spread a given physical page belongs to. `physicalPage` is
 // expected to already be an integer within `[1, maxPhysicalPage]`;
 // out-of-range input is clamped defensively to the nearest boundary spread

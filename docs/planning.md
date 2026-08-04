@@ -862,7 +862,7 @@ bullet under Technical requirements is superseded by that later refactor.
 
 ### 22. Show binder completion metrics
 
-**Status:** Not started
+**Status:** Done (2026-08-03 22:43 EDT) - slot-completion metrics only; the card-acquisition percentage is deferred to story 36 (per the scope note below). `GET /binders` (and the shared binder-summary builder used by duplicate) now returns `totalSlots`, `occupiedSlots`, and `emptySlots`, computed from persisted dimensions/placements/placed art via a new binder-wide `countOccupiedSlots` helper and the shared `getTotalSlots`; the home page shows a localStorage-persisted "Show completion metrics" toggle (default visible via `DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE`) and renders occupied/empty counts plus a client-derived slot-completion percentage below each binder, without refetching when toggled.
 
 #### Acceptance criteria
 
@@ -873,22 +873,20 @@ bullet under Technical requirements is superseded by that later refactor.
 - Every slot covered by placed multi-slot art is counted as occupied.
 - Unplaced cards and multi-slot art do not count as occupied slots.
 - Each binder displays a slot-completion percentage calculated as `(occupied slots / total binder slots) x 100`.
-- Each binder also displays its card-acquisition percentage.
 - When the toggle is off, the completion metrics are hidden.
-- Completion metrics update when cards or multi-slot art are added, removed, moved, or when card acquisition changes.
+- Completion metrics update when cards or multi-slot art are added, removed, or moved.
 - Loading binder completion metrics uses the shared loading component, and a failure removes the loading state and displays the provided error using the shared failed toast.
 
 #### Technical requirements
 
 - The binder-list endpoint includes completion metrics in every binder-summary response; the client does not make a separate metrics request.
 - The metrics toggle controls presentation only, and switching it does not refetch the binder list.
-- The backend calculates canonical completion aggregates from persisted binder dimensions, placements, multi-slot art, and card-acquisition data rather than returning the full binder graph for client-side calculation.
-- Card-acquisition percentage is `acquired card records / all card records associated with the binder x 100`; both placed and unplaced cards count, and multi-slot art is excluded.
-- When a binder has no card records, its card-acquisition percentage is `null` and the client displays `N/A`.
-- The API exposes the underlying metric counts without storing rounded percentages; the client displays both percentages rounded to the nearest whole percent.
+- The backend calculates canonical completion aggregates from persisted binder dimensions, placements, and multi-slot art rather than returning the full binder graph for client-side calculation.
+- The API exposes the underlying metric counts without storing rounded percentages; the client displays the slot-completion percentage rounded to the nearest whole percent.
 - The metrics visibility preference is persisted in browser local storage and restored on subsequent home-page visits; it is not stored by the backend.
 - Completion metrics are visible before a local preference has been saved; this first-visit value is exported from the canonical shared `defaults.ts`.
-- Each binder summary returns `totalSlots`, `occupiedSlots`, `emptySlots`, `acquiredCards`, and `totalCards`; the client derives slot-completion and card-acquisition percentages from those counts.
+- Each binder summary returns `totalSlots`, `occupiedSlots`, and `emptySlots`; the client derives the slot-completion percentage from those counts.
+- The card-acquisition completion metric is out of scope for this story and is added later by Story 36 ("Track card acquisition"), once cards store acquisition state; that story extends the binder-summary metrics and the home-page display with the acquisition percentage.
 
 ### 23. Add binder notes
 
@@ -1509,10 +1507,18 @@ carried over for a later story to close:
 - Turning the toggle on displays whether each card is acquired or unacquired.
 - Turning the toggle off hides card acquisition status from the binder layout.
 - Acquisition changes use the shared save-status toast and restore the card's previous acquisition state if saving fails.
+- The home page's binder completion metrics (Story 22) additionally display each binder's card-acquisition percentage below the binder, alongside its existing slot-completion metrics, when completion metrics are shown.
+- The card-acquisition percentage counts both placed and unplaced cards and excludes multi-slot art.
+- When a binder has no card records, its card-acquisition percentage displays as `N/A`.
+- The card-acquisition metric updates when card acquisition changes and when cards are added or removed.
 
 #### Technical requirements
 
 - TBD: Define the acquisition data model, API contract, locked-binder exception, optimistic-update, and display-toggle behavior.
+- Card-acquisition percentage is `acquired card records / all card records associated with the binder x 100`; both placed and unplaced cards count, and multi-slot art is excluded.
+- When a binder has no card records, its card-acquisition percentage is `null` and the client displays `N/A`.
+- This story extends the Story 22 binder-summary metrics with `acquiredCards` and `totalCards` counts; the client derives the card-acquisition percentage (rounded to the nearest whole percent) from those counts without the API storing a rounded percentage.
+- The card-acquisition metric reuses Story 22's existing completion-metrics visibility toggle and shared loading/failed-toast behavior rather than introducing a separate control.
 
 ### 37. Add a card checklist
 

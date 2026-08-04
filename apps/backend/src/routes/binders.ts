@@ -18,6 +18,7 @@ import {
   DEFAULT_WIDTH_PER_SLOT_CM,
   generateUniqueBinderCopyName,
   getMaxPhysicalPage,
+  getTotalSlots,
   resolveSpread,
 } from '@binder-project-planner/shared';
 import { and, asc, desc, eq, isNotNull } from 'drizzle-orm';
@@ -31,6 +32,7 @@ import {
 } from '../idempotency/mutationIdempotency.js';
 import { generateArtPrintPdf } from '../pdf/artPrintPdf.js';
 import { generateBinderLayoutPdf } from '../pdf/binderLayoutPdf.js';
+import { countOccupiedSlots } from '../placement/occupancy.js';
 import { listArtForBinder, listPlacedArtForPreview } from './art.js';
 import { listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
 
@@ -204,8 +206,19 @@ function buildBinderSummary(database: DatabaseConnection['database'], row: Binde
   // `left`/`right` nullability.
   const physicalPages = [spread.left, spread.right].filter((page): page is number => page !== null);
 
+  // Story 22: whole-binder slot-completion counts. `totalSlots` is derived
+  // purely from the binder's dimensions/page count; `occupiedSlots` counts
+  // every slot holding a card or covered by placed art (unplaced items
+  // excluded), and the client derives the slot-completion percentage from
+  // the two. The card-acquisition metric is deferred to story 36.
+  const totalSlots = getTotalSlots(row.width, row.height, row.pages);
+  const occupiedSlots = countOccupiedSlots(database, row.id);
+
   return {
     ...serializeBinder(row),
+    totalSlots,
+    occupiedSlots,
+    emptySlots: totalSlots - occupiedSlots,
     preview: {
       spread,
       cards: listPlacedCardsForPreview(database, row.id, physicalPages),

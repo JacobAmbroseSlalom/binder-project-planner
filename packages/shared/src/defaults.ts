@@ -178,6 +178,13 @@ export const DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE = 2;
 // rows.
 export const BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN = 2;
 
+// Story 22: "Show binder completion metrics". The home-page binder list's
+// completion-metrics visibility toggle defaults to visible on a first
+// visit, before the user's own preference has been saved to browser local
+// storage. The toggle is a presentation-only preference and is never
+// persisted by the backend.
+export const DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE = true;
+
 // Story 30: "Export multi-slot art for printing". Every art-print PDF page
 // is US Letter landscape (11 x 8.5 in); this margin is reserved on every
 // edge and treated as unavailable area by the packing algorithm.

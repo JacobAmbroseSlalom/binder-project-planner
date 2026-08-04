@@ -527,6 +527,12 @@ export interface components {
             borderRadius: components["schemas"]["BinderBorderRadius"];
             borderWidth: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage: components["schemas"]["BinderPreviewPhysicalPage"];
+            /** @description Story 22: the total number of card slots in the binder (width * height * 2 * pages). The client derives the slot-completion percentage as occupiedSlots / totalSlots * 100. */
+            totalSlots: number;
+            /** @description Story 22: how many slots hold a card or are covered by placed multi-slot art, deduplicated across overlaps. Unplaced cards and art are excluded. */
+            occupiedSlots: number;
+            /** @description Story 22: totalSlots minus occupiedSlots. */
+            emptySlots: number;
             preview: components["schemas"]["BinderPreview"];
             /** Format: date-time */
             createdAt: string;

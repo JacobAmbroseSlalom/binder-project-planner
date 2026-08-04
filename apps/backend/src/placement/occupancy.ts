@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 
 import type { DatabaseConnection } from '../database/client.js';
 import { art, cards } from '../database/schema.js';
@@ -71,6 +71,58 @@ export function getOccupiedCells(
   }
 
   return [...cellsByKey.values()];
+}
+
+// Counts every occupied slot across a binder's entire layout (story 22:
+// "Show binder completion metrics"). A slot is occupied when it holds a
+// placed card or is covered by a placed multi-slot-art footprint; overlaps
+// and unplaced items (null placement) never count. Unlike `getOccupied
+// Cells`, which queries one physical page at a time, this issues a single
+// query each for the binder's placed cards and placed art and dedupes
+// across all physical pages in one pass, so building a binder summary
+// doesn't fan out into one query per physical page.
+export function countOccupiedSlots(
+  database: DatabaseConnection['database'],
+  binderId: string,
+): number {
+  // Distinct occupied cells, keyed by physical page + coordinate so the
+  // same (row, column) on different pages is counted once per page, and
+  // overlapping card/art coverage on one page is counted once.
+  const occupied = new Set<string>();
+
+  const placedCards = database
+    .select({ physicalPage: cards.physicalPage, row: cards.row, column: cards.column })
+    .from(cards)
+    .where(and(eq(cards.binderId, binderId), isNotNull(cards.physicalPage)))
+    .all();
+  for (const card of placedCards) {
+    // `isNotNull(physicalPage)` plus the all-or-none placement check
+    // guarantees row/column are also non-null here, but guard anyway.
+    if (card.physicalPage === null || card.row === null || card.column === null) continue;
+    occupied.add(`${card.physicalPage}-${card.row}-${card.column}`);
+  }
+
+  const placedArt = database
+    .select({
+      physicalPage: art.physicalPage,
+      row: art.row,
+      column: art.column,
+      widthSlots: art.widthSlots,
+      heightSlots: art.heightSlots,
+    })
+    .from(art)
+    .where(and(eq(art.binderId, binderId), isNotNull(art.physicalPage)))
+    .all();
+  for (const item of placedArt) {
+    if (item.physicalPage === null || item.row === null || item.column === null) continue;
+    for (let r = item.row; r < item.row + item.heightSlots; r++) {
+      for (let c = item.column; c < item.column + item.widthSlots; c++) {
+        occupied.add(`${item.physicalPage}-${r}-${c}`);
+      }
+    }
+  }
+
+  return occupied.size;
 }
 
 // Every (row, column) cell covered by one art item's footprint, anchored
