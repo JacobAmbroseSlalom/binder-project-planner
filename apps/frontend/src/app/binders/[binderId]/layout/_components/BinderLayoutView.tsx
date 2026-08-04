@@ -764,7 +764,7 @@ export function BinderLayoutView() {
           slotAspectRatio={slotAspectRatio}
         />
 
-        <div className={`flex h-full min-h-0 flex-col ${notesVisible ? 'gap-2' : 'gap-4'}`}>
+        <div className={`flex h-full min-h-0 flex-col gap-4`}>
           {/* The Michi-indicator toggle (story 10) and the direct page-number
               input (story 9), side by side on their own row above the binder
               visualization. */}

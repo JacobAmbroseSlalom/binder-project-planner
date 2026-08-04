@@ -143,7 +143,7 @@
     /* Story 23 lowered this from `min(32rem, 60vh)` so the spread reserves
        a bit less vertical space, leaving room for the notes section below
        it on the Edit Layout tab without the two overlapping. */
-    height: min(28rem, 50vh);
+    height: min(32rem, 60vh);
   }
 
   /* The binder-side slot grid. Its width is capped by `min()` to whichever

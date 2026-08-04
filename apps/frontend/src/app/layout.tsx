@@ -3,7 +3,7 @@ import { Inter } from 'next/font/google';
 import './globals.css';
 
 import { ToastProvider } from '@/shared/feedback';
-import { AppHeader } from '@/shared/navigation';
+import { AppHeader, AppHeaderTitleProvider } from '@/shared/navigation';
 
 const inter = Inter({
   variable: '--font-inter',
@@ -26,9 +26,14 @@ export default function RootLayout({
         {/* Mounted once so every page can start/update save-status toasts
             through useSaveStatusToast (story 3). */}
         <ToastProvider>
-          {/* Persistent header (every page) with a link back to the home page. */}
-          <AppHeader />
-          {children}
+          {/* Persistent header (every page) with a link back to the home
+              page. The title provider wraps both the header and the routed
+              page so a page (e.g. a binder view/edit page) can surface its
+              title in the header bar. */}
+          <AppHeaderTitleProvider>
+            <AppHeader />
+            {children}
+          </AppHeaderTitleProvider>
         </ToastProvider>
       </body>
     </html>

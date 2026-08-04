@@ -109,10 +109,10 @@ export function BinderNotesSection() {
         placeholder="Free-form notes and to-do items for this binder…"
         // Filled-input treatment from the styling conventions (neutral-800
         // fill, no resting border, primary border on focus). Fills the
-        // section's remaining height (`flex-1 min-h-0`) so it reaches the
-        // bottom of the unplaced panels, with a small floor and manual
-        // vertical resize still available.
-        className="min-h-24 w-full flex-1 resize-y rounded-standard border border-transparent bg-neutral-800 px-3 py-2 placeholder:text-neutral-500 focus:border-primary focus:outline-none"
+        // section's remaining height (`flex-1 min-h-0`) so its bottom lines
+        // up exactly with the unplaced panels' bottom rather than
+        // overflowing past them; still manually resizable.
+        className="min-h-0 w-full flex-1 resize-y rounded-standard border border-transparent bg-neutral-800 px-3 py-2 placeholder:text-neutral-500 focus:border-primary focus:outline-none"
       />
     </section>
   );

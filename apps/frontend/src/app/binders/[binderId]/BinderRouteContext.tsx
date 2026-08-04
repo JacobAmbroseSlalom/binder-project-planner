@@ -37,6 +37,7 @@ import {
   useSaveStatusToast,
   useToastContext,
 } from '@/shared/feedback';
+import { useSetAppHeaderTitle } from '@/shared/navigation';
 
 import { getFootprintCells, isFootprintBlocked } from './artFootprint';
 import { BinderTabs } from './BinderTabs';
@@ -483,6 +484,11 @@ export function BinderRouteProvider({
   const [pendingCardDuplicateIds, setPendingCardDuplicateIds] = useState<Set<string>>(new Set());
 
   const showLoading = useDelayedLoading(status === 'loading');
+
+  // Show the binder's name in the app header bar (rather than an in-page
+  // heading) while a binder page is open; cleared automatically on navigate
+  // away. `null` until the binder loads.
+  useSetAppHeaderTitle(binder?.name ?? null);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -1498,7 +1504,8 @@ export function BinderRouteProvider({
 
   return (
     <BinderRouteContext.Provider value={value}>
-      <h1 className="pt-4 text-center">{value.binder.name}</h1>
+      {/* The binder name is shown in the app header bar (via
+          `useSetAppHeaderTitle` above) rather than as an in-page heading. */}
       <BinderTabs binderId={binderId} />
       {/* `flex-1 min-h-0`: gives the active tab a definite, fill-remaining-
           space container to grow into. Tabs that don't need it (Edit

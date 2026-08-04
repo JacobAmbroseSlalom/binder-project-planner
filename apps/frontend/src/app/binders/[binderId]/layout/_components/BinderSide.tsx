@@ -134,8 +134,11 @@ export function BinderSide({
   // complete grid fits both the available width and height.
   const slotRatio = (width / height) * slotAspectRatio;
 
-  const gapColumns = michiIndicatorsVisible ? getMichiGapColumns(width, side) : [];
-  const hasIndicators = gapColumns.length > 0;
+  // Computed unconditionally (it's pure/cheap) so the indicator strip can
+  // always reserve its height; the brackets themselves only render when the
+  // toggle is on and this side actually has paired-column gaps.
+  const gapColumns = getMichiGapColumns(width, side);
+  const showIndicators = michiIndicatorsVisible && gapColumns.length > 0;
 
   // Looks up a card by its (row, column) on this side's physical page in
   // O(1) rather than scanning the full card list once per slot; rebuilt
@@ -200,14 +203,19 @@ export function BinderSide({
             2-column span lands the fixed-width bracket exactly on the
             boundary between them, since both are equal-width tracks.
             `aria-hidden` and the lack of any interactive role/tabIndex keep
-            them out of the accessibility tree and tab order. */}
-        {hasIndicators && (
-          <div
-            aria-hidden="true"
-            className="grid gap-1 px-2 pb-1"
-            style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}
-          >
-            {gapColumns.map((gapColumn) => (
+            them out of the accessibility tree and tab order.
+
+            The strip is always rendered (with a reserved `min-h-2` matching
+            the brackets' own height), and only its brackets are conditional
+            on the toggle - so turning Michi indicators on/off never changes
+            this wrapper's height and the binder side doesn't shift. */}
+        <div
+          aria-hidden="true"
+          className="grid min-h-4 gap-1 px-2 pb-1"
+          style={{ gridTemplateColumns: `repeat(${width}, 1fr)` }}
+        >
+          {showIndicators &&
+            gapColumns.map((gapColumn) => (
               <div
                 key={`michi-${gapColumn}`}
                 className="flex h-2 w-8 items-center justify-self-center self-end"
@@ -218,8 +226,7 @@ export function BinderSide({
                 <span className="h-2 w-0.5 shrink-0 bg-secondary" />
               </div>
             ))}
-          </div>
-        )}
+        </div>
 
         <div
           role="group"
