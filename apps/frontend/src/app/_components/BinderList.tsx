@@ -195,43 +195,43 @@ export function BinderList() {
       {status === 'success' && binders.length > 0 && (
         <ul className="flex flex-wrap justify-center gap-12">
           {binders.map((binder) => {
-              const isPendingCopy = pendingCopyIds.has(binder.id);
-              return (
-                <li key={binder.id} className="group relative flex flex-col items-center gap-2">
-                  {/* Story 21: hover-revealed delete/copy/edit actions,
+            const isPendingCopy = pendingCopyIds.has(binder.id);
+            return (
+              <li key={binder.id} className="group relative flex flex-col items-center gap-2">
+                {/* Story 21: hover-revealed delete/copy/edit actions,
                     disabled on the temporary tile for an in-flight copy. */}
-                  <BinderActionsOverlay
-                    name={binder.name}
-                    isEditDisabled={isPendingCopy}
-                    isCopyDisabled={isPendingCopy}
-                    isDeleteDisabled={isPendingCopy}
-                    onEdit={() => router.push(`/binders/${binder.id}/details`)}
-                    onCopy={() => handleCopyBinder(binder)}
-                    onDelete={() => setConfirmDeleteBinder(binder)}
-                  />
-                  {/* Story 7: opens the binder's view/edit page with the "Edit
+                <BinderActionsOverlay
+                  name={binder.name}
+                  isEditDisabled={isPendingCopy}
+                  isCopyDisabled={isPendingCopy}
+                  isDeleteDisabled={isPendingCopy}
+                  onEdit={() => router.push(`/binders/${binder.id}/details`)}
+                  onCopy={() => handleCopyBinder(binder)}
+                  onDelete={() => setConfirmDeleteBinder(binder)}
+                />
+                {/* Story 7: opens the binder's view/edit page with the "Edit
                     Layout" tab selected. The optimistic copy tile isn't
                     navigable until the real binder exists. */}
-                  <Link
-                    href={isPendingCopy ? '#' : `/binders/${binder.id}/layout`}
-                    aria-disabled={isPendingCopy}
-                    onClick={(event) => {
-                      if (isPendingCopy) event.preventDefault();
-                    }}
-                    className={`flex flex-col items-center gap-2 hover:brightness-110 ${isPendingCopy ? 'pointer-events-none opacity-50' : ''}`}
-                  >
-                    {/* Story 20: a live miniature of the binder's saved
+                <Link
+                  href={isPendingCopy ? '#' : `/binders/${binder.id}/layout`}
+                  aria-disabled={isPendingCopy}
+                  onClick={(event) => {
+                    if (isPendingCopy) event.preventDefault();
+                  }}
+                  className={`flex flex-col items-center gap-2 hover:brightness-110 ${isPendingCopy ? 'pointer-events-none opacity-50' : ''}`}
+                >
+                  {/* Story 20: a live miniature of the binder's saved
                       preview physical page/spread. */}
-                    <BinderPreview binder={binder} />
-                    <p className="font-bold">{binder.name}</p>
-                  </Link>
-                  {/* Story 22: per-binder completion metrics, shown below the
+                  <BinderPreview binder={binder} />
+                  <p className="font-bold">{binder.name}</p>
+                </Link>
+                {/* Story 22: per-binder completion metrics, shown below the
                     binder only when the toggle is on. Rendered outside the
                     Link so it isn't part of the clickable navigation area. */}
-                  {metricsVisible && <BinderCompletionMetrics binder={binder} />}
-                </li>
-              );
-            })}
+                {metricsVisible && <BinderCompletionMetrics binder={binder} />}
+              </li>
+            );
+          })}
         </ul>
       )}
       {confirmDeleteBinder && (

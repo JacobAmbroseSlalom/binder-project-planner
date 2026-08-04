@@ -30,10 +30,6 @@ Story #26 was wayyyyy tooo big
 
 # Title
 
-Move bidner name into title bar
-    make the binder and other areas bigger
-
-31 Search and filter unplaced items
 27 Handle binder size and page-count changes
 
 28 Undo and redo layout movements

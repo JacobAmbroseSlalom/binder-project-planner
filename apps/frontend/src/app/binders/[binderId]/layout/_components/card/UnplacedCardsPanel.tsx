@@ -3,7 +3,7 @@
 import { useDroppable } from '@dnd-kit/core';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { Plus } from 'lucide-react';
-import { useEffect, useMemo, useRef } from 'react';
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Card } from '@/lib/api';
 
@@ -41,6 +41,31 @@ function sortUnplacedCards(unplacedCards: Card[]): Card[] {
     if (a.id === b.id) return 0;
     return a.id < b.id ? -1 : 1;
   });
+}
+
+// Splits a trimmed query into lowercase whitespace-delimited terms.
+// Empty/whitespace-only input returns an empty array so callers can treat
+// it as "no filter".
+function getSearchTerms(query: string): string[] {
+  const trimmed = query.trim();
+  if (trimmed.length === 0) return [];
+  return trimmed.toLowerCase().split(/\s+/);
+}
+
+// Story 31's unplaced-card match logic: every query term must match at
+// least one supported field on the same card (name, set, number, or
+// variation), case-insensitively.
+function matchesCardSearch(card: Card, terms: string[]): boolean {
+  if (terms.length === 0) return true;
+
+  const searchableValues = [
+    card.name,
+    card.setName ?? '',
+    card.localNumber ?? '',
+    card.variation ?? '',
+  ].map((value) => value.toLowerCase());
+
+  return terms.every((term) => searchableValues.some((value) => value.includes(term)));
 }
 
 // The "Edit Layout" tab's unplaced-cards section (story 15): an
@@ -90,9 +115,22 @@ export function UnplacedCardsPanel({
   // threaded down from `BinderLayoutView` to each `UnplacedCard` tile.
   slotAspectRatio: number;
 }) {
+  // Story 31: local-per-panel text state that resets whenever this layout
+  // tab unmounts/remounts. Keystrokes update immediately while filtering
+  // below consumes a deferred copy to keep typing responsive.
+  const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
   const unplacedCards = useMemo(
     () => sortUnplacedCards(cards.filter((card) => card.placement.physicalPage === null)),
     [cards],
+  );
+
+  const searchTerms = useMemo(() => getSearchTerms(deferredSearchQuery), [deferredSearchQuery]);
+
+  const filteredUnplacedCards = useMemo(
+    () => unplacedCards.filter((card) => matchesCardSearch(card, searchTerms)),
+    [unplacedCards, searchTerms],
   );
 
   // Chunks the flat sorted list into fixed-size grid rows (story 15's
@@ -100,11 +138,11 @@ export function UnplacedCardsPanel({
   // grid rather than one oversized tile per row).
   const unplacedCardRows = useMemo(() => {
     const rows: Card[][] = [];
-    for (let index = 0; index < unplacedCards.length; index += UNPLACED_GRID_COLUMNS) {
-      rows.push(unplacedCards.slice(index, index + UNPLACED_GRID_COLUMNS));
+    for (let index = 0; index < filteredUnplacedCards.length; index += UNPLACED_GRID_COLUMNS) {
+      rows.push(filteredUnplacedCards.slice(index, index + UNPLACED_GRID_COLUMNS));
     }
     return rows;
-  }, [unplacedCards]);
+  }, [filteredUnplacedCards]);
 
   // The whole panel is the one drop target (story 15's technical
   // requirement) - `data.unplaced` distinguishes it from a concrete
@@ -137,8 +175,13 @@ export function UnplacedCardsPanel({
   const previousIdsRef = useRef<Set<string>>(new Set(unplacedCards.map((card) => card.id)));
   useEffect(() => {
     const previousIds = previousIdsRef.current;
-    const newlyUnplacedIndex = unplacedCards.findIndex((card) => !previousIds.has(card.id));
+    const newlyUnplacedCard = unplacedCards.find((card) => !previousIds.has(card.id));
     previousIdsRef.current = new Set(unplacedCards.map((card) => card.id));
+    if (!newlyUnplacedCard) return;
+
+    const newlyUnplacedIndex = filteredUnplacedCards.findIndex(
+      (card) => card.id === newlyUnplacedCard.id,
+    );
     if (newlyUnplacedIndex !== -1) {
       // Scrolls to the grid ROW containing the newly unplaced card, not
       // its flat index, since each virtualized row now holds multiple
@@ -147,7 +190,7 @@ export function UnplacedCardsPanel({
         align: 'auto',
       });
     }
-  }, [unplacedCards, rowVirtualizer]);
+  }, [unplacedCards, filteredUnplacedCards, rowVirtualizer]);
 
   return (
     <div
@@ -180,44 +223,79 @@ export function UnplacedCardsPanel({
         </button>
       </div>
 
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search unplaced cards"
+          aria-label="Search unplaced cards"
+          className="w-full flex-1 rounded-standard border border-neutral-700 bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
+        />
+        {searchQuery.trim().length > 0 && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            aria-label="Clear unplaced cards search"
+            className="cursor-pointer rounded-standard px-2 py-1 font-bold text-primary hover:brightness-110"
+          >
+            Clear
+          </button>
+        )}
+      </div>
+
       {/* Own vertical scroll container (story 15's "independently
           scrolling... its height does not depend on the rendered binder
           spread" requirement) - `min-h-0` lets it shrink within the
           panel's own fixed/flex height rather than growing to fit its
-          content. No separate empty-state message when there are no
-          unplaced cards - the add button above is enough. */}
+          content. Story 31's empty-results state only appears when a
+          nonblank search has no matches; the preexisting empty list case
+          (no unplaced cards yet) still relies on the add button above. */}
       <div ref={scrollContainerRef} className="min-h-0 flex-1 overflow-y-auto">
-        <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-          {rowVirtualizer.getVirtualItems().map((virtualRow) => {
-            const row = unplacedCardRows[virtualRow.index];
-            return (
-              <div
-                key={row[0].id}
-                data-index={virtualRow.index}
-                ref={rowVirtualizer.measureElement}
-                className="absolute top-0 left-0 grid w-full grid-cols-3 gap-2 pb-2"
-                style={{ transform: `translateY(${virtualRow.start}px)` }}
-              >
-                {row.map((card) => (
-                  <UnplacedCard
-                    key={card.id}
-                    card={card}
-                    isRemovalPending={pendingCardDeletionIds.has(card.id)}
-                    isPendingCreate={pendingUnplacedCardIds.has(card.id)}
-                    isMovePending={isMovePending}
-                    onRemoveCard={onRemoveCard}
-                    onEditVariation={onEditVariation}
-                    isVariationEditPending={pendingCardVariationEditIds.has(card.id)}
-                    onDuplicateCard={onDuplicateCard}
-                    isDuplicatePending={pendingCardDuplicateIds.has(card.id)}
-                    variationsVisible={variationsVisible}
-                    slotAspectRatio={slotAspectRatio}
-                  />
-                ))}
-              </div>
-            );
-          })}
-        </div>
+        {searchTerms.length > 0 && filteredUnplacedCards.length === 0 ? (
+          <div className="flex h-full min-h-0 flex-col items-center justify-start gap-3 pt-2 text-center">
+            <p className="text-neutral-500">No matching items</p>
+            <button
+              type="button"
+              onClick={() => setSearchQuery('')}
+              className="cursor-pointer rounded-standard px-2 py-1 font-bold text-primary hover:brightness-110"
+            >
+              Clear search
+            </button>
+          </div>
+        ) : (
+          <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
+            {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+              const row = unplacedCardRows[virtualRow.index];
+              return (
+                <div
+                  key={row[0].id}
+                  data-index={virtualRow.index}
+                  ref={rowVirtualizer.measureElement}
+                  className="absolute top-0 left-0 grid w-full grid-cols-3 gap-2 pb-2"
+                  style={{ transform: `translateY(${virtualRow.start}px)` }}
+                >
+                  {row.map((card) => (
+                    <UnplacedCard
+                      key={card.id}
+                      card={card}
+                      isRemovalPending={pendingCardDeletionIds.has(card.id)}
+                      isPendingCreate={pendingUnplacedCardIds.has(card.id)}
+                      isMovePending={isMovePending}
+                      onRemoveCard={onRemoveCard}
+                      onEditVariation={onEditVariation}
+                      isVariationEditPending={pendingCardVariationEditIds.has(card.id)}
+                      onDuplicateCard={onDuplicateCard}
+                      isDuplicatePending={pendingCardDuplicateIds.has(card.id)}
+                      variationsVisible={variationsVisible}
+                      slotAspectRatio={slotAspectRatio}
+                    />
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

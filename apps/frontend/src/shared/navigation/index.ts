@@ -3,7 +3,4 @@
 export { AppHeader } from './AppHeader';
 // Lets a page set the title shown in the app header bar (e.g. the binder
 // view/edit pages show the binder name there).
-export {
-  AppHeaderTitleProvider,
-  useSetAppHeaderTitle,
-} from './AppHeaderTitle';
+export { AppHeaderTitleProvider, useSetAppHeaderTitle } from './AppHeaderTitle';

@@ -155,7 +155,7 @@ parentheses, e.g. `Done (2026-07-30 23:31 EDT)`.
 
 **Status:** Done (2026-07-31 17:55 EDT)
 
-**Update (2026-08-04):** The list is now ordered by each binder's most recent *activity* rather than only edits to its own details: `GET /binders` sorts by the newest of the binder's `updatedAt` and the newest `updatedAt` among its cards and art (descending), then by binder UUID. So adding, moving, or editing a card or art item floats its binder to the top. (A card/art deletion doesn't change any remaining row's timestamp, so it isn't reflected in the ordering.)
+**Update (2026-08-04):** The list is now ordered by each binder's most recent _activity_ rather than only edits to its own details: `GET /binders` sorts by the newest of the binder's `updatedAt` and the newest `updatedAt` among its cards and art (descending), then by binder UUID. So adding, moving, or editing a card or art item floats its binder to the top. (A card/art deletion doesn't change any remaining row's timestamp, so it isn't reflected in the ordering.)
 
 #### Acceptance criteria
 

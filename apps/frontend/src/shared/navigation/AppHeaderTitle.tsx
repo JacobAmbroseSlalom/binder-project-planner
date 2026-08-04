@@ -22,10 +22,7 @@ export function AppHeaderTitleProvider({ children }: { children: React.ReactNode
   // Stable setter so `useSetAppHeaderTitle`'s effect isn't re-run every
   // render.
   const setTitleStable = useCallback((next: string | null) => setTitle(next), []);
-  const value = useMemo(
-    () => ({ title, setTitle: setTitleStable }),
-    [title, setTitleStable],
-  );
+  const value = useMemo(() => ({ title, setTitle: setTitleStable }), [title, setTitleStable]);
   return <AppHeaderTitleContext.Provider value={value}>{children}</AppHeaderTitleContext.Provider>;
 }
 

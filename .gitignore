@@ -8,3 +8,5 @@ out/
 .env
 .DS_Store
 *.log
+.kiro/*
+.vscode/*
