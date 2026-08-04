@@ -12,6 +12,7 @@ import { openApiSpecificationPath } from './paths.js';
 import { createArtRouter } from './routes/art.js';
 import { createBindersRouter } from './routes/binders.js';
 import { createCardsRouter } from './routes/cards.js';
+import { createDataTransferRouter } from './routes/dataTransfer.js';
 import { createMaintenanceRouter } from './routes/maintenance.js';
 import { createDigestDiskStorage } from './uploads/digestDiskStorage.js';
 
@@ -90,6 +91,7 @@ export function createApp({
   app.use(createCardsRouter(database, imagesDirectory));
   app.use(createArtRouter(database, imagesDirectory));
   app.use(createMaintenanceRouter(database, imagesDirectory));
+  app.use(createDataTransferRouter(database, imagesDirectory));
 
   const errorHandler: ErrorRequestHandler = (error: HttpError, _request, response, _next) => {
     const status = error.status ?? 500;

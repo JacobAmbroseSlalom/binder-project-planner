@@ -191,6 +191,23 @@ export const BINDER_SETTINGS_PREVIEW_ART_SLOT_SPAN = 2;
 // persisted by the backend.
 export const DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE = true;
 
+// Story 23: "Add binder notes". The Edit Layout tab's notes-section
+// visibility toggle defaults to visible, before the user's own preference
+// has been saved to browser local storage. Presentation-only; never
+// persisted by the backend.
+export const DEFAULT_BINDER_NOTES_VISIBLE = true;
+
+// Story 33: "Export and import all application data". The version of the
+// export archive format, written into its manifest and required to match
+// on import so an incompatible archive is rejected rather than
+// mis-imported.
+export const EXPORT_FORMAT_VERSION = 1;
+
+// How long a staged (validated but not yet committed) import is retained
+// server-side before it's pruned; the two-step import flow validates and
+// stages an uploaded archive, then commits it by token within this window.
+export const IMPORT_STAGING_TTL_MS = 1_800_000; // 30 minutes
+
 // Story 30: "Export multi-slot art for printing". Every art-print PDF page
 // is US Letter landscape (11 x 8.5 in); this margin is reserved on every
 // edge and treated as unavailable area by the packing algorithm.

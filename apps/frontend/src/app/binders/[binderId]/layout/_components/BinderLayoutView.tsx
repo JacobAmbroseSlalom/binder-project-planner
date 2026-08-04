@@ -11,7 +11,10 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from '@dnd-kit/core';
-import { CARD_DRAG_ACTIVATION_DISTANCE_PX } from '@binder-project-planner/shared';
+import {
+  CARD_DRAG_ACTIVATION_DISTANCE_PX,
+  DEFAULT_BINDER_NOTES_VISIBLE,
+} from '@binder-project-planner/shared';
 import { Check, ChevronLeft, ChevronRight, Images, Printer } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -24,6 +27,7 @@ import {
   type TcgDexCatalogCard,
 } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
+import { useLocalStorageBoolean } from '@/shared/hooks/useLocalStorageBoolean';
 
 import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
 import { getFootprintCells, isFootprintBlocked, isFootprintInBounds } from '../../artFootprint';
@@ -560,13 +564,14 @@ export function BinderLayoutView() {
   const michiIndicatorsVisible = rawMichi === 'true';
   const michiNeedsCleanup = rawMichi !== null && !michiIndicatorsVisible;
 
-  // Story 23's notes-visibility toggle: unlike michi/variations, notes
-  // default to VISIBLE - only an explicit `notes=false` hides the panel.
-  // Any other value is treated as visible and (like an invalid `michi`)
-  // stripped from the URL by the cleanup effect below.
-  const rawNotes = searchParams.get('notes');
-  const notesVisible = rawNotes !== 'false';
-  const notesNeedsCleanup = rawNotes !== null && rawNotes !== 'false';
+  // Story 23's notes-visibility toggle. Unlike the michi/variations
+  // toggles (which are per-view URL query params), notes visibility is a
+  // persisted preference: it's remembered across binders and reloads via
+  // browser local storage and defaults to visible on a first visit.
+  const [notesVisible, setNotesVisible] = useLocalStorageBoolean(
+    'binder-notes-visible',
+    DEFAULT_BINDER_NOTES_VISIBLE,
+  );
 
   // Keeps the URL in sync: replaces (never pushes, so navigating spreads
   // never grows browser history) the `page` query parameter whenever the
@@ -576,17 +581,13 @@ export function BinderLayoutView() {
   // actually needed - an unrelated `michi` cleanup must not add `?page=1`
   // when the parameter was legitimately absent.
   useEffect(() => {
-    if (replacementPage === undefined && !michiNeedsCleanup && !notesNeedsCleanup) return;
+    if (replacementPage === undefined && !michiNeedsCleanup) return;
 
     const params = new URLSearchParams(searchParams);
     if (replacementPage !== undefined) params.set('page', String(replacementPage));
     if (michiNeedsCleanup) params.delete('michi');
-    // Story 23: strip any `notes` value other than `false` (which is kept
-    // to persist the hidden state); the derivation above already treats it
-    // as visible, so removing it just tidies the URL.
-    if (notesNeedsCleanup) params.delete('notes');
     router.replace(`${pathname}?${params.toString()}`);
-  }, [replacementPage, michiNeedsCleanup, notesNeedsCleanup, pathname, router, searchParams]);
+  }, [replacementPage, michiNeedsCleanup, pathname, router, searchParams]);
 
   // Records the displayed physical page as the route's retained layout
   // focal page, but only once it's explicit in the URL - the very first,
@@ -689,18 +690,11 @@ export function BinderLayoutView() {
     router.replace(`${pathname}?${params.toString()}`);
   }
 
-  // Flips the notes-visibility toggle (story 23): since notes default to
-  // visible, HIDING sets `notes=false` and SHOWING removes the parameter -
-  // the inverse of the michi/variations toggles above. History replacement
-  // and copying the current params preserve every other query parameter.
+  // Flips the persisted notes-visibility preference (story 23), which
+  // `useLocalStorageBoolean` writes to browser local storage so it's
+  // remembered on the next visit.
   function toggleNotesVisible() {
-    const params = new URLSearchParams(searchParams);
-    if (notesVisible) {
-      params.set('notes', 'false');
-    } else {
-      params.delete('notes');
-    }
-    router.replace(`${pathname}?${params.toString()}`);
+    setNotesVisible(!notesVisible);
   }
 
   // Generates and downloads the binder's layout PDF (story 29): drives the
@@ -820,8 +814,8 @@ export function BinderLayoutView() {
             </label>
 
             {/* Story 23's toggle: same custom-styled checkbox as the toggles
-                above, but defaults to ON (notes are visible unless the URL
-                has `notes=false`), so `checked` follows `notesVisible`. */}
+                above; its checked state is the persisted (local-storage)
+                notes-visibility preference, defaulting to on. */}
             <label htmlFor="notes-visible-toggle" className="flex items-center gap-2">
               <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
                 <input

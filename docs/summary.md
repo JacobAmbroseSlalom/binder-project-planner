@@ -30,10 +30,12 @@ Story #26 was wayyyyy tooo big
 
 # Title
 
-23 Add binder notes
+bidners sort by last updated should include the last updated on cards/art any changes
+Move bidner name into title bar
+    make the binder and other areas bigger
+
 31 Search and filter unplaced items
 27 Handle binder size and page-count changes
-33 Export and import all application data
 
 28 Undo and redo layout movements
 32 Lock a binder

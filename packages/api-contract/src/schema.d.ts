@@ -392,6 +392,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/exports/data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export all application data as a portable archive
+         * @description Streams a single ZIP archive (story 33) containing a manifest, a JSON dump of the durable domain tables, and every referenced image file. Built in a request-scoped temporary file that is removed once the response completes. Read-only; never restricted by binder lock state. Secrets and environment-specific configuration are not included.
+         */
+        get: operations["exportData"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/data/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Validate an import archive and stage it for commit
+         * @description Validates an uploaded full-data export archive (story 33) - format, schema-version compatibility, image presence/integrity, and internal referential integrity - without changing any data. On success the extracted archive is staged under a returned token and a summary of what a commit would add is returned. Staged imports expire after a fixed retention window.
+         */
+        post: operations["validateImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/imports/data/commit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Commit a previously validated+staged import
+         * @description Applies a staged import identified by its token (story 33): copies any new image files in, then inserts every remapped record in one database transaction. Imported binders/cards/art are added as new records (binder-name collisions are made unique); image assets are deduplicated against identical existing assets. On any failure the transaction rolls back and the copied files are removed, leaving all existing data unchanged.
+         */
+        post: operations["commitImport"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -401,6 +461,41 @@ export interface components {
             status: "ok";
             /** @constant */
             database: "connected";
+        };
+        ImportArchiveUpload: {
+            /**
+             * Format: binary
+             * @description The full-data export ZIP archive to validate and stage.
+             */
+            archive: string;
+        };
+        /** @description Counts of what an import will add (story 33) - surfaced by validate as a preview and by commit as the result. */
+        ImportSummary: {
+            binders: number;
+            cards: number;
+            art: number;
+            /** @description Image assets whose bytes will be copied in as new files. */
+            newImages: number;
+            /** @description Image assets reused from identical assets already present locally. */
+            dedupedImages: number;
+        };
+        ImportValidateResponse: {
+            /**
+             * Format: uuid
+             * @description Identifies the staged archive to pass to the commit endpoint.
+             */
+            token: string;
+            summary: components["schemas"]["ImportSummary"];
+        };
+        ImportCommitRequest: {
+            /**
+             * Format: uuid
+             * @description The token returned by the validate endpoint.
+             */
+            token: string;
+        };
+        ImportCommitResponse: {
+            summary: components["schemas"]["ImportSummary"];
         };
         OrphanedImagesCleanupResult: {
             deletedFileCount: number;
@@ -531,6 +626,7 @@ export interface components {
             borderRadius: components["schemas"]["BinderBorderRadius"];
             borderWidth: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage: components["schemas"]["BinderPreviewPhysicalPage"];
+            notes: components["schemas"]["BinderNotes"];
             /** @description Story 22: the total number of card slots in the binder (width * height * 2 * pages). The client derives the slot-completion percentage as occupiedSlots / totalSlots * 100. */
             totalSlots: number;
             /** @description Story 22: how many slots hold a card or are covered by placed multi-slot art, deduplicated across overlaps. Unplaced cards and art are excluded. */
@@ -1865,6 +1961,112 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrphanedImagesCleanupResult"];
+                };
+            };
+        };
+    };
+    exportData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The generated export archive. */
+            200: {
+                headers: {
+                    /** @description `attachment` with a timestamped `binder-project-planner-export-*.zip` download filename. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            /** @description Export failed - for example, an image file referenced by an asset row is missing from storage. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    validateImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["ImportArchiveUpload"];
+            };
+        };
+        responses: {
+            /** @description The archive is valid and has been staged for commit. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportValidateResponse"];
+                };
+            };
+            /** @description No archive was supplied, or the archive is not a readable, compatible, and internally consistent export. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    commitImport: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportCommitRequest"];
+            };
+        };
+        responses: {
+            /** @description The import was applied. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportCommitResponse"];
+                };
+            };
+            /** @description No staged import exists for the token (it may have expired). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The import failed to apply; no data was changed. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };

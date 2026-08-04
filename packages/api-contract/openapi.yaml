@@ -1019,6 +1019,109 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrphanedImagesCleanupResult'
+  /exports/data:
+    get:
+      operationId: exportData
+      summary: Export all application data as a portable archive
+      description: >-
+        Streams a single ZIP archive (story 33) containing a manifest, a
+        JSON dump of the durable domain tables, and every referenced image
+        file. Built in a request-scoped temporary file that is removed once
+        the response completes. Read-only; never restricted by binder lock
+        state. Secrets and environment-specific configuration are not
+        included.
+      responses:
+        '200':
+          description: The generated export archive.
+          headers:
+            Content-Disposition:
+              description: >-
+                `attachment` with a timestamped
+                `binder-project-planner-export-*.zip` download filename.
+              schema:
+                type: string
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        '500':
+          description: >-
+            Export failed - for example, an image file referenced by an
+            asset row is missing from storage.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /imports/data/validate:
+    post:
+      operationId: validateImport
+      summary: Validate an import archive and stage it for commit
+      description: >-
+        Validates an uploaded full-data export archive (story 33) - format,
+        schema-version compatibility, image presence/integrity, and internal
+        referential integrity - without changing any data. On success the
+        extracted archive is staged under a returned token and a summary of
+        what a commit would add is returned. Staged imports expire after a
+        fixed retention window.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ImportArchiveUpload'
+      responses:
+        '200':
+          description: The archive is valid and has been staged for commit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportValidateResponse'
+        '400':
+          description: >-
+            No archive was supplied, or the archive is not a readable,
+            compatible, and internally consistent export.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /imports/data/commit:
+    post:
+      operationId: commitImport
+      summary: Commit a previously validated+staged import
+      description: >-
+        Applies a staged import identified by its token (story 33): copies
+        any new image files in, then inserts every remapped record in one
+        database transaction. Imported binders/cards/art are added as new
+        records (binder-name collisions are made unique); image assets are
+        deduplicated against identical existing assets. On any failure the
+        transaction rolls back and the copied files are removed, leaving all
+        existing data unchanged.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportCommitRequest'
+      responses:
+        '200':
+          description: The import was applied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImportCommitResponse'
+        '404':
+          description: No staged import exists for the token (it may have expired).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: The import failed to apply; no data was changed.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
 components:
   parameters:
     binderId:
@@ -1059,6 +1162,77 @@ components:
         database:
           type: string
           const: connected
+    ImportArchiveUpload:
+      type: object
+      additionalProperties: false
+      required:
+        - archive
+      properties:
+        archive:
+          type: string
+          format: binary
+          description: The full-data export ZIP archive to validate and stage.
+    ImportSummary:
+      type: object
+      additionalProperties: false
+      description: >-
+        Counts of what an import will add (story 33) - surfaced by validate
+        as a preview and by commit as the result.
+      required:
+        - binders
+        - cards
+        - art
+        - newImages
+        - dedupedImages
+      properties:
+        binders:
+          type: integer
+          minimum: 0
+        cards:
+          type: integer
+          minimum: 0
+        art:
+          type: integer
+          minimum: 0
+        newImages:
+          type: integer
+          minimum: 0
+          description: Image assets whose bytes will be copied in as new files.
+        dedupedImages:
+          type: integer
+          minimum: 0
+          description: Image assets reused from identical assets already present locally.
+    ImportValidateResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - token
+        - summary
+      properties:
+        token:
+          type: string
+          format: uuid
+          description: Identifies the staged archive to pass to the commit endpoint.
+        summary:
+          $ref: '#/components/schemas/ImportSummary'
+    ImportCommitRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - token
+      properties:
+        token:
+          type: string
+          format: uuid
+          description: The token returned by the validate endpoint.
+    ImportCommitResponse:
+      type: object
+      additionalProperties: false
+      required:
+        - summary
+      properties:
+        summary:
+          $ref: '#/components/schemas/ImportSummary'
     OrphanedImagesCleanupResult:
       type: object
       additionalProperties: false
@@ -1398,6 +1572,7 @@ components:
         - borderRadius
         - borderWidth
         - previewPhysicalPage
+        - notes
         - totalSlots
         - occupiedSlots
         - emptySlots
@@ -1439,6 +1614,8 @@ components:
           $ref: '#/components/schemas/BinderBorderWidth'
         previewPhysicalPage:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
+        notes:
+          $ref: '#/components/schemas/BinderNotes'
         totalSlots:
           type: integer
           minimum: 0

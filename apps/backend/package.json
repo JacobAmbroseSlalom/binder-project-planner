@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@binder-project-planner/shared": "workspace:*",
+    "adm-zip": "0.5.16",
     "better-sqlite3": "13.0.2",
     "cors": "2.8.6",
     "drizzle-orm": "0.45.2",
@@ -27,6 +28,7 @@
   "devDependencies": {
     "@swc/core": "1.15.47",
     "@swc/jest": "0.2.39",
+    "@types/adm-zip": "0.5.7",
     "@types/better-sqlite3": "7.6.13",
     "@types/cors": "2.8.19",
     "@types/express": "5.0.6",

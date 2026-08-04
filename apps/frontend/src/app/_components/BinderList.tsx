@@ -4,7 +4,6 @@ import {
   DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE,
   generateUniqueBinderCopyName,
 } from '@binder-project-planner/shared';
-import { Check } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
@@ -25,8 +24,10 @@ import { DeleteBinderConfirmDialog } from './DeleteBinderConfirmDialog';
 import { BinderPreview } from './preview/BinderPreview';
 
 // Local-storage key for the completion-metrics visibility preference (story
-// 22). Persisted client-side only; never sent to the backend.
-const COMPLETION_METRICS_VISIBLE_STORAGE_KEY = 'binder-completion-metrics-visible';
+// 22). Persisted client-side only; never sent to the backend. Exported so
+// the home toolbar's toggle and this list's per-binder metrics read/write
+// the same preference (they stay in sync via `useLocalStorageBoolean`).
+export const COMPLETION_METRICS_VISIBLE_STORAGE_KEY = 'binder-completion-metrics-visible';
 
 // The three states the binder list can be in (story 5). Tracking this as one
 // enum, rather than separate booleans, keeps "loading" and "failed" from
@@ -68,7 +69,7 @@ export function BinderList() {
   // flipping it never refetches the binder list (it isn't a dependency of
   // the load effect above) - it just reads the counts already embedded in
   // each binder summary.
-  const [metricsVisible, setMetricsVisible] = useLocalStorageBoolean(
+  const [metricsVisible] = useLocalStorageBoolean(
     COMPLETION_METRICS_VISIBLE_STORAGE_KEY,
     DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE,
   );
@@ -192,26 +193,8 @@ export function BinderList() {
         </p>
       )}
       {status === 'success' && binders.length > 0 && (
-        <div className="flex flex-col items-center gap-6">
-          {/* Story 22: the completion-metrics visibility toggle at the top
-              of the list. Same custom-styled checkbox convention as the
-              Edit Layout tab's Michi/variations toggles. */}
-          <label htmlFor="completion-metrics-toggle" className="flex items-center gap-2">
-            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-              <input
-                id="completion-metrics-toggle"
-                type="checkbox"
-                checked={metricsVisible}
-                onChange={(event) => setMetricsVisible(event.target.checked)}
-                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-              />
-              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-            </span>
-            <span className="text-caption text-neutral-500">Show completion metrics</span>
-          </label>
-
-          <ul className="flex flex-wrap justify-center gap-12">
-            {binders.map((binder) => {
+        <ul className="flex flex-wrap justify-center gap-12">
+          {binders.map((binder) => {
               const isPendingCopy = pendingCopyIds.has(binder.id);
               return (
                 <li key={binder.id} className="group relative flex flex-col items-center gap-2">
@@ -249,8 +232,7 @@ export function BinderList() {
                 </li>
               );
             })}
-          </ul>
-        </div>
+        </ul>
       )}
       {confirmDeleteBinder && (
         <DeleteBinderConfirmDialog

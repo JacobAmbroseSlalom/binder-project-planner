@@ -179,12 +179,8 @@
           "name": "art_binderId_binders_id_fk",
           "tableFrom": "art",
           "tableTo": "binders",
-          "columnsFrom": [
-            "binderId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["binderId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -192,12 +188,8 @@
           "name": "art_imageAssetId_art_image_assets_id_fk",
           "tableFrom": "art",
           "tableTo": "art_image_assets",
-          "columnsFrom": [
-            "imageAssetId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["imageAssetId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -316,9 +308,7 @@
       "indexes": {
         "art_image_assets_sha256Digest_unique": {
           "name": "art_image_assets_sha256Digest_unique",
-          "columns": [
-            "sha256Digest"
-          ],
+          "columns": ["sha256Digest"],
           "isUnique": true
         }
       },
@@ -453,9 +443,7 @@
       "indexes": {
         "binders_normalizedName_unique": {
           "name": "binders_normalizedName_unique",
-          "columns": [
-            "normalizedName"
-          ],
+          "columns": ["normalizedName"],
           "isUnique": true
         }
       },
@@ -575,16 +563,12 @@
       "indexes": {
         "card_image_assets_provider_card_id_unique": {
           "name": "card_image_assets_provider_card_id_unique",
-          "columns": [
-            "providerCardId"
-          ],
+          "columns": ["providerCardId"],
           "isUnique": true
         },
         "card_image_assets_sha256_digest_unique": {
           "name": "card_image_assets_sha256_digest_unique",
-          "columns": [
-            "sha256Digest"
-          ],
+          "columns": ["sha256Digest"],
           "isUnique": true
         }
       },
@@ -705,12 +689,7 @@
       "indexes": {
         "cards_binder_placement_unique": {
           "name": "cards_binder_placement_unique",
-          "columns": [
-            "binderId",
-            "physicalPage",
-            "row",
-            "column"
-          ],
+          "columns": ["binderId", "physicalPage", "row", "column"],
           "isUnique": true
         }
       },
@@ -719,12 +698,8 @@
           "name": "cards_binderId_binders_id_fk",
           "tableFrom": "cards",
           "tableTo": "binders",
-          "columnsFrom": [
-            "binderId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["binderId"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -732,12 +707,8 @@
           "name": "cards_imageAssetId_card_image_assets_id_fk",
           "tableFrom": "cards",
           "tableTo": "card_image_assets",
-          "columnsFrom": [
-            "imageAssetId"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["imageAssetId"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
