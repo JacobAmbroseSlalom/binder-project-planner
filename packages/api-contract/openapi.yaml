@@ -1157,6 +1157,15 @@ components:
         resets it to the shared DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE value
         when reducing the stored page count would otherwise make the
         saved value invalid.
+    BinderNotes:
+      type: string
+      maxLength: 1000000
+      nullable: true
+      description: >-
+        Story 23: free-form Markdown-source notes for the binder, or null
+        when unset. An exactly-empty string sent on update is normalized to
+        null by the backend; non-empty content is stored as-is without
+        trimming.
     CreateBinderRequest:
       type: object
       additionalProperties: false
@@ -1268,6 +1277,8 @@ components:
           $ref: '#/components/schemas/BinderBorderWidth'
         previewPhysicalPage:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
+        notes:
+          $ref: '#/components/schemas/BinderNotes'
     ExportBinderPdfRequest:
       type: object
       additionalProperties: false
@@ -1317,6 +1328,7 @@ components:
         - borderRadius
         - borderWidth
         - previewPhysicalPage
+        - notes
         - createdAt
         - updatedAt
       properties:
@@ -1354,6 +1366,8 @@ components:
           $ref: '#/components/schemas/BinderBorderWidth'
         previewPhysicalPage:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
+        notes:
+          $ref: '#/components/schemas/BinderNotes'
         createdAt:
           type: string
           format: date-time

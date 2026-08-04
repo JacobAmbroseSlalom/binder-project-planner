@@ -46,6 +46,13 @@ export const binders = sqliteTable(
     // `resolveSpread`). Bounded by `pages` (below), so its check
     // constraint must reference both columns.
     previewPhysicalPage: integer().notNull(),
+    // Story 23: free-form Markdown-source notes for the binder. Nullable
+    // (an exactly-empty notes string is normalized to null by the backend);
+    // the 1,000,000-character limit is enforced at the OpenAPI/app layers
+    // rather than a DB check constraint, matching the other nullable text
+    // columns (e.g. `art.description`) and keeping this a simple in-place
+    // ALTER migration rather than a table-recreate.
+    notes: text(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
   },

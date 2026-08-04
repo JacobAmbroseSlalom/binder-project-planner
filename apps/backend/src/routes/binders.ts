@@ -8,6 +8,7 @@ import {
   ART_PRINT_PAGE_MARGIN_INCHES,
   ART_PRINT_TILE_OVERLAP_INCHES,
   BINDER_NAME_MAX_LENGTH,
+  BINDER_NOTES_MAX_LENGTH,
   DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
   DEFAULT_BORDER_COLOR,
   DEFAULT_BORDER_RADIUS_PERCENT,
@@ -54,6 +55,7 @@ interface CreateBinderRequestBody {
   borderRadius?: number;
   borderWidth?: number;
   previewPhysicalPage?: number;
+  notes?: string | null;
 }
 
 // The validated, OpenAPI-typed shape of an update-binder request body
@@ -74,6 +76,7 @@ interface UpdateBinderRequestBody {
   borderRadius?: number;
   borderWidth?: number;
   previewPhysicalPage?: number;
+  notes?: string | null;
 }
 
 // The raw database row shape (includes the internal `normalizedName`
@@ -94,6 +97,7 @@ interface BinderRow {
   borderRadiusHundredths: number;
   borderWidthHundredths: number;
   previewPhysicalPage: number;
+  notes: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -137,6 +141,7 @@ function serializeBinder(row: BinderRow) {
     borderRadius: fromHundredths(row.borderRadiusHundredths),
     borderWidth: fromHundredths(row.borderWidthHundredths),
     previewPhysicalPage: row.previewPhysicalPage,
+    notes: row.notes,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -355,6 +360,9 @@ export function createBindersRouter(
       borderRadiusHundredths: toHundredths(borderRadius),
       borderWidthHundredths: toHundredths(borderWidth),
       previewPhysicalPage,
+      // Story 23: notes aren't part of binder creation (they're edited on
+      // the Edit Layout tab), so a new binder always starts with none.
+      notes: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -431,6 +439,26 @@ export function createBindersRouter(
     if (body.width !== undefined) updates.width = body.width;
     if (body.height !== undefined) updates.height = body.height;
     if (body.pages !== undefined) updates.pages = body.pages;
+
+    // Story 23: notes. An exactly-empty string is normalized to null;
+    // non-empty Markdown is stored as-is without trimming leading/trailing
+    // whitespace. The OpenAPI schema already enforces the 1,000,000-char
+    // maximum, but it's re-checked here as defense-in-depth (a null value
+    // clears the notes and is always within bounds).
+    if (body.notes !== undefined) {
+      if (body.notes !== null && body.notes.length > BINDER_NOTES_MAX_LENGTH) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(
+            badRequestProblem(
+              `Binder notes must be ${BINDER_NOTES_MAX_LENGTH} characters or fewer.`,
+            ),
+          );
+        return;
+      }
+      updates.notes = body.notes === '' ? null : body.notes;
+    }
 
     // Cross-field dimension validation (story 24) runs against the
     // *effective* values - existing persisted values overridden by any

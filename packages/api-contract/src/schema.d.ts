@@ -434,6 +434,8 @@ export interface components {
         BinderBorderWidth: number;
         /** @description Story 20: one-based physical focal page resolved to the same single page or two-page spread as layout navigation. Must be between 1 and twice the binder's stored page count; the backend resets it to the shared DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE value when reducing the stored page count would otherwise make the saved value invalid. */
         BinderPreviewPhysicalPage: number;
+        /** @description Story 23: free-form Markdown-source notes for the binder, or null when unset. An exactly-empty string sent on update is normalized to null by the backend; non-empty content is stored as-is without trimming. */
+        BinderNotes: string | null;
         CreateBinderRequest: {
             /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
             name: string;
@@ -477,6 +479,7 @@ export interface components {
             borderRadius?: components["schemas"]["BinderBorderRadius"];
             borderWidth?: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage?: components["schemas"]["BinderPreviewPhysicalPage"];
+            notes?: components["schemas"]["BinderNotes"];
         };
         /** @description `POST /binders/{binderId}/exports/pdf`'s request body (story 29). */
         ExportBinderPdfRequest: {
@@ -506,6 +509,7 @@ export interface components {
             borderRadius: components["schemas"]["BinderBorderRadius"];
             borderWidth: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage: components["schemas"]["BinderPreviewPhysicalPage"];
+            notes: components["schemas"]["BinderNotes"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */

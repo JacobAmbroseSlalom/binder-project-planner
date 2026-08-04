@@ -890,7 +890,7 @@ bullet under Technical requirements is superseded by that later refactor.
 
 ### 23. Add binder notes
 
-**Status:** Not started
+**Status:** Done (2026-08-03 23:51 EDT) - with one known gap: the locked-binder behavior (hiding the notes toggle and section, and not mounting them, while a binder is locked) isn't implemented because story 32 ("Lock a binder") hasn't been built - there's no `locked` column on `binders` yet, so notes are always shown/editable for now. Everything else is implemented: a nullable `notes` Markdown column (migration `0010_lumpy_deathstrike.sql`, a simple in-place `ALTER`) returned in the binder-details response and the shared binder context and saved through the existing `PATCH /binders/{binderId}` (empty string normalized to null, 1,000,000-char limit via `BINDER_NOTES_MAX_LENGTH` in the OpenAPI contract and backend validation); a `notes` layout-route query param that defaults to visible and hides on `notes=false` (any other value is treated as visible and stripped from the URL), toggled by a "Show notes" checkbox in the layout toolbar; and a full-width `BinderNotesSection` textarea below the layout grid that saves on blur when changed, using the shared save-status toast with the same serialized/coalesced one-in-flight save behavior as the Edit Details tab.
 
 #### Acceptance criteria
 

@@ -41,6 +41,7 @@ import { CreateArtModal } from './art/CreateArtModal';
 import { PrintArtModal } from './art/PrintArtModal';
 import { UnplacedArtPanel } from './art/UnplacedArtPanel';
 import { BinderLayoutSummaryStats } from './BinderLayoutSummaryStats';
+import { BinderNotesSection } from './BinderNotesSection';
 import { BinderSide } from './BinderSide';
 import { BulkAddFailuresModal } from './card/BulkAddFailuresModal';
 import { CardSelectionModal } from './card/CardSelectionModal';
@@ -559,6 +560,14 @@ export function BinderLayoutView() {
   const michiIndicatorsVisible = rawMichi === 'true';
   const michiNeedsCleanup = rawMichi !== null && !michiIndicatorsVisible;
 
+  // Story 23's notes-visibility toggle: unlike michi/variations, notes
+  // default to VISIBLE - only an explicit `notes=false` hides the panel.
+  // Any other value is treated as visible and (like an invalid `michi`)
+  // stripped from the URL by the cleanup effect below.
+  const rawNotes = searchParams.get('notes');
+  const notesVisible = rawNotes !== 'false';
+  const notesNeedsCleanup = rawNotes !== null && rawNotes !== 'false';
+
   // Keeps the URL in sync: replaces (never pushes, so navigating spreads
   // never grows browser history) the `page` query parameter whenever the
   // requested value needed correcting, or to restore a focal page retained
@@ -567,13 +576,17 @@ export function BinderLayoutView() {
   // actually needed - an unrelated `michi` cleanup must not add `?page=1`
   // when the parameter was legitimately absent.
   useEffect(() => {
-    if (replacementPage === undefined && !michiNeedsCleanup) return;
+    if (replacementPage === undefined && !michiNeedsCleanup && !notesNeedsCleanup) return;
 
     const params = new URLSearchParams(searchParams);
     if (replacementPage !== undefined) params.set('page', String(replacementPage));
     if (michiNeedsCleanup) params.delete('michi');
+    // Story 23: strip any `notes` value other than `false` (which is kept
+    // to persist the hidden state); the derivation above already treats it
+    // as visible, so removing it just tidies the URL.
+    if (notesNeedsCleanup) params.delete('notes');
     router.replace(`${pathname}?${params.toString()}`);
-  }, [replacementPage, michiNeedsCleanup, pathname, router, searchParams]);
+  }, [replacementPage, michiNeedsCleanup, notesNeedsCleanup, pathname, router, searchParams]);
 
   // Records the displayed physical page as the route's retained layout
   // focal page, but only once it's explicit in the URL - the very first,
@@ -676,6 +689,20 @@ export function BinderLayoutView() {
     router.replace(`${pathname}?${params.toString()}`);
   }
 
+  // Flips the notes-visibility toggle (story 23): since notes default to
+  // visible, HIDING sets `notes=false` and SHOWING removes the parameter -
+  // the inverse of the michi/variations toggles above. History replacement
+  // and copying the current params preserve every other query parameter.
+  function toggleNotesVisible() {
+    const params = new URLSearchParams(searchParams);
+    if (notesVisible) {
+      params.set('notes', 'false');
+    } else {
+      params.delete('notes');
+    }
+    router.replace(`${pathname}?${params.toString()}`);
+  }
+
   // Generates and downloads the binder's layout PDF (story 29): drives the
   // shared save-status toast exactly like every other mutation (a
   // persistent "saving" toast the whole time, replaced by "saved" on
@@ -743,7 +770,7 @@ export function BinderLayoutView() {
           slotAspectRatio={slotAspectRatio}
         />
 
-        <div className="flex h-full min-h-0 flex-col gap-4">
+        <div className={`flex h-full min-h-0 flex-col ${notesVisible ? 'gap-2' : 'gap-4'}`}>
           {/* The Michi-indicator toggle (story 10) and the direct page-number
               input (story 9), side by side on their own row above the binder
               visualization. */}
@@ -789,6 +816,26 @@ export function BinderLayoutView() {
               <span className="flex flex-col text-caption leading-tight text-neutral-500">
                 <span>Show card</span>
                 <span>variations</span>
+              </span>
+            </label>
+
+            {/* Story 23's toggle: same custom-styled checkbox as the toggles
+                above, but defaults to ON (notes are visible unless the URL
+                has `notes=false`), so `checked` follows `notesVisible`. */}
+            <label htmlFor="notes-visible-toggle" className="flex items-center gap-2">
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                <input
+                  id="notes-visible-toggle"
+                  type="checkbox"
+                  checked={notesVisible}
+                  onChange={toggleNotesVisible}
+                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                />
+                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+              </span>
+              <span className="flex flex-col text-caption leading-tight text-neutral-500">
+                <span>Show</span>
+                <span>notes</span>
               </span>
             </label>
 
@@ -871,7 +918,7 @@ export function BinderLayoutView() {
               so its own `items-center` correctly centers the chevrons
               against the actual rendered grid height, with no artificial
               extra space to throw that off. */}
-          <div className="flex h-full min-h-0 flex-1 items-start justify-center">
+          <div className="flex shrink-0 items-start justify-center">
             <div className="flex w-full items-center justify-center gap-4">
               <button
                 type="button"
@@ -979,6 +1026,11 @@ export function BinderLayoutView() {
               </button>
             </div>
           </div>
+
+          {/* Story 23: the notes section, within the center column below
+                the spread (not spanning the unplaced side panels), shown
+                unless the notes toggle is off. */}
+          {notesVisible && <BinderNotesSection />}
         </div>
 
         <UnplacedArtPanel

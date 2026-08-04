@@ -26,6 +26,12 @@ export const BINDER_NAME_MAX_LENGTH = 100;
 // count has no fixed maximum.
 export const BINDER_DIMENSION_MAX = 8;
 
+// Story 23: "Add binder notes". Maximum length of a binder's free-form
+// Markdown-source notes, shared by the frontend textarea/validation, the
+// OpenAPI request/response contract, and backend validation. An exactly
+// empty notes string is normalized to `null` rather than stored.
+export const BINDER_NOTES_MAX_LENGTH = 1_000_000;
+
 // Timing for the shared loading component (story 6: "Add reusable loading
 // feedback"). A pending request only shows the spinner after it has been
 // pending this long, avoiding a flash of loading state for fast requests.

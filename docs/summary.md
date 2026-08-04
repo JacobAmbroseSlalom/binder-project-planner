@@ -30,7 +30,6 @@ Story #26 was wayyyyy tooo big
 
 # Title
 
-40 Add summary stats on Binder Layout Page
 23 Add binder notes
 31 Search and filter unplaced items
 27 Handle binder size and page-count changes

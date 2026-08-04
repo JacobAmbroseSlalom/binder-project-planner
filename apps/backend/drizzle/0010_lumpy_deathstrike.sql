@@ -1,0 +1,1 @@
+ALTER TABLE `binders` ADD `notes` text;
