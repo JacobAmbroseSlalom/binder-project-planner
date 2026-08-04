@@ -3,6 +3,22 @@ import { Check } from 'lucide-react';
 
 import type { Art, Binder, Card } from '@/lib/api';
 
+// Compact metric token with an immediate custom tooltip on hover/focus,
+// without changing the token's own visual styling.
+function MetricAbbr({ value, suffix, tooltip }: { value: number; suffix: string; tooltip: string }) {
+  return (
+    <span className="group relative inline-block" tabIndex={0} aria-label={`${value} ${tooltip}`}>
+      <span>
+        {value}
+        {suffix}
+      </span>
+      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 -translate-x-1/2 rounded-standard bg-neutral-900 px-2 py-1 text-caption text-neutral-100 opacity-0 shadow-panel transition-opacity duration-75 group-hover:opacity-100 group-focus-visible:opacity-100">
+        {tooltip}
+      </span>
+    </span>
+  );
+}
+
 // The "Edit Layout" tab's summary stats line (story 40), rendered directly
 // above the spread page label. Computed entirely client-side from the cards
 // and art already loaded in the binder route context plus the binder's
@@ -47,6 +63,13 @@ export function BinderLayoutSummaryStats({
   const emptySlots = totalSlots - occupiedSlots;
   const slotCompletionPercent = Math.round((occupiedSlots / totalSlots) * 100);
   const isFull = occupiedSlots === totalSlots;
+  const placedCards = cards.filter((card) => card.placement.physicalPage !== null).length;
+  const placedArtItems = art.filter((item) => item.placement.physicalPage !== null);
+  const placedArt = placedArtItems.length;
+  const placedArtSlots = placedArtItems.reduce(
+    (sum, item) => sum + item.widthSlots * item.heightSlots,
+    0,
+  );
 
   // Unplaced items are those with an all-null placement.
   const unplacedCards = cards.filter((card) => card.placement.physicalPage === null);
@@ -62,13 +85,26 @@ export function BinderLayoutSummaryStats({
   const slotsNeeded = unplacedCards.length + artSlotsNeeded;
   const overCapacity = slotsNeeded > emptySlots;
 
+  // Abbreviated metric tokens stay compact in the UI while exposing their
+  // full meaning on hover.
+  const placedTooltip = 'Placed';
+  const unplacedTooltip = 'Unplaced';
+  const slotsTooltip = 'Slots';
+
   return (
     <div className="flex flex-wrap items-center justify-center gap-x-1 text-center text-caption">
       {/* Slots-filled figure: success-tinted with a checkmark when the
           binder is completely full, otherwise the muted secondary tone. */}
       <span className={`flex items-center gap-1 ${isFull ? 'text-success' : 'text-neutral-500'}`}>
         {isFull && <Check className="size-4" aria-hidden="true" />}
-        {occupiedSlots}/{totalSlots} slots filled ({slotCompletionPercent}%)
+        Slots: {occupiedSlots}/{totalSlots} ({slotCompletionPercent}%)
+      </span>
+      <span className="text-neutral-500" aria-hidden="true">
+        ·
+      </span>
+      <span className="text-neutral-500">
+        Cards: <MetricAbbr value={placedCards} suffix="P" tooltip={placedTooltip} /> -{' '}
+        <MetricAbbr value={unplacedCards.length} suffix="U" tooltip={unplacedTooltip} />
       </span>
       <span className="text-neutral-500" aria-hidden="true">
         ·
@@ -77,9 +113,10 @@ export function BinderLayoutSummaryStats({
           unplaced cards and art together need more slots than remain
           empty, otherwise the same muted tone. */}
       <span className={overCapacity ? 'text-error' : 'text-neutral-500'}>
-        {unplacedCards.length} unplaced {unplacedCards.length === 1 ? 'card' : 'cards'} ·{' '}
-        {unplacedArt.length} unplaced art ({artSlotsNeeded}{' '}
-        {artSlotsNeeded === 1 ? 'slot' : 'slots'})
+        Art: <MetricAbbr value={placedArt} suffix="P" tooltip={placedTooltip} /> ({' '}
+        <MetricAbbr value={placedArtSlots} suffix="s" tooltip={slotsTooltip} />) -{' '}
+        <MetricAbbr value={unplacedArt.length} suffix="U" tooltip={unplacedTooltip} /> ({' '}
+        <MetricAbbr value={artSlotsNeeded} suffix="s" tooltip={slotsTooltip} />)
       </span>
     </div>
   );

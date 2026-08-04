@@ -91,6 +91,15 @@ export function PrintArtModal({
     });
   }
 
+  // Mirrors story 18's card-selection pattern: one toggle button that
+  // switches between selecting every listed item and clearing the complete
+  // selection.
+  const allArtSelected =
+    placedArt.length > 0 && placedArt.every((item) => selectedIds.has(item.id));
+  function handleToggleSelectAll() {
+    setSelectedIds(allArtSelected ? new Set() : new Set(placedArt.map((item) => item.id)));
+  }
+
   // Generates and downloads the selected art's print PDF (story 30):
   // drives the shared save-status toast exactly like the layout toolbar's
   // own `handleExportPdf`, but on failure keeps the modal open with
@@ -133,9 +142,23 @@ export function PrintArtModal({
         className="flex max-h-[80vh] w-full max-w-4xl flex-col gap-4 rounded-standard bg-surface p-6 shadow-modal"
       >
         <h3 id="print-art-dialog-title">Print art</h3>
-        <p className="text-caption text-neutral-500">
-          Choose which placed art to include in the generated PDF.
-        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-caption text-neutral-500">
+            Choose which placed art to include in the generated PDF.
+          </p>
+          <button
+            type="button"
+            onClick={handleToggleSelectAll}
+            disabled={isPrinting || placedArt.length === 0}
+            className={`shrink-0 rounded-standard px-2 py-1 font-bold text-primary hover:brightness-110 ${
+              isPrinting || placedArt.length === 0
+                ? 'cursor-not-allowed opacity-50'
+                : 'cursor-pointer'
+            }`}
+          >
+            {allArtSelected ? 'Deselect All' : 'Select All'}
+          </button>
+        </div>
 
         {/* A CSS multi-column ("masonry") layout, not a flex-wrap grid:
             with a flex-wrap row, every tile in a row is forced to share

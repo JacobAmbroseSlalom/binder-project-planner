@@ -56,7 +56,7 @@ export const SLOT_HEIGHT_CM = 9;
 export const CARD_SEARCH_DEBOUNCE_MS = 300;
 // The trimmed query must reach this length before a TCGdex search runs at
 // all; shorter queries leave the most recent completed results visible.
-export const CARD_SEARCH_MIN_QUERY_LENGTH = 4;
+export const CARD_SEARCH_MIN_QUERY_LENGTH = 3;
 // How long the backend's in-memory TCGdex search cache retains a
 // successful normalized response for a given trimmed, case-normalized
 // query, keyed by that query.
@@ -202,6 +202,13 @@ export const DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE = true;
 // has been saved to browser local storage. Presentation-only; never
 // persisted by the backend.
 export const DEFAULT_BINDER_NOTES_VISIBLE = true;
+
+// Edit Layout presentation toggles: Michi indicators (story 10) and card
+// variation overlays (story 16) are local UI preferences, persisted in
+// browser local storage and never stored by the backend. Both default to
+// hidden on a first visit.
+export const DEFAULT_BINDER_MICHI_INDICATORS_VISIBLE = false;
+export const DEFAULT_BINDER_VARIATIONS_VISIBLE = false;
 
 // Story 33: "Export and import all application data". The version of the
 // export archive format, written into its manifest and required to match

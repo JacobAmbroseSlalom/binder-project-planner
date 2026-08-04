@@ -13,7 +13,9 @@ import {
 } from '@dnd-kit/core';
 import {
   CARD_DRAG_ACTIVATION_DISTANCE_PX,
+  DEFAULT_BINDER_MICHI_INDICATORS_VISIBLE,
   DEFAULT_BINDER_NOTES_VISIBLE,
+  DEFAULT_BINDER_VARIATIONS_VISIBLE,
 } from '@binder-project-planner/shared';
 import { Check, ChevronLeft, ChevronRight, Images, Printer, Redo2, Undo2 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -558,15 +560,13 @@ export function BinderLayoutView() {
     layoutFocalPage,
   );
 
-  // Story 10's Michi-indicator toggle: `michi=true` enables the
-  // indicators; any other value (or its absence) is disabled. An invalid
-  // non-`true` value still needs the same URL cleanup the malformed `page`
-  // value gets below, so both corrections are folded into the one effect
-  // that follows rather than risking two separate `router.replace` calls
-  // stomping on each other's stale `searchParams` snapshot.
-  const rawMichi = searchParams.get('michi');
-  const michiIndicatorsVisible = rawMichi === 'true';
-  const michiNeedsCleanup = rawMichi !== null && !michiIndicatorsVisible;
+  // Story 10's Michi-indicator toggle is a presentation preference,
+  // persisted in local storage (mirroring notes visibility) rather than
+  // encoded in the route query string.
+  const [michiIndicatorsVisible, setMichiIndicatorsVisible] = useLocalStorageBoolean(
+    'binder-layout-michi-visible',
+    DEFAULT_BINDER_MICHI_INDICATORS_VISIBLE,
+  );
 
   // Story 23's notes-visibility toggle. Unlike the michi/variations
   // toggles (which are per-view URL query params), notes visibility is a
@@ -577,21 +577,15 @@ export function BinderLayoutView() {
     DEFAULT_BINDER_NOTES_VISIBLE,
   );
 
-  // Keeps the URL in sync: replaces (never pushes, so navigating spreads
-  // never grows browser history) the `page` query parameter whenever the
-  // requested value needed correcting, or to restore a focal page retained
-  // from a previous visit to this tab; and/or drops an invalid `michi`
-  // value. `page` is only ever (re)written when a page replacement is
-  // actually needed - an unrelated `michi` cleanup must not add `?page=1`
-  // when the parameter was legitimately absent.
+  // Keeps the URL in sync for the `page` query parameter only, using
+  // history replacement so spread navigation doesn't grow browser history.
   useEffect(() => {
-    if (replacementPage === undefined && !michiNeedsCleanup) return;
+    if (replacementPage === undefined) return;
 
     const params = new URLSearchParams(searchParams);
     if (replacementPage !== undefined) params.set('page', String(replacementPage));
-    if (michiNeedsCleanup) params.delete('michi');
     router.replace(`${pathname}?${params.toString()}`);
-  }, [replacementPage, michiNeedsCleanup, pathname, router, searchParams]);
+  }, [replacementPage, pathname, router, searchParams]);
 
   // Records the displayed physical page as the route's retained layout
   // focal page, but only once it's explicit in the URL - the very first,
@@ -606,6 +600,10 @@ export function BinderLayoutView() {
   const spread = resolveSpread(physicalPage, maxPhysicalPage);
   const isFirstSpread = spread.left === null;
   const isLastSpread = spread.right === null;
+  // The denominator in the page label uses total physical pages (stored
+  // pages × 2), so users see progress against the binder's actual page
+  // count, e.g. `Pages 2–3 / 40` for a 20-page binder.
+  const totalPhysicalPages = maxPhysicalPage;
 
   function navigateToPhysicalPage(targetPage: number) {
     const params = new URLSearchParams(searchParams);
@@ -644,17 +642,9 @@ export function BinderLayoutView() {
     navigateToPhysicalPage(parsed);
   }
 
-  // Flips the Michi-indicator toggle (story 10): history replacement (never
-  // a push) and copying the current `searchParams` as the base preserves
-  // every other query parameter, including `page`.
+  // Flips the persisted Michi-indicator preference.
   function toggleMichiIndicators() {
-    const params = new URLSearchParams(searchParams);
-    if (michiIndicatorsVisible) {
-      params.delete('michi');
-    } else {
-      params.set('michi', 'true');
-    }
-    router.replace(`${pathname}?${params.toString()}`);
+    setMichiIndicatorsVisible(!michiIndicatorsVisible);
   }
 
   // Story 29's print-to-PDF button disables itself while its own export is
@@ -716,26 +706,17 @@ export function BinderLayoutView() {
   // and is never included in the PDF").
   const placedArt = art.filter((item) => item.placement.physicalPage !== null);
 
-  // Story 16's variations-visibility toggle: `variations=true` shows each
-  // card's variation overlaid on its image (see `CardTile`); any other
-  // value (or its absence) hides it, matching the acceptance criteria's
-  // "hidden by default". Story 29's PDF export also reads this same flag
-  // ("the frontend sets `includeVariations` from the layout route's
-  // current `variations=true` toggle state") so the printed layout matches
-  // whatever's currently visible on screen.
-  const variationsVisible = searchParams.get('variations') === 'true';
+  // Story 16's card-variation overlay toggle is a persisted presentation
+  // preference (hidden by default), and story 29's PDF export reads this
+  // same state so printed output matches what's shown on screen.
+  const [variationsVisible, setVariationsVisible] = useLocalStorageBoolean(
+    'binder-layout-variations-visible',
+    DEFAULT_BINDER_VARIATIONS_VISIBLE,
+  );
 
-  // Flips the variations toggle (story 16): mirrors `toggleMichiIndicators`
-  // above - history replacement (never a push) and copying the current
-  // `searchParams` as the base preserves every other query parameter.
+  // Flips the persisted variations-visibility preference.
   function toggleVariationsVisible() {
-    const params = new URLSearchParams(searchParams);
-    if (variationsVisible) {
-      params.delete('variations');
-    } else {
-      params.set('variations', 'true');
-    }
-    router.replace(`${pathname}?${params.toString()}`);
+    setVariationsVisible(!variationsVisible);
   }
 
   // Flips the persisted notes-visibility preference (story 23), which
@@ -971,7 +952,9 @@ export function BinderLayoutView() {
 
           {/* The current spread's label (story 9) lives on its own row,
               centered above the binder visualization. */}
-          <p className="text-center text-caption text-neutral-500">{getSpreadLabel(spread)}</p>
+          <p className="text-center text-caption text-neutral-500">
+            {getSpreadLabel(spread)} / {totalPhysicalPages}
+          </p>
 
           {/* Two nested containers split "claim the leftover height" from
               "center the visible content": the OUTER div reserves the tab's
