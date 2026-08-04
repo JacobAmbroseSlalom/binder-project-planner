@@ -40,6 +40,7 @@ import { ArtTile } from './art/ArtTile';
 import { CreateArtModal } from './art/CreateArtModal';
 import { PrintArtModal } from './art/PrintArtModal';
 import { UnplacedArtPanel } from './art/UnplacedArtPanel';
+import { BinderLayoutSummaryStats } from './BinderLayoutSummaryStats';
 import { BinderSide } from './BinderSide';
 import { BulkAddFailuresModal } from './card/BulkAddFailuresModal';
 import { CardSelectionModal } from './card/CardSelectionModal';
@@ -849,6 +850,11 @@ export function BinderLayoutView() {
               <Images className="size-5" />
             </button>
           </div>
+
+          {/* Story 40: summary stats (slots filled + unplaced counts, with
+              an over-capacity warning) on their own row above the spread
+              label. */}
+          <BinderLayoutSummaryStats binder={binder} cards={cards} art={art} />
 
           {/* The current spread's label (story 9) lives on its own row,
               centered above the binder visualization. */}

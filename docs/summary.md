@@ -34,10 +34,10 @@ Story #26 was wayyyyy tooo big
 23 Add binder notes
 31 Search and filter unplaced items
 27 Handle binder size and page-count changes
+33 Export and import all application data
 
 28 Undo and redo layout movements
 32 Lock a binder
-33 Export and import all application data
 34 Add custom art finances
 35 Add art production time statistics
 36 Track card acquisition
