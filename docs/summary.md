@@ -30,9 +30,6 @@ Story #26 was wayyyyy tooo big
 
 # Title
 
-27 Handle binder size and page-count changes
-
-28 Undo and redo layout movements
 32 Lock a binder
 34 Add custom art finances
 35 Add art production time statistics

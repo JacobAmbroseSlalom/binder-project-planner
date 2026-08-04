@@ -3,26 +3,25 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-// The 3 tabs story 7 requires, in display order. Each maps directly to one
-// of the nested routes mounted below `[binderId]/layout.tsx`; a
-// "checklist" tab is explicitly called out in planning.md as a later
-// addition ("when implemented") and intentionally isn't included here yet.
-// "View Financials" is disabled for now: per planning.md it needs card/price
-// totals that later stories haven't implemented yet, so its page is just a
-// placeholder today and shouldn't be navigable.
+// The binder tabs in display order. "Card List" and "View Financials" are
+// intentionally disabled placeholders until their stories are implemented,
+// so they render as non-interactive labels rather than links.
 const TABS = [
   { segment: 'details', label: 'Edit Details', disabled: false },
   { segment: 'layout', label: 'Edit Layout', disabled: false },
+  { segment: 'card-list', label: 'Card List', disabled: true },
   { segment: 'financials', label: 'View Financials', disabled: true },
 ] as const;
 
 // One `justify-self` value per tab position, keyed by index rather than
-// computed from label length: paired with the 3 equal grid columns below,
-// this pins the middle tab's own center to the nav's horizontal center
-// regardless of how wide the other two labels are, while pulling the first
-// and third tabs toward that center column (rather than the nav's outer
-// edges) so they sit as close to "Edit Layout" as the gap allows.
-const TAB_JUSTIFY_SELF = ['justify-self-end', 'justify-self-center', 'justify-self-start'] as const;
+// computed from label length, so labels stay visually grouped toward the
+// center while preserving left-to-right order.
+const TAB_JUSTIFY_SELF = [
+  'justify-self-end',
+  'justify-self-center',
+  'justify-self-center',
+  'justify-self-start',
+] as const;
 
 // The binder route's tab bar (story 7): links to each nested tab route so
 // the selected tab is bookmarkable/refresh-safe, and highlights whichever
@@ -33,13 +32,9 @@ export function BinderTabs({ binderId }: { binderId: string }) {
   const pathname = usePathname();
 
   return (
-    // A 3-column grid with the outer two columns matched (`1fr`) and the
-    // middle column sized to its own content (`auto`, not `1fr`) so the
-    // middle tab ("Edit Layout") stays exactly on the nav's horizontal
-    // center — the two equal flanking columns guarantee that — while its
-    // column no longer eats up a full third of the nav's width. That's what
-    // lets the outer tabs' `justify-self` (below) sit right up against it.
-    <nav className="grid w-full grid-cols-[1fr_auto_1fr] gap-10 border-b border-neutral-800 px-8 pt-4">
+    // A 4-column grid keeps tab hit areas stable as disabled placeholders
+    // are added for future stories.
+    <nav className="grid w-full grid-cols-4 gap-10 border-b border-neutral-800 px-8 pt-4">
       {TABS.map(({ segment, label, disabled }, index) => {
         const href = `/binders/${binderId}/${segment}`;
         const isActive = pathname === href;
