@@ -442,6 +442,11 @@ export function CardSelectionModal({
   // rule above treat this array's first entry as "the" card eligible for
   // `initialTarget`.
   const selectedResults = results.filter((card) => selectedIds.has(card.providerCardId));
+  // Shared disabled-state gate for the search view's Add Card action,
+  // reused by both the footer button and the result-tile Enter shortcut
+  // below so they stay behaviorally aligned.
+  const isSearchAddCardDisabled =
+    selectedResults.length === 0 || isBulkAddPending || isAddMoreSubmitting;
 
   function toggleSelected(providerCardId: string) {
     setSelectedIds((previous) => {
@@ -770,6 +775,15 @@ export function CardSelectionModal({
                             key={card.providerCardId}
                             type="button"
                             onClick={() => toggleSelected(card.providerCardId)}
+                            onKeyDown={(event) => {
+                              if (event.key !== 'Enter') return;
+                              // Once a tile has been selected, Enter should
+                              // submit via Add Card (if available) rather
+                              // than re-activating this same tile button,
+                              // which would otherwise toggle it back off.
+                              event.preventDefault();
+                              if (!isSearchAddCardDisabled) handleAddCards();
+                            }}
                             disabled={isBulkAddPending || isAddMoreSubmitting}
                             aria-pressed={isSelected}
                             // `self-start` guards against the grid default
@@ -900,7 +914,7 @@ export function CardSelectionModal({
                 </button>
                 <button
                   type="button"
-                  disabled={selectedResults.length === 0 || isBulkAddPending || isAddMoreSubmitting}
+                  disabled={isSearchAddCardDisabled}
                   onClick={handleAddCards}
                   className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
                 >

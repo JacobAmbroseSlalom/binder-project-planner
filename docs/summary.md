@@ -29,7 +29,7 @@ agressive use of comments
 Story #26 was wayyyyy tooo big
 
 # Title
-s
+
 32 Lock a binder
 34 Add custom art finances
 35 Add art production time statistics
