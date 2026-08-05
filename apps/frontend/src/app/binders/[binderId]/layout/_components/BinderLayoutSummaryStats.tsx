@@ -113,9 +113,9 @@ export function BinderLayoutSummaryStats({
           unplaced cards and art together need more slots than remain
           empty, otherwise the same muted tone. */}
       <span className={overCapacity ? 'text-error' : 'text-neutral-500'}>
-        Art: <MetricAbbr value={placedArt} suffix="P" tooltip={placedTooltip} /> ({' '}
+        Art: <MetricAbbr value={placedArt} suffix="P" tooltip={placedTooltip} /> (
         <MetricAbbr value={placedArtSlots} suffix="s" tooltip={slotsTooltip} />) -{' '}
-        <MetricAbbr value={unplacedArt.length} suffix="U" tooltip={unplacedTooltip} /> ({' '}
+        <MetricAbbr value={unplacedArt.length} suffix="U" tooltip={unplacedTooltip} /> (
         <MetricAbbr value={artSlotsNeeded} suffix="s" tooltip={slotsTooltip} />)
       </span>
     </div>
