@@ -347,8 +347,31 @@ Both requests use multipart form data.
 ### PdfExportOptions
 
 | Property            | Type    | Notes                                                                                                           |
-| ------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
 | `includeVariations` | boolean | Optional for binder-layout PDF export; defaults to `false`. It is set from the current layout variation toggle. |
+
+### CardChecklistState (Story 37)
+
+Client-only, derived entirely from the already-loaded `cards` array in
+`BinderRouteContext`; none of this state is sent to or stored by the backend except as
+the resolved `cardIds` array in `CardsPdfExportRequest` below.
+
+| Property        | Type                                                                 | Notes                                                                                                                                                       |
+| ---------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `searchQuery`     | string                                                                | Trimmed, case-insensitive; matches as a substring of `name`, `setName`, `localNumber`, or `variation` (OR logic).                                            |
+| `sortOption`      | enum: `name`, `set`, `number`, `setAndNumber`, `acquisition`          | Defaults to `setAndNumber`. Ties fall back to `Card.createdAt` ascending.                                                                                    |
+| `sortDirection`   | enum: `ascending`, `descending`                                       | Toggled by clicking the active column's header; a `null`/missing `setName` or `localNumber` always sorts last regardless of direction.                       |
+| `columnFilters`   | one value-set per column: `name`, `set`, `number`, `acquisition`     | Each is a set of selected distinct values for that column (a dedicated `"(None)"` entry represents `null`); defaults to every distinct value selected.        |
+
+Column filters combine with each other and the search query using AND logic. The
+progress tracker (acquired/total/percentage) always reflects every card in the binder,
+unaffected by any of this state.
+
+### CardsPdfExportRequest (Story 37)
+
+| Property  | Type       | Notes                                                                                                                    |
+| --------- | ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `cardIds` | `string[]` | The client's currently filtered and sorted card IDs, in display order; the backend renders exactly these cards, in this order, without recomputing search, sort, or filter state. |
 
 ### HealthResponse
 
@@ -467,7 +490,6 @@ and resets on binder-route unmount, page refresh, or a full binder reload.
 | Area                           | Required future types or fields                                                                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Full-data export and import    | Archive manifest, schema-version record, archive entry inventory, identifier and storage-path remapping, import preview, and transaction outcome. |
-| Card checklist                 | Checklist route state, sorting options, filters, display entry, progress data, and PDF export request.                                            |
 | Card finances                  | Pricing-provider match, price quote, saved price, price source, retrieval time, refresh preview, and financial totals.                            |
 
 ## Relationship Summary
@@ -482,4 +504,4 @@ erDiagram
 ```
 
 The exact database technology, table names, image-derivative representation, financial
-model, acquisition model, checklist model, and archive schema remain open decisions.
+model, and archive schema remain open decisions.

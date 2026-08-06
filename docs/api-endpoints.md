@@ -68,6 +68,7 @@ truth; update this reference when a story adds, removes, or changes a route.
 | ------ | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `POST` | `/binders/{binderId}/exports/pdf`     | Generates the binder-layout PDF from a request-start persisted snapshot. Accepts JSON `{ "includeVariations": boolean }`, with `false` as the default, and returns a downloadable PDF named from the sanitized binder name followed by " Binder" (e.g. "Umbreon Binder.pdf").                                                                                                                              |
 | `POST` | `/binders/{binderId}/exports/art-pdf` | Generates a downloadable PDF containing only the request's selected, currently placed multi-slot art from a request-start persisted snapshot, packed across as many pages as needed. Accepts JSON `{ "selectedArtIds": string[] }`; the filename is the sanitized binder name followed by `-art.pdf`. The request fails when `selectedArtIds` is empty or any id isn't currently placed art in the binder. |
+| `POST` | `/binders/{binderId}/exports/cards-pdf` | Generates a downloadable Card Checklist PDF (24 cards per page, 4 columns by 6 rows) from a request-start persisted snapshot. Accepts JSON `{ "cardIds": string[] }` — the client's currently filtered and sorted card IDs, rendered in that exact order without the backend recomputing search, sort, or filter state (Story 37); the filename is the sanitized binder name followed by `-cards.pdf`. |
 
 ## Finances (Story 34)
 
@@ -92,5 +93,5 @@ update only; delete is deferred to story 44 ("Delete custom art finance cost ent
 ## Planned Endpoint Gaps
 
 The following planned features do not yet specify an endpoint path and are intentionally
-absent from this reference: full-data export and import, card acquisition, card
-checklists, card finances, and deleting custom art finance cost entries.
+absent from this reference: full-data export and import, card finances, and deleting
+custom art finance cost entries.
