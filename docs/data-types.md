@@ -1,11 +1,14 @@
 # Data Types Reference
 
-This is a planning-derived inventory of the application's objects and properties. It is
-not a database schema or generated API type definition. The OpenAPI specification and
-selected database technology will remain authoritative during implementation.
+This is a story-derived inventory of the application's objects and properties, drawn
+from the story files under [docs/stories/](stories/) (see
+[docs/stories/README.md](stories/README.md) for the full index). It is not a database
+schema or generated API type definition. The OpenAPI specification and selected
+database technology will remain authoritative during implementation.
 
 Fields marked **TBD** are required by planned behavior but do not yet have a settled
-shape, name, or persistence contract in [planning.md](planning.md).
+shape, name, or persistence contract in the relevant story file under
+[docs/stories/](stories/).
 
 ## Shared Conventions
 

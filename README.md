@@ -116,7 +116,8 @@ The response reports how many files and database rows were deleted:
 
 ## Project documentation
 
-- [Product planning and story backlog](docs/planning.md)
+- [Product planning and tech stack](docs/planning.md)
+- [Story index](docs/stories/README.md)
 - [API endpoint index](docs/api-endpoints.md)
 - [Data types and modeling decisions](docs/data-types.md)
 - [Story requirements workflow](docs/story-requirements-workflow.md)

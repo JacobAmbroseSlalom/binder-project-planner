@@ -1,8 +1,9 @@
 # API Endpoint Reference
 
-This is a planning-derived index of every explicitly specified endpoint in
-[planning.md](planning.md). The OpenAPI specification will be the implementation source
-of truth; update this reference when planning adds, removes, or changes a route.
+This is a story-derived index of every explicitly specified endpoint across the story
+files under [docs/stories/](stories/) (see [docs/stories/README.md](stories/README.md)
+for the full index). The OpenAPI specification will be the implementation source of
+truth; update this reference when a story adds, removes, or changes a route.
 
 ## Conventions
 

@@ -2,13 +2,18 @@
 
 ## Canonical sources
 
-- `docs/planning.md` is the canonical product backlog and technical-decisions document.
-  Read the active story and nearby related stories before asking questions.
-- Each story in `docs/planning.md` carries a `**Status:**` marker (`Not started`,
-  `In progress`, or `Done`) tracking implementation progress in place. This is a
-  separate axis from the requirements-writing progress tracked below; do not move,
-  delete, or split out a story's content when it reaches `Done` — later stories keep
-  citing its confirmed contracts.
+- `docs/planning.md` holds the product vision, tech stack, and definition of done.
+  Stories themselves live one-per-file under `docs/stories/`, in three bucket folders:
+  `docs/stories/needs-refinement/` (requirements not yet fully defined),
+  `docs/stories/ready-for-dev/` (requirements complete, implementation not yet done),
+  and `docs/stories/completed/` (implemented). `docs/stories/README.md` is the index of
+  every story file and its current bucket — check it, and the active story's file,
+  before asking questions.
+- Each story file carries a `**Status:**` marker (`Not started`, `In progress`, or
+  `Done`) tracking implementation progress in place. This is a separate axis from the
+  requirements-writing bucket (which folder the file lives in); do not delete or split
+  out a story's content when it reaches `Done` — later stories keep citing its
+  confirmed contracts.
 - `.github/copilot-instructions.md` records the planned stack and onboarding guidance.
 - `.github/instructions/coding-conventions.instructions.md` requires all
   application-owned defaults to live in one shared canonical `defaults.ts` once
@@ -18,13 +23,18 @@
 
 ## Interview workflow
 
-- Develop technical requirements story by story, in backlog order, through one question
-  at a time.
+- Develop technical requirements story by story, working through
+  `docs/stories/needs-refinement/` in ascending story-number order unless the user
+  directs otherwise, through one question at a time.
 - Ask a concrete multiple-choice question with a recommended option and short tradeoff
   descriptions; allow a freeform correction.
 - Treat user corrections as authoritative even when they reverse an earlier answer.
-- After every answer, immediately patch `docs/planning.md`, run focused validation on
-  that file, briefly report what changed, and ask the next single question.
+- After every answer, immediately patch the active story's own file under
+  `docs/stories/needs-refinement/`, run focused validation on that file, briefly report
+  what changed, and ask the next single question.
+- When a story's acceptance criteria and technical requirements are both fully
+  resolved (no remaining TBDs), move its file from `docs/stories/needs-refinement/` into
+  `docs/stories/ready-for-dev/` and update its row in `docs/stories/README.md`.
 - After the workspace's Prettier toolchain is scaffolded, run `pnpm format` after
   documentation or code edits that it supports; use `pnpm format:check` when a
   non-mutating formatting check is needed.
@@ -50,37 +60,19 @@
 
 ## Current stopping point
 
-Status as of 2026-07-24:
+Story content, including which stories already have fully resolved acceptance criteria
+and technical requirements, now lives in the story files themselves rather than in a
+narrative summary here:
 
-- Technical requirements have been developed from Project Setup through Search and
-  filter unplaced items.
-- Binder-layout PDF export is substantially specified, including a dedicated POST
-  endpoint, current UI variation-toggle inference, temporary-file generation, atomic
-  image-integrity failure, request-start snapshot consistency, locked-binder
-  availability, and binder-name download filename.
-- Multi-slot-art print export is substantially specified, but implementation is
-  explicitly blocked by a critical packing-capacity TBD. Default exact-size 2-by-2,
-  2-by-1, and 1-by-1 capacity targets conflict with US Letter landscape once physical
-  dimensions, margins, and gaps are honored. Do not treat those capacity targets as
-  resolved.
-- The art-print story currently selects US Letter landscape, placed art only, 90-degree
-  rotation, deterministic heuristic packing, 0.25-inch margins and gaps, exact-scale
-  tiling for oversized art with 0.25-inch overlap, no labels or crop marks, and allowance
-  for other art in unused tile-page regions.
-- A separate critical TBD remains for the physical or rendered basis of multi-slot-art
-  border-width percentage.
-- Search and filter unplaced items is complete: client-side, case-insensitive substring
-  terms with AND semantics across fields, ephemeral state, segmented All, Cards, and Art
-  control, `useDeferredValue`, and a Clear filters empty state.
-- Story 32, `Lock a binder`, has complete technical requirements. They use the existing binder
-  PATCH with a required `locked` boolean; optimistic per-binder action disabling;
-  last-write-wins state updates; `409 Conflict` enforcement and stale-state reloads;
-  disabled details fields; hidden layout-editing controls; preserved read-only display
-  controls; allowed acquisition and price changes; and a compact Lock plus `Locked`
-  status on the binder page. Lock-specific automated coverage was intentionally left
-  unspecified.
-- Resume technical-requirements questions at `### Export and import all application
-data` unless the user directs otherwise.
+- Every file in `docs/stories/completed/` and `docs/stories/ready-for-dev/` has
+  fully resolved acceptance criteria and technical requirements. Read the story file
+  directly for its confirmed contracts instead of relying on a summary in this doc.
+- Resume technical-requirements questions with the lowest-numbered story file in
+  `docs/stories/needs-refinement/` (check `docs/stories/README.md` for the current
+  list) unless the user directs otherwise.
+- Update this section only if the resume point needs to differ from "lowest-numbered
+  file in `needs-refinement/`" — e.g. the user asks to work a specific story out of
+  order.
 
 ## Consistency notes
 
@@ -89,8 +81,7 @@ data` unless the user directs otherwise.
 - Read-only binder-layout and placed-art PDF exports remain available when a binder is
   locked.
 - Existing requirements contain cross-story API and mutation rules. Before adding a new
-  requirement, search `docs/planning.md` for the affected endpoint, lock behavior,
-  toast or loading behavior, idempotency, and optimistic rollback to avoid
-  contradictions.
-- Validate Markdown after every patch with workspace diagnostics. Diagnostics were clean
-  at the pause point.
+  requirement, search story files under `docs/stories/completed/` and
+  `docs/stories/ready-for-dev/` for the affected endpoint, lock behavior, toast or
+  loading behavior, idempotency, and optimistic rollback to avoid contradictions.
+- Validate Markdown after every patch with workspace diagnostics.

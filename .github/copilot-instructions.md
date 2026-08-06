@@ -35,14 +35,19 @@ file to match what was actually built.
 ## Working conventions
 
 - Planning and requirements live in [docs/](../docs). Check
-  [docs/planning.md](../docs/planning.md) before starting new work — it holds the story
-  backlog and product notes.
-- The planning-derived endpoint index is [docs/api-endpoints.md](../docs/api-endpoints.md).
-  Keep it synchronized with explicitly defined routes in `docs/planning.md`; the future
-  OpenAPI specification remains the implementation source of truth.
-- The planning-derived object and property index is [docs/data-types.md](../docs/data-types.md).
-  Keep it synchronized with confirmed data-model decisions in `docs/planning.md`; do
-  not treat fields marked **TBD** as implemented contracts.
+  [docs/planning.md](../docs/planning.md) before starting new work — it holds the
+  product vision, tech stack, and definition of done.
+- Stories live one-per-file under [docs/stories/](../docs/stories/), in three bucket
+  folders: `needs-refinement/`, `ready-for-dev/`, and `completed/`. The index at
+  [docs/stories/README.md](../docs/stories/README.md) lists every story file and its
+  current bucket — check it, and the active story's file, before starting new work.
+- The story-derived endpoint index is [docs/api-endpoints.md](../docs/api-endpoints.md).
+  Keep it synchronized with explicitly defined routes in the story files under
+  `docs/stories/`; the future OpenAPI specification remains the implementation source
+  of truth.
+- The story-derived object and property index is [docs/data-types.md](../docs/data-types.md).
+  Keep it synchronized with confirmed data-model decisions in the story files under
+  `docs/stories/`; do not treat fields marked **TBD** as implemented contracts.
 - When continuing the story technical-requirements interview, follow
   [docs/story-requirements-workflow.md](../docs/story-requirements-workflow.md) for the
   one-question workflow, current stopping point, and unresolved decisions.
@@ -51,8 +56,10 @@ file to match what was actually built.
   Apply them whenever writing, reviewing, or refactoring application code.
 - Always add helpful comments to code blocks, especially to explain their purpose,
   control flow, and non-obvious implementation decisions.
-- Prefer small, incremental changes. Add new stories to the bottom of the backlog in
-  `docs/planning.md` unless the user specifies a different position.
+- Prefer small, incremental changes. Add new stories as new files in
+  `docs/stories/needs-refinement/` (updating the index at
+  [docs/stories/README.md](../docs/stories/README.md)) unless the user specifies a
+  different bucket.
 - Once a build/test/lint toolchain exists, document the exact commands here so future
   sessions don't need to rediscover them.
 - After the workspace is scaffolded, run `pnpm format` after repository edits that
