@@ -1682,6 +1682,18 @@ carried over for a later story to close:
 
 - TBD: Define technical requirements.
 
+### 43. Add a card from other API sources
+
+**Status:** Not started
+
+#### Acceptance criteria
+
+- TBD: Define acceptance criteria.
+
+#### Technical requirements
+
+- TBD: Define technical requirements.
+
 Add new stories as they come up, following the same format, starting with `**Status:**
 Not started` under the heading.
 
