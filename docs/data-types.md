@@ -43,11 +43,17 @@ shape, name, or persistence contract in the relevant story file under
 | `borderColor`         | `#RRGGBB` string          | Yes      | Six-digit uppercase hexadecimal color; default `#FFCB05`.                                                                                                                                      |
 | `borderRadius`        | decimal percentage        | Yes      | `0` through `100`; default `38`.                                                                                                                                                               |
 | `borderWidth`         | decimal centimeters       | Yes      | `0` or greater; default `0.25`. A physical measurement (not a percentage or fixed pixel count) converted to pixels at render time using the same cm-to-px scale factor as the art's own image. |
+| `selectedBinderCostEntryId`             | UUID or `null`   | Yes      | Selected `BinderCostEntry` for this binder's Finances tab; nulled server-side when a width/height/pages change no longer matches the selected entry's stored dimensions.                        |
+| `selectedPrintingCostEntryId`           | UUID or `null`   | Yes      | Selected `PrintingCostEntry` for this binder's Finances tab.                                                                                                                                     |
+| `selectedHolographicPaperCostEntryId`   | UUID or `null`   | Yes      | Selected `HolographicPaperCostEntry` for this binder's Finances tab.                                                                                                                             |
+| `cachedArtPrintPageCount`               | nonnegative integer | Yes  | Cached result of `GET /binders/{binderId}/art-print-page-count`, recomputed only when the cache signature below no longer matches.                                                              |
+| art-print page-count cache signature    | derived value    | Yes      | `COUNT` of currently-placed art rows plus `MAX(updatedAt)` across them plus the binder's own `updatedAt`; not a stored column, computed on read to detect staleness cheaply.                    |
 | `createdAt`           | UTC timestamp             | Yes      | Backend-managed.                                                                                                                                                                               |
 | `updatedAt`           | UTC timestamp             | Yes      | Backend-managed; changes when lock state changes.                                                                                                                                              |
 
 **Relationships:** A binder owns cards and multi-slot art. It references neither image
-files nor image-asset storage paths directly.
+files nor image-asset storage paths directly. It also optionally references one shared
+`BinderCostEntry`, `PrintingCostEntry`, and `HolographicPaperCostEntry` (Story 34).
 
 ### PlacementCoordinates
 
@@ -129,6 +135,57 @@ TCGdex cards, and multi-slot art. Its exact schema is not yet settled.
 | sanitized original filename                 | string or `null`                       | Stored for custom uploads as metadata only.                                        |
 | original source file                        | local file reference                   | Exact uploaded or downloaded bytes remain available.                               |
 | orientation-normalized rendering derivative | local file reference or related record | Created when JPEG EXIF orientation requires it; exact representation is **TBD**.   |
+
+### FinanceSettings
+
+A single global singleton record (Story 34) shared across every binder; no per-record ID
+is exposed in the API.
+
+| Property             | Type              | Required | Notes                                                                                                                     |
+| -------------------- | ----------------- | -------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `wagePerHour`        | nonnegative currency (integer cents) | Yes | Shared across all binders' time-based cost calculations; default `0`.                                       |
+| `errorMarginPercent` | integer percentage, `0` to `100` | Yes | Defaults to `10`; shared across all binders and applied to Printing and Holographic Paper costs as `ceil(pageCount * errorMarginPercent / 100)` extra whole pages. |
+| rate basis per time-cost category | nested record, one per category | Yes | Each of the 5 fixed categories (`designing`, `printing`, `applyingHolographicPaper`, `cutting`, `placing`) holds its own `referenceMinutes` (nonnegative integer, default `0`) and `referencePages` (positive integer, default `1`). |
+
+**Constraints:** The 5 time-cost categories are a fixed enum baked into schema and code;
+adding, renaming, or removing one requires a future code change and migration, not an
+in-app action. The initial row's seed values are set directly in the database
+migration/seed rather than in the shared `defaults.ts`, as a documented one-off exception
+to the `defaults.ts` centralization convention.
+
+### BinderCostEntry
+
+A shared, reusable catalog entry (Story 34) selectable from any binder's Finances tab.
+
+| Property | Type                        | Required | Notes                                                                                     |
+| -------- | --------------------------- | -------- | ------------------------------------------------------------------------------------------ |
+| `id`     | UUID                        | Yes      | Backend-generated.                                                                        |
+| `name`   | string                      | Yes      | Trimmed, 1 to 100 characters; duplicate names across entries are allowed.                 |
+| `price`  | positive currency (integer cents) | Yes | Shown to the user.                                                                         |
+| `width`  | positive integer, `1` to `8` | Yes     | Hidden from the user; used only to filter the dropdown to binders with matching dimensions. |
+| `height` | positive integer, `1` to `8` | Yes     | Hidden from the user; same filtering role as `width`.                                     |
+| `pages`  | positive integer             | Yes     | Hidden from the user; same filtering role as `width`/`height`.                             |
+
+### PrintingCostEntry
+
+A shared, reusable catalog entry (Story 34) selectable from any binder's Finances tab.
+
+| Property        | Type                          | Required | Notes                                                                    |
+| --------------- | ------------------------------ | -------- | --------------------------------------------------------------------------- |
+| `id`            | UUID                           | Yes      | Backend-generated.                                                          |
+| `name`          | string                         | Yes      | Trimmed, 1 to 100 characters; duplicate names across entries are allowed.  |
+| `pricePerPage`  | positive currency (integer cents) | Yes  | Cost is `pricePerPage * pageCount` (art-print-PDF page count for this binder). |
+
+### HolographicPaperCostEntry
+
+A shared, reusable catalog entry (Story 34) selectable from any binder's Finances tab.
+
+| Property         | Type                          | Required | Notes                                                                                            |
+| ---------------- | ------------------------------ | -------- | --------------------------------------------------------------------------------------------------- |
+| `id`             | UUID                           | Yes      | Backend-generated.                                                                                  |
+| `name`           | string                         | Yes      | Trimmed, 1 to 100 characters; duplicate names across entries are allowed.                          |
+| `price`          | positive currency (integer cents) | Yes  | Total price for a pack of `pagesIncluded` pages.                                                    |
+| `pagesIncluded`  | positive integer               | Yes      | Cost is `(price / pagesIncluded) * pageCount` (art-print-PDF page count for this binder).            |
 
 ## Derived API Representations
 
@@ -399,8 +456,6 @@ and resets on binder-route unmount, page refresh, or a full binder reload.
 | Card acquisition               | Persisted acquisition field or record, update request, and locked-binder exception contract.                                                      |
 | Card checklist                 | Checklist route state, sorting options, filters, display entry, progress data, and PDF export request.                                            |
 | Card finances                  | Pricing-provider match, price quote, saved price, price source, retrieval time, refresh preview, and financial totals.                            |
-| Custom art finances            | All types and properties.                                                                                                                         |
-| Art production time statistics | All types and properties.                                                                                                                         |
 
 ## Relationship Summary
 

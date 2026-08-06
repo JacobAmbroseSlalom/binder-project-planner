@@ -47,15 +47,15 @@ This index maps every story file to its current bucket.
 | Story | Title | File |
 | --- | --- | --- |
 | 32 | Lock a binder | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md) |
+| 34 | Add custom art finances | [docs/stories/ready-for-dev/34-add-custom-art-finances.md](ready-for-dev/34-add-custom-art-finances.md) |
 
 ## Needs Refinement
 
 | Story | Title | File |
 | --- | --- | --- |
-| 34 | Add custom art finances | [docs/stories/needs-refinement/34-add-custom-art-finances.md](needs-refinement/34-add-custom-art-finances.md) |
-| 35 | Add art production time statistics | [docs/stories/needs-refinement/35-add-art-production-time-statistics.md](needs-refinement/35-add-art-production-time-statistics.md) |
 | 36 | Track card acquisition | [docs/stories/needs-refinement/36-track-card-acquisition.md](needs-refinement/36-track-card-acquisition.md) |
 | 37 | Add a card checklist | [docs/stories/needs-refinement/37-add-a-card-checklist.md](needs-refinement/37-add-a-card-checklist.md) |
 | 38 | Add card finances | [docs/stories/needs-refinement/38-add-card-finances.md](needs-refinement/38-add-card-finances.md) |
 | 39 | Add Binder Search and Sort functions | [docs/stories/needs-refinement/39-add-binder-search-and-sort-functions.md](needs-refinement/39-add-binder-search-and-sort-functions.md) |
 | 43 | Add a card from other API sources | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md) |
+| 44 | Delete custom art finance cost entries | [docs/stories/needs-refinement/44-delete-custom-art-finance-cost-entries.md](needs-refinement/44-delete-custom-art-finance-cost-entries.md) |
