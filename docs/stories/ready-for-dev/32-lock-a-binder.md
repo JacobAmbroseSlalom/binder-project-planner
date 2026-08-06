@@ -12,8 +12,8 @@
 - The "Edit Details" tab is read-only while the binder is locked.
 - The "Edit Layout" tab is read-only while the binder is locked.
 - Controls that add, remove, duplicate, edit variations, or move cards or multi-slot art are unavailable while the binder is locked.
-- Card acquisition status can still be changed while the binder is locked.
-- API-fetched and manually entered card prices can still be updated while the binder is locked.
+- Card acquisition status can still be changed while the binder is locked, but only from the Card Checklist tab (Story 37); the layout's acquisition hover action (Story 36) does not appear while the binder is locked.
+- API-fetched and manually entered card prices can still be updated while the binder is locked, from the Card Checklist tab (Story 38); card price is never edited from the layout, regardless of lock state.
 - The delete X is hidden from the home page hover actions while the binder is locked.
 - A locked binder cannot be deleted, and the backend rejects deletion requests for it.
 - A locked binder can still be duplicated, and the new binder is created unlocked.
@@ -44,7 +44,11 @@
 - A locked binder's view/edit page displays a compact persistent Lucide `Lock` icon followed by `Locked` near the page header or tab navigation rather than a full-width read-only banner.
 - When the binder is locked, the layout does not render add, drag, edit, delete, duplicate, variation-edit, or movement controls for cards or art; the binder grid and its content remain viewable.
 - While locked, the layout hides Undo and Redo but retains its binder-scoped movement-history stacks; unlocking restores those controls with any entries not pruned by the established history rules.
-- Acquisition and price controls remain rendered and usable on the locked layout because their mutations are explicitly allowed.
+- The layout never renders a price control in any lock state; card price is edited
+  exclusively from the Card Checklist tab (Story 38). The layout's acquisition hover
+  action (Story 36) is rendered and usable only while the binder is unlocked; while
+  locked, it is omitted along with the other restricted layout controls, and
+  acquisition changes are only available from the Card Checklist tab (Story 37).
 - Locked binders retain layout page navigation and presentation-only controls, including Michi, variation-label, and acquisition-status visibility toggles, because they do not mutate persisted binder data.
 - Selecting lock or unlock optimistically replaces the binder summary's lock state and disables every home-page action for that binder until the update settles; actions for other binders remain available.
 - A successful response replaces the optimistic summary with the complete backend representation. A failure restores the prior summary and re-enables its actions while the shared failed toast reports the Problem Details `detail`.

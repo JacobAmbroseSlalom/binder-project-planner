@@ -1600,9 +1600,9 @@ components:
           default: false
           description: >-
             When true, renders each card's saved variation label below it in
-            the generated PDF, mirroring the layout route's own
-            `variations=true` toggle. The frontend sends `false` (or omits
-            the field) whenever that toggle is off.
+            the generated PDF, mirroring the layout tab's own persisted
+            (local storage) card-variations visibility toggle. The frontend
+            sends `false` (or omits the field) whenever that toggle is off.
     ExportArtPdfRequest:
       type: object
       additionalProperties: false

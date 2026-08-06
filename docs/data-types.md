@@ -84,7 +84,7 @@ the remaining covered slots are derived from the art's slot width and height.
 | `imageAsset`     | `ImageAsset` reference | Backend only | Exact exposed property name is **TBD**; storage identifiers and filenames are never exposed to the frontend.              |
 | `createdAt`      | UTC timestamp          | Yes          | Used for deterministic unplaced-item ordering.                                                                            |
 | `updatedAt`      | UTC timestamp          | Expected     | New card instances receive backend-managed UTC timestamps; exact serialization key is **TBD**.                            |
-| `acquired`       | boolean                | **TBD**      | Required by Story 36, but persistence and API details are not defined.                                                    |
+| `acquired`       | boolean                | Yes          | Defaults to `false`. Updated via `PATCH /cards/{cardId}` with `{ "acquired": boolean }`; optionally set at creation time through `POST /binders/{binderId}/cards` or the shared checkbox in `POST /binders/{binderId}/cards/bulk` (Story 36). |
 | price fields     | **TBD**                | **TBD**      | Story 38 requires saved manual and provider prices, source, and retrieval timing, but the shape is not defined.           |
 
 **Constraints:** At most one card may occupy a binder and placement-coordinate triple.
@@ -201,7 +201,7 @@ the binder graph.
 | `totalSlots`                                                                 | integer         | Canonical slot count.                                                                     |
 | `occupiedSlots`                                                              | integer         | Cards plus art-covered slots.                                                             |
 | `emptySlots`                                                                 | integer         | Total minus occupied slots.                                                               |
-| `acquiredCards`                                                              | integer         | Number of acquired card records. Acquisition model remains **TBD**.                       |
+| `acquiredCards`                                                              | integer         | Number of card records with `acquired = true` (Story 36); counts placed and unplaced cards and excludes art. |
 | `totalCards`                                                                 | integer         | All binder-owned card records, placed and unplaced.                                       |
 
 The client derives rounded slot-completion and card-acquisition percentages. Card
@@ -404,13 +404,27 @@ Created when post-commit removal of an unreferenced image file fails.
 
 ### LayoutRouteState
 
-| Query property         | Type                       | Notes                                                                                    |
-| ---------------------- | -------------------------- | ---------------------------------------------------------------------------------------- |
-| `page`                 | positive integer           | Focal physical page; defaults to `1` when absent or invalid.                             |
-| `michi`                | literal `true` or omitted  | Enables Michi indicators only when exactly `true`.                                       |
-| `variations`           | literal `true` or omitted  | Enables variation labels only when exactly `true`.                                       |
-| `notes`                | literal `false` or omitted | Hides notes only when exactly `false`; notes are otherwise visible for unlocked binders. |
-| acquisition visibility | **TBD**                    | Story 36 requires a layout toggle but does not define its URL or state shape.            |
+| Query property | Type             | Notes                                                          |
+| -------------- | ---------------- | --------------------------------------------------------------- |
+| `page`         | positive integer | Focal physical page; defaults to `1` when absent or invalid.  |
+
+Michi-indicator, variation-label, notes, and card-acquisition visibility are not part of
+this route state (despite stories 10, 16, and 29's original text describing `michi` and
+`variations` as route query parameters) — all four are persisted browser local-storage
+preferences; see `LayoutVisibilityPreferences` below.
+
+### LayoutVisibilityPreferences
+
+Four independent presentation-only preferences for the Edit Layout tab, each its own
+browser local-storage boolean (not the backend or a route query parameter), remembered
+across binders and reloads.
+
+| Property                 | Local storage key                     | Notes                                                                                                          |
+| ------------------------- | -------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `michiIndicatorsVisible`  | `binder-layout-michi-visible`          | Defaults to `DEFAULT_BINDER_MICHI_INDICATORS_VISIBLE` (Story 10).                                              |
+| `variationsVisible`       | `binder-layout-variations-visible`     | Defaults to `DEFAULT_BINDER_VARIATIONS_VISIBLE` (Story 16); also read by the layout PDF export's `includeVariations` (Story 29), which no longer reads a `variations=true` route parameter. |
+| `notesVisible`            | `binder-notes-visible`                 | Defaults to `DEFAULT_BINDER_NOTES_VISIBLE` (Story 23).                                                          |
+| `acquisitionStatusVisible`| **TBD** (Story 36)                     | Defaults to hidden until a preference is saved.                                                                 |
 
 ### HomePagePreference
 
@@ -453,7 +467,6 @@ and resets on binder-route unmount, page refresh, or a full binder reload.
 | Area                           | Required future types or fields                                                                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Full-data export and import    | Archive manifest, schema-version record, archive entry inventory, identifier and storage-path remapping, import preview, and transaction outcome. |
-| Card acquisition               | Persisted acquisition field or record, update request, and locked-binder exception contract.                                                      |
 | Card checklist                 | Checklist route state, sorting options, filters, display entry, progress data, and PDF export request.                                            |
 | Card finances                  | Pricing-provider match, price quote, saved price, price source, retrieval time, refresh preview, and financial totals.                            |
 

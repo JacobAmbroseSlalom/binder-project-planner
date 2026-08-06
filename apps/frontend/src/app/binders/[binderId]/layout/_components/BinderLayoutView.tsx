@@ -802,10 +802,10 @@ export function BinderLayoutView() {
           <div className="flex items-center justify-center gap-10">
             {/* Story 10's toggle: custom-styled checkbox matching the app's
               checkbox convention (styling.instructions.md's "Forms & inputs"
-              section). Defaults to off since `michiIndicatorsVisible` is only
-              true when the URL explicitly has `michi=true`. The label is
-              forced onto 2 short lines (rather than one long line) so this
-              control stays narrow next to the page input. */}
+              section). `michiIndicatorsVisible` is a persisted (local
+              storage) preference defaulting to off, not a URL query param.
+              The label is forced onto 2 short lines (rather than one long
+              line) so this control stays narrow next to the page input. */}
             <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
               <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
                 <input
@@ -824,9 +824,9 @@ export function BinderLayoutView() {
             </label>
 
             {/* Story 16's toggle: same custom-styled checkbox as the Michi
-                toggle above. Defaults to off (hidden), per the acceptance
-                criteria - `variationsVisible` is only true when the URL
-                explicitly has `variations=true`. */}
+                toggle above. `variationsVisible` is a persisted (local
+                storage) preference defaulting to off (hidden), per the
+                acceptance criteria - not a URL query param. */}
             <label htmlFor="variations-visible-toggle" className="flex items-center gap-2">
               <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
                 <input

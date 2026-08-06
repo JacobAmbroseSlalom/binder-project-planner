@@ -25,10 +25,13 @@
 
 #### Technical requirements
 
-- Michi-indicator visibility is represented by a query parameter on the layout route so it persists across refreshes and copied URLs.
-- The presence of `michi=true` enables the indicators; the `michi` parameter is omitted when they are disabled.
-- Any other `michi` value is treated as disabled and removed from the URL using history replacement.
-- Toggling Michi indicators updates the query parameters using history replacement and preserves the current `page` parameter.
+- Michi-indicator visibility is a persisted preference remembered across binders and
+  reloads via browser local storage (matching the later notes-visibility precedent,
+  Story 23), not a layout route query parameter; it is not stored by the backend and
+  defaults to hidden until a preference is saved.
+- Toggling Michi indicators updates the persisted local-storage preference; it has no
+  effect on the route's query parameters.
+- Any invalid stored value is treated as disabled.
 - A frontend pure function derives indicator gaps from the binder width and binder side at render time; Michi pair positions are not returned by the API or persisted.
 - Unit tests cover the derived pair gaps for odd and even binder widths on left-only, right-only, and two-sided spreads.
 - Indicator elements are noninteractive, excluded from the tab order, and hidden from the accessibility tree.

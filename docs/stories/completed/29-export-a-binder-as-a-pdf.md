@@ -26,8 +26,10 @@
 - Each PDF page includes the layout's physical page label, such as `Page 1` or `Pages 4-5`, above the scaled binder view within the page margins.
 - The PDF renders complete binder-side and slot boundaries, including empty slots, along with placed cards and multi-slot art.
 - Binder PDF generation accepts an `includeVariations` option; when true, a card's variation overlays the bottom edge of its own rendered image (matching the layout tab's on-screen overlay, story 16) without resizing card images or grid rows.
-- The frontend sets `includeVariations` from the layout route's current `variations=true` toggle state; no separate export-options prompt is displayed.
-- When the layout route omits `variations=true`, the frontend sends `includeVariations: false`.
+- The frontend sets `includeVariations` from the layout tab's current persisted
+  `variationsVisible` local-storage preference (Story 16); no separate export-options
+  prompt is displayed.
+- When that local-storage preference is off, the frontend sends `includeVariations: false`.
 - Acquisition indicators, Michi indicators, pending-operation feedback, and editing controls are omitted from binder-layout PDFs.
 - `POST /binders/{binderId}/exports/pdf` accepts a JSON request body containing `includeVariations` and streams the generated binder-layout PDF in the response.
 - The OpenAPI request schema defines `includeVariations` as an optional boolean with a default of `false`.

@@ -30,9 +30,13 @@
 - Saving closes the modal and optimistically updates the card's variation in the binder context while the shared save-status toast tracks the request.
 - On success, the returned card replaces the optimistic value; on failure, the previous card is restored and the modal reopens with the attempted variation preserved.
 - Variation updates use last-write-wins semantics and do not include an expected prior value or card timestamp.
-- Variation-label visibility is enabled by `variations=true` on the layout route and defaults to hidden when the parameter is absent.
-- Toggling variation labels updates the query using history replacement and preserves the current `page` and `michi` parameters.
-- Any other `variations` value is treated as hidden and removed from the URL using history replacement.
+- Variation-label visibility is a persisted preference remembered across binders and
+  reloads via browser local storage (matching the later notes-visibility precedent,
+  Story 23), not a layout route query parameter; it is not stored by the backend and
+  defaults to hidden until a preference is saved.
+- Toggling variation labels updates the persisted local-storage preference; it has no
+  effect on the route's query parameters.
+- Any invalid stored value is treated as hidden.
 - When visible, a variation label overlays the bottom edge of its card's own image (rather than reserving space below it), so toggling labels never resizes or repositions any slot, card image, or the binder side's overall dimensions.
 - The overlay is only rendered for an occupied slot whose card has a non-null variation; empty slots and cards without one render nothing extra.
 - Variation labels remain on one line at the slot width, truncate overflow with an ellipsis, and expose the complete value in a hover tooltip.

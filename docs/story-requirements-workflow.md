@@ -76,8 +76,9 @@ narrative summary here:
 
 ## Consistency notes
 
-- Binder PDF variation visibility is inferred from the current layout route's
-  `variations=true` state; there is no separate export-options prompt.
+- Binder PDF variation visibility is inferred from the layout tab's persisted
+  `variationsVisible` local-storage preference (Story 16), not a route query parameter;
+  there is no separate export-options prompt.
 - Read-only binder-layout and placed-art PDF exports remain available when a binder is
   locked.
 - Existing requirements contain cross-story API and mutation rules. Before adding a new
