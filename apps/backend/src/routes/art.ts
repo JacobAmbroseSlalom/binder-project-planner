@@ -22,6 +22,7 @@ import {
   saveIdempotentOutcome,
 } from '../idempotency/mutationIdempotency.js';
 import { detectImageFormat } from '../images/imageFormat.js';
+import { lockedBinderConflictProblem } from '../lockedBinderProblem.js';
 import { getArtFootprintCells, getOccupiedCells } from '../placement/occupancy.js';
 
 // The validated, OpenAPI-typed shape of a create-art request body (story
@@ -387,6 +388,14 @@ export function createArtRouter(
       return;
     }
 
+    // Story 32: a locked binder rejects every art mutation, including
+    // creating one.
+    if (binder.locked) {
+      if (uploadedFiles) removeTemporaryUploads(uploadedFiles);
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+      return;
+    }
+
     const uploadedFile = uploadedFiles?.find((file) => file.fieldname === 'image');
     if (!uploadedFile) {
       // Never expected: the OpenAPI schema requires `image`, so
@@ -609,6 +618,13 @@ export function createArtRouter(
         .status(404)
         .type('application/problem+json')
         .json(problem(404, 'Not Found', 'No binder exists for this art item.'));
+      return;
+    }
+
+    // Story 32: moving/editing art is a restricted mutation too.
+    if (binder.locked) {
+      if (uploadedFiles) removeTemporaryUploads(uploadedFiles);
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
       return;
     }
 
@@ -961,6 +977,26 @@ export function createArtRouter(
   router.delete('/art/:artId', (request, response) => {
     const { artId } = request.params;
 
+    // Story 32: removing art is a restricted mutation - checked before
+    // the transaction below even starts. Art that doesn't exist has no
+    // binder to check, so this falls through to the existing no-op delete.
+    const artForLockCheck = database
+      .select({ binderId: art.binderId })
+      .from(art)
+      .where(eq(art.id, artId))
+      .get();
+    if (artForLockCheck) {
+      const binderForLockCheck = database
+        .select({ locked: binders.locked })
+        .from(binders)
+        .where(eq(binders.id, artForLockCheck.binderId))
+        .get();
+      if (binderForLockCheck?.locked) {
+        response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+        return;
+      }
+    }
+
     const orphanedFilePaths = database.transaction((tx) => {
       const row = tx
         .select({ imageAssetId: art.imageAssetId })
@@ -1049,6 +1085,17 @@ export function createArtRouter(
         .status(404)
         .type('application/problem+json')
         .json(problem(404, 'Not Found', `No art exists with id "${artId}".`));
+      return;
+    }
+
+    // Story 32: duplicating art is a restricted mutation too.
+    const binderForDuplicate = database
+      .select({ locked: binders.locked })
+      .from(binders)
+      .where(eq(binders.id, source.binderId))
+      .get();
+    if (binderForDuplicate?.locked) {
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
       return;
     }
 

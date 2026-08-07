@@ -34,6 +34,7 @@ export function CardTile({
   slotAspectRatio,
   gridRow,
   gridColumn,
+  isLocked = false,
 }: {
   card: Card;
   // True while this specific card is the one currently being dragged -
@@ -85,6 +86,10 @@ export function CardTile({
   // past cells the art already claimed.
   gridRow?: number;
   gridColumn?: number;
+  // Story 32: when true, this card's remove/edit-variation/duplicate
+  // hover actions are omitted entirely (not merely disabled) - the binder
+  // is locked, so none of them are available.
+  isLocked?: boolean;
 }) {
   if (isDragging) {
     return (
@@ -118,39 +123,42 @@ export function CardTile({
       {/* Hover-revealed card actions (styling.instructions.md): hidden and
           nudged up/right until hovered, then settles into place over the
           card's top-right corner. `pointer-events-none` while hidden keeps
-          it from intercepting clicks meant for the card underneath. */}
-      <div className="pointer-events-none absolute top-0 right-0 z-10 flex -translate-y-1 translate-x-1 gap-1 opacity-0 transition-all duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100">
-        <button
-          type="button"
-          disabled={isVariationEditPending}
-          onClick={() => onEditVariation(card)}
-          aria-label={editVariationAriaLabel}
-          title="Edit variation"
-          className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Pencil className="size-3.5" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          disabled={isDuplicatePending}
-          onClick={() => onDuplicateCard(card.id)}
-          aria-label={duplicateAriaLabel}
-          title="Duplicate card"
-          className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Copy className="size-3.5" aria-hidden="true" />
-        </button>
-        <button
-          type="button"
-          disabled={isRemovalPending}
-          onClick={() => onRemoveCard(card.id)}
-          aria-label={removeAriaLabel}
-          title="Remove card"
-          className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          <Trash2 className="size-3.5" aria-hidden="true" />
-        </button>
-      </div>
+          it from intercepting clicks meant for the card underneath. Story
+          32: omitted entirely while the binder is locked. */}
+      {!isLocked && (
+        <div className="pointer-events-none absolute top-0 right-0 z-10 flex -translate-y-1 translate-x-1 gap-1 opacity-0 transition-all duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100">
+          <button
+            type="button"
+            disabled={isVariationEditPending}
+            onClick={() => onEditVariation(card)}
+            aria-label={editVariationAriaLabel}
+            title="Edit variation"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Pencil className="size-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            disabled={isDuplicatePending}
+            onClick={() => onDuplicateCard(card.id)}
+            aria-label={duplicateAriaLabel}
+            title="Duplicate card"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Copy className="size-3.5" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            disabled={isRemovalPending}
+            onClick={() => onRemoveCard(card.id)}
+            aria-label={removeAriaLabel}
+            title="Remove card"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 className="size-3.5" aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {/* Story 16's variation label - overlaid directly on the card image's
           own bottom edge (rather than reserved space below it), so
           toggling variations on/off never changes any slot's size or the

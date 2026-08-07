@@ -46,6 +46,12 @@ export const binders = sqliteTable(
     // `resolveSpread`). Bounded by `pages` (below), so its check
     // constraint must reference both columns.
     previewPhysicalPage: integer().notNull(),
+    // Story 32: "Lock a binder". SQLite has no native boolean type, so
+    // drizzle's `{ mode: 'boolean' }` stores it as an integer 0/1 and
+    // converts to/from a real `boolean` at the application boundary.
+    // Defaults to `false` (unlocked); blocks restricted details/layout/
+    // card/art mutations while `true`.
+    locked: integer({ mode: 'boolean' }).notNull().default(false),
     // Story 23: free-form Markdown-source notes for the binder. Nullable
     // (an exactly-empty notes string is normalized to null by the backend);
     // the 1,000,000-character limit is enforced at the OpenAPI/app layers

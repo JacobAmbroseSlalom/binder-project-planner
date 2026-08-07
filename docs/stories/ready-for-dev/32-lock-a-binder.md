@@ -1,6 +1,6 @@
 # 32. Lock a binder
 
-**Status:** Not started
+**Status:** Done (2026-08-07 12:45 EDT)
 
 #### Acceptance criteria
 

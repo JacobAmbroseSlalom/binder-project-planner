@@ -1496,6 +1496,15 @@ components:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
         notes:
           $ref: '#/components/schemas/BinderNotes'
+        locked:
+          type: boolean
+          description: >-
+            Story 32: when true, rejects every restricted details/layout/
+            card/art mutation for this binder with a `409 Conflict` whose
+            Problem Details `type` is the stable
+            `/problems/locked-binder` value - this field itself is always
+            accepted regardless of the binder's current lock state, so a
+            locked binder can still be unlocked through this same request.
         moveAffectedItemsToUnplaced:
           type: boolean
           description: >-
@@ -1639,6 +1648,7 @@ components:
         - borderWidth
         - previewPhysicalPage
         - notes
+        - locked
         - createdAt
         - updatedAt
       properties:
@@ -1678,6 +1688,12 @@ components:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
         notes:
           $ref: '#/components/schemas/BinderNotes'
+        locked:
+          type: boolean
+          description: >-
+            Story 32: whether restricted details/layout/card/art
+            mutations are currently rejected for this binder with a `409
+            Conflict`.
         createdAt:
           type: string
           format: date-time
@@ -1709,6 +1725,7 @@ components:
         - borderWidth
         - previewPhysicalPage
         - notes
+        - locked
         - totalSlots
         - occupiedSlots
         - emptySlots
@@ -1752,6 +1769,12 @@ components:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
         notes:
           $ref: '#/components/schemas/BinderNotes'
+        locked:
+          type: boolean
+          description: >-
+            Story 32: whether restricted details/layout/card/art
+            mutations are currently rejected for this binder with a `409
+            Conflict`.
         totalSlots:
           type: integer
           minimum: 0

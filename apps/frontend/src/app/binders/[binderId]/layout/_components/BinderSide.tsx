@@ -134,6 +134,12 @@ export function BinderSide({
   // complete grid fits both the available width and height.
   const slotRatio = (width / height) * slotAspectRatio;
 
+  // Story 32: derived directly from the already-passed `binder` prop
+  // (rather than a separate prop) since every `BinderSide` caller already
+  // has to supply `binder` anyway - disables every slot's own
+  // drag/drop/add affordances and suppresses card hover-action overlays.
+  const isLocked = binder.locked;
+
   // Computed unconditionally (it's pure/cheap) so the indicator strip can
   // always reserve its height; the brackets themselves only render when the
   // toggle is on and this side actually has paired-column gaps.
@@ -283,6 +289,7 @@ export function BinderSide({
                 isDuplicatePending={card ? pendingCardDuplicateIds.has(card.id) : false}
                 variationsVisible={variationsVisible}
                 slotAspectRatio={slotAspectRatio}
+                isLocked={isLocked}
               />
             );
           })}

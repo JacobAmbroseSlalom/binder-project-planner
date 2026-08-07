@@ -7,20 +7,20 @@
 - The "Edit Layout" tab has a toggle for showing Michi slot indicators.
 - The toggle defaults to off.
 - When the toggle is on, each intermediate layout view displays the left and right binder
-	sides together as a spread so the Michi placements can be understood across both sides.
+  sides together as a spread so the Michi placements can be understood across both sides.
 - The first layout view remains right-side-only and the last remains left-side-only when
-	Michi indicators are on; indicators appear for the binder side that exists.
+  Michi indicators are on; indicators appear for the binder side that exists.
 - A Michi indicator appears above each gap between paired columns whose slot openings
-	face toward each other.
+  face toward each other.
 - Columns are numbered from left to right across the complete binder spread.
 - On each binder side, columns are paired from the outside edge toward the binder spine.
 - For an odd binder width, the column nearest the spine on each side is not paired.
 - A 3-wide binder displays indicators between columns 1 and 2 and between columns 5 and 6.
 - A 5-wide binder displays indicators between columns 1 and 2, 3 and 4, 7 and 8, and 9
-	and 10.
+  and 10.
 - For an even binder width, every column is paired.
 - A 4-wide binder displays indicators between columns 1 and 2, 3 and 4, 5 and 6, and 7
-	and 8.
+  and 8.
 - Turning the toggle off hides all Michi indicators.
 
 #### Technical requirements

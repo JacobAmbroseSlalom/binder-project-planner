@@ -47,7 +47,8 @@ export function PlacedArtTile({
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: art.id,
     data: { art },
-    disabled: isMovePending || isEditPending || isDeletionPending || isDuplicatePending,
+    disabled:
+      isMovePending || isEditPending || isDeletionPending || isDuplicatePending || binder.locked,
   });
 
   const isActionDisabled = isEditPending || isDeletionPending || isDuplicatePending;
@@ -72,15 +73,19 @@ export function PlacedArtTile({
       className={`group relative h-full w-full touch-none ${highlightClassName}`}
     >
       <ArtTile art={art} binder={binder} isPendingCreate={false} />
-      <ArtActionsOverlay
-        title={art.title}
-        isEditDisabled={isActionDisabled}
-        isDeleteDisabled={isActionDisabled}
-        isDuplicateDisabled={isActionDisabled}
-        onEdit={() => onEditArt(art)}
-        onDelete={() => onRemoveArt(art.id)}
-        onDuplicate={() => onDuplicateArt(art.id)}
-      />
+      {/* Story 32: the whole hover-action overlay is omitted (not merely
+          disabled) while the binder is locked. */}
+      {!binder.locked && (
+        <ArtActionsOverlay
+          title={art.title}
+          isEditDisabled={isActionDisabled}
+          isDeleteDisabled={isActionDisabled}
+          isDuplicateDisabled={isActionDisabled}
+          onEdit={() => onEditArt(art)}
+          onDelete={() => onRemoveArt(art.id)}
+          onDuplicate={() => onDuplicateArt(art.id)}
+        />
+      )}
     </div>
   );
 }

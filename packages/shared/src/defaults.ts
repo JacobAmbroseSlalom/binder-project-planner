@@ -16,6 +16,11 @@ export const DEFAULT_BINDER_WIDTH = 3;
 export const DEFAULT_BINDER_HEIGHT = 3;
 export const DEFAULT_BINDER_PAGE_COUNT = 20;
 
+// Story 32: "Lock a binder". A newly created binder always starts
+// unlocked; binder creation never exposes or accepts a client-selected
+// initial lock state.
+export const DEFAULT_BINDER_LOCKED = false;
+
 // Maximum trimmed binder-name length, shared by the frontend Zod schema, the
 // OpenAPI request/response contract, and the backend database field.
 export const BINDER_NAME_MAX_LENGTH = 100;

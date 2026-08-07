@@ -153,6 +153,12 @@ export function BinderLayoutView() {
   const slotAspectRatio =
     (binder.widthPerSlot + binder.widthBase) / (binder.heightPerSlot + binder.heightBase);
 
+  // Story 32: derived once here and threaded down to every add/edit/
+  // remove/duplicate/move-capable child - Undo/Redo are hidden entirely
+  // below rather than threaded further, since there's nothing left for
+  // them to act on once every mutation is unavailable.
+  const isLocked = binder.locked;
+
   // The slot (if any) currently targeted by an open card-selection modal
   // (story 11).
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
@@ -778,22 +784,35 @@ export function BinderLayoutView() {
           panel's top edge lines up with the toolbar row above the spread
           instead of starting only alongside the spread. */}
       <div className="grid h-full min-h-0 flex-1 grid-cols-[24rem_1fr_24rem] grid-rows-[minmax(0,1fr)] gap-8 p-8">
-        <UnplacedCardsPanel
-          cards={cards}
-          pendingCardDeletionIds={pendingCardDeletionIds}
-          pendingUnplacedCardIds={pendingUnplacedCardIds}
-          isMovePending={isMovePending}
-          onRemoveCard={removeCard}
-          onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
-          pendingCardVariationEditIds={pendingCardVariationEditIds}
-          onDuplicateCard={duplicateCard}
-          pendingCardDuplicateIds={pendingCardDuplicateIds}
-          variationsVisible={variationsVisible}
-          onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
-          slotAspectRatio={slotAspectRatio}
-          scrollToCardId={pendingHistoryCardRevealId}
-          onScrollToCardHandled={() => setPendingHistoryCardRevealId(null)}
-        />
+        {/* Story 32: replaced with a blank placeholder while the binder is
+            locked - every one of the panel's own controls
+            (add/edit/remove/duplicate/move) is a restricted mutation, so
+            there's nothing left in it to interact with. A grid child (not
+            simply omitting the panel) is required here: CSS Grid's
+            auto-placement re-packs any *remaining* children into the
+            earliest explicit tracks, so dropping this child entirely would
+            shove the center spread into this first (`24rem`) column
+            instead of leaving it blank. */}
+        {isLocked ? (
+          <div aria-hidden="true" />
+        ) : (
+          <UnplacedCardsPanel
+            cards={cards}
+            pendingCardDeletionIds={pendingCardDeletionIds}
+            pendingUnplacedCardIds={pendingUnplacedCardIds}
+            isMovePending={isMovePending}
+            onRemoveCard={removeCard}
+            onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
+            pendingCardVariationEditIds={pendingCardVariationEditIds}
+            onDuplicateCard={duplicateCard}
+            pendingCardDuplicateIds={pendingCardDuplicateIds}
+            variationsVisible={variationsVisible}
+            onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
+            slotAspectRatio={slotAspectRatio}
+            scrollToCardId={pendingHistoryCardRevealId}
+            onScrollToCardHandled={() => setPendingHistoryCardRevealId(null)}
+          />
+        )}
 
         <div className={`flex h-full min-h-0 flex-col gap-4`}>
           {/* The Michi-indicator toggle (story 10) and the direct page-number
@@ -846,23 +865,30 @@ export function BinderLayoutView() {
 
             {/* Story 23's toggle: same custom-styled checkbox as the toggles
                 above; its checked state is the persisted (local-storage)
-                notes-visibility preference, defaulting to on. */}
-            <label htmlFor="notes-visible-toggle" className="flex items-center gap-2">
-              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                <input
-                  id="notes-visible-toggle"
-                  type="checkbox"
-                  checked={notesVisible}
-                  onChange={toggleNotesVisible}
-                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-                />
-                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-              </span>
-              <span className="flex flex-col text-caption leading-tight text-neutral-500">
-                <span>Show</span>
-                <span>notes</span>
-              </span>
-            </label>
+                notes-visibility preference, defaulting to on. Story 32:
+                hidden entirely while the binder is locked, since the notes
+                section itself is never rendered in that state (see the
+                gated `<BinderNotesSection>` below) - leaving the toggle
+                visible would let the user "show" a section that can never
+                actually appear. */}
+            {!isLocked && (
+              <label htmlFor="notes-visible-toggle" className="flex items-center gap-2">
+                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                  <input
+                    id="notes-visible-toggle"
+                    type="checkbox"
+                    checked={notesVisible}
+                    onChange={toggleNotesVisible}
+                    className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                  />
+                  <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+                </span>
+                <span className="flex flex-col text-caption leading-tight text-neutral-500">
+                  <span>Show</span>
+                  <span>notes</span>
+                </span>
+              </label>
+            )}
 
             <div className="flex flex-col items-center gap-1">
               <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
@@ -886,33 +912,41 @@ export function BinderLayoutView() {
               />
             </div>
 
-            <button
-              type="button"
-              onClick={() => void handleUndoLayoutMovement()}
-              disabled={!canUndoLayoutMovement || isMovePending}
-              aria-label="Undo layout movement"
-              title="Undo"
-              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Undo2 className="size-5" />
-            </button>
+            {/* Story 32: Undo/Redo are hidden entirely (not merely
+                disabled) while the binder is locked - every mutation they
+                could reverse is itself unavailable. */}
+            {!isLocked && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => void handleUndoLayoutMovement()}
+                  disabled={!canUndoLayoutMovement || isMovePending}
+                  aria-label="Undo layout movement"
+                  title="Undo"
+                  className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Undo2 className="size-5" />
+                </button>
 
-            <button
-              type="button"
-              onClick={() => void handleRedoLayoutMovement()}
-              disabled={!canRedoLayoutMovement || isMovePending}
-              aria-label="Redo layout movement"
-              title="Redo"
-              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Redo2 className="size-5" />
-            </button>
+                <button
+                  type="button"
+                  onClick={() => void handleRedoLayoutMovement()}
+                  disabled={!canRedoLayoutMovement || isMovePending}
+                  aria-label="Redo layout movement"
+                  title="Redo"
+                  className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Redo2 className="size-5" />
+                </button>
+              </>
+            )}
 
             {/* Story 29's print-to-PDF button: available regardless of
-                lock state (no lock feature exists yet - see story 32),
-                disabled only while its own export is in flight. Icon-only,
-                so it relies on `aria-label`/`title` for its accessible
-                name rather than visible text. */}
+                lock state (story 32 leaves printing unrestricted since it
+                doesn't mutate the binder), disabled only while its own
+                export is in flight. Icon-only, so it relies on
+                `aria-label`/`title` for its accessible name rather than
+                visible text. */}
             <button
               type="button"
               onClick={handleExportPdf}
@@ -1078,25 +1112,35 @@ export function BinderLayoutView() {
 
           {/* Story 23: the notes section, within the center column below
                 the spread (not spanning the unplaced side panels), shown
-                unless the notes toggle is off. */}
-          {notesVisible && <BinderNotesSection />}
+                unless the notes toggle is off. Story 32: also hidden
+                entirely while the binder is locked, since its own editing
+                is a restricted mutation. */}
+          {notesVisible && !isLocked && <BinderNotesSection />}
         </div>
 
-        <UnplacedArtPanel
-          art={art}
-          binder={binder}
-          pendingUnplacedArtIds={pendingUnplacedArtIds}
-          pendingArtEditIds={pendingArtEditIds}
-          pendingArtDeletionIds={pendingArtDeletionIds}
-          pendingArtDuplicateIds={pendingArtDuplicateIds}
-          isMovePending={isMovePending}
-          onAddArt={() => setIsCreateArtModalOpen(true)}
-          onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
-          onRemoveArt={removeArt}
-          onDuplicateArt={duplicateArt}
-          scrollToArtId={pendingHistoryArtRevealId}
-          onScrollToArtHandled={() => setPendingHistoryArtRevealId(null)}
-        />
+        {/* Story 32: mirrors the unplaced-cards column above - a blank
+            placeholder grid child (not an omitted one) so the last
+            (`24rem`) column stays reserved and the center spread doesn't
+            get re-packed leftward by CSS Grid auto-placement. */}
+        {isLocked ? (
+          <div aria-hidden="true" />
+        ) : (
+          <UnplacedArtPanel
+            art={art}
+            binder={binder}
+            pendingUnplacedArtIds={pendingUnplacedArtIds}
+            pendingArtEditIds={pendingArtEditIds}
+            pendingArtDeletionIds={pendingArtDeletionIds}
+            pendingArtDuplicateIds={pendingArtDuplicateIds}
+            isMovePending={isMovePending}
+            onAddArt={() => setIsCreateArtModalOpen(true)}
+            onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
+            onRemoveArt={removeArt}
+            onDuplicateArt={duplicateArt}
+            scrollToArtId={pendingHistoryArtRevealId}
+            onScrollToArtHandled={() => setPendingHistoryArtRevealId(null)}
+          />
+        )}
       </div>
 
       {/* The drag overlay (story 14): renders the dragged card's image

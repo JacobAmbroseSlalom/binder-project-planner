@@ -1,0 +1,1 @@
+ALTER TABLE `binders` ADD `locked` integer DEFAULT false NOT NULL;

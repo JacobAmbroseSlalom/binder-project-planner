@@ -5,7 +5,15 @@ import type { Art, Binder, Card } from '@/lib/api';
 
 // Compact metric token with an immediate custom tooltip on hover/focus,
 // without changing the token's own visual styling.
-function MetricAbbr({ value, suffix, tooltip }: { value: number; suffix: string; tooltip: string }) {
+function MetricAbbr({
+  value,
+  suffix,
+  tooltip,
+}: {
+  value: number;
+  suffix: string;
+  tooltip: string;
+}) {
   return (
     <span className="group relative inline-block" tabIndex={0} aria-label={`${value} ${tooltip}`}>
       <span>

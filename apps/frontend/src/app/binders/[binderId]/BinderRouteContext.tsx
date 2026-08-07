@@ -4,6 +4,7 @@ import {
   CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
   CARD_SEARCH_LANGUAGE_DEFAULT,
   LAYOUT_MOVEMENT_HISTORY_LIMIT,
+  LOCKED_BINDER_PROBLEM_TYPE,
 } from '@binder-project-planner/shared';
 import { useRouter } from 'next/navigation';
 import {
@@ -226,6 +227,18 @@ function isConflictProblem(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const candidate = error as { status?: unknown };
   return candidate.status === 409;
+}
+
+// Story 32: distinguishes a mutation rejected specifically because its
+// binder is locked from every other 409 Conflict (e.g. a stale expected
+// position or an occupied destination), by matching the stable Problem
+// Details `type` the backend returns for that case alone (see
+// `lockedBinderConflictProblem` in the backend and `LOCKED_BINDER_PROBLEM_TYPE`
+// in the shared package).
+function isLockedBinderConflict(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const candidate = error as { type?: unknown };
+  return candidate.type === LOCKED_BINDER_PROBLEM_TYPE;
 }
 
 function actionTouchesItem(action: LayoutMovementHistoryAction, itemId: string): boolean {
@@ -577,8 +590,10 @@ export function BinderRouteProvider({
 
   // Show the binder's name in the app header bar (rather than an in-page
   // heading) while a binder page is open; cleared automatically on navigate
-  // away. `null` until the binder loads.
-  useSetAppHeaderTitle(binder?.name ?? null);
+  // away. `null` until the binder loads. Story 32: also passes the binder's
+  // locked state so the header can show its "Locked" badge directly beside
+  // the name, rather than as a separate row above the tabs.
+  useSetAppHeaderTitle(binder?.name ?? null, binder?.locked ?? false);
 
   // Live refs let callbacks that intentionally avoid large dependency lists
   // still read the latest binder/cards/art stacks when they run.
@@ -895,13 +910,17 @@ export function BinderRouteProvider({
           );
           settle();
           toast.markFailed(error);
+          // Story 32: a bulk-add rejected because the binder is now locked
+          // reloads the complete binder graph so the UI reflects the fresh
+          // locked state and read-only interface.
+          if (isLockedBinderConflict(error)) retry();
           if (reopenOnFailure) {
             setBulkSelectionRestore({ placement: targetPlacement, cards: selection, variation });
           }
           return false;
         });
     },
-    [binderId, start, markFailed],
+    [binderId, start, markFailed, retry],
   );
 
   // Assigns a manually-entered custom card to a binder slot (story 12).
@@ -970,6 +989,9 @@ export function BinderRouteProvider({
           // everything.
           if (reopenOnFailure) setManualEntryRestore({ placement, values, file });
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this card
+          // creation was rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
           return false;
         })
         .finally(() => {
@@ -989,7 +1011,7 @@ export function BinderRouteProvider({
           }
         });
     },
-    [binderId, start],
+    [binderId, start, retry],
   );
 
   // Clears the one-shot restore signal once `BinderLayoutView` has consumed
@@ -1093,6 +1115,9 @@ export function BinderRouteProvider({
           // revoked once `clearArtCreateRestore` runs (planning.md).
           setArtCreateRestore({ values, file, previewUrl });
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this art
+          // creation was rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setPendingUnplacedArtIds((previous) => {
@@ -1102,7 +1127,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [binderId, start],
+    [binderId, start, retry],
   );
 
   // Clears the one-shot art-create restore signal once the create-art
@@ -1171,12 +1196,15 @@ export function BinderRouteProvider({
             ),
           );
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this move was
+          // rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setIsMovePending(false);
         });
     },
-    [art, cards, isMovePending, recordSuccessfulMovement, start],
+    [art, cards, isMovePending, recordSuccessfulMovement, start, retry],
   );
 
   // Edits an existing art item's metadata, transform, style overrides, and
@@ -1241,6 +1269,9 @@ export function BinderRouteProvider({
           // `clearArtEditRestore` runs.
           setArtEditRestore({ artId, values, file, previewUrl });
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this edit was
+          // rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setPendingArtEditIds((previous) => {
@@ -1250,7 +1281,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [art, pruneHistoryEntriesForItem, start],
+    [art, pruneHistoryEntriesForItem, start, retry],
   );
 
   // Clears the one-shot edit-art restore signal once the edit modal has
@@ -1288,6 +1319,9 @@ export function BinderRouteProvider({
             return restored;
           });
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this removal was
+          // rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setPendingArtDeletionIds((previous) => {
@@ -1297,7 +1331,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [art, pruneHistoryEntriesForItem, start],
+    [art, pruneHistoryEntriesForItem, start, retry],
   );
 
   // Duplicates an art item into the unplaced-art section (story 26),
@@ -1335,6 +1369,9 @@ export function BinderRouteProvider({
         .catch((error) => {
           setArt((previous) => previous.filter((item) => item.id !== optimisticId));
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this
+          // duplication was rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setPendingArtDuplicateIds((previous) => {
@@ -1344,7 +1381,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [art, start],
+    [art, start, retry],
   );
 
   // Permanently removes a card from a binder slot (story 13). Sending X
@@ -1376,6 +1413,9 @@ export function BinderRouteProvider({
             return restored;
           });
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this removal was
+          // rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setPendingCardDeletionIds((previous) => {
@@ -1385,7 +1425,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [cards, pruneHistoryEntriesForItem, start],
+    [cards, pruneHistoryEntriesForItem, start, retry],
   );
 
   // Edits an existing card's saved variation (story 16), mirroring
@@ -1420,6 +1460,9 @@ export function BinderRouteProvider({
             ),
           );
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this variation
+          // edit was rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setPendingCardVariationEditIds((previous) => {
@@ -1429,7 +1472,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [cards, pruneHistoryEntriesForItem, start],
+    [cards, pruneHistoryEntriesForItem, start, retry],
   );
 
   // Duplicates a card into the unplaced-cards section (story 19),
@@ -1472,6 +1515,9 @@ export function BinderRouteProvider({
         .catch((error) => {
           setCards((previous) => previous.filter((card) => card.id !== optimisticId));
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this
+          // duplication was rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setPendingCardDuplicateIds((previous) => {
@@ -1481,7 +1527,7 @@ export function BinderRouteProvider({
           });
         });
     },
-    [cards, start],
+    [cards, start, retry],
   );
 
   // Moves (or swaps) a card to another slot in the same binder, or into the
@@ -1588,12 +1634,15 @@ export function BinderRouteProvider({
             }),
           );
           toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this move was
+          // rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
         })
         .finally(() => {
           setIsMovePending(false);
         });
     },
-    [cards, isMovePending, recordSuccessfulMovement, start],
+    [cards, isMovePending, recordSuccessfulMovement, start, retry],
   );
 
   // Story 28 shared executor for undo/redo: applies one action from the
@@ -1830,7 +1879,9 @@ export function BinderRouteProvider({
   return (
     <BinderRouteContext.Provider value={value as BinderRouteContextValue}>
       {/* The binder name is shown in the app header bar (via
-          `useSetAppHeaderTitle` above) rather than as an in-page heading. */}
+          `useSetAppHeaderTitle` above), including its "Locked" badge
+          (story 32) when the binder is currently locked, rather than as an
+          in-page heading. */}
       <BinderTabs binderId={binderId} />
       {/* `flex-1 min-h-0`: gives the active tab a definite, fill-remaining-
           space container to grow into. Tabs that don't need it (Edit

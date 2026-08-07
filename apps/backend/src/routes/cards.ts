@@ -30,6 +30,7 @@ import {
   saveIdempotentOutcome,
 } from '../idempotency/mutationIdempotency.js';
 import { translateEnglishNameToJapanese } from '../integrations/pokeapi.js';
+import { lockedBinderConflictProblem } from '../lockedBinderProblem.js';
 import { getOccupiedCells } from '../placement/occupancy.js';
 import {
   downloadCardImage,
@@ -634,6 +635,14 @@ export function createCardsRouter(
       return;
     }
 
+    // Story 32: a locked binder rejects every card mutation, including
+    // creating one.
+    if (binder.locked) {
+      if (uploadedFiles) removeTemporaryUploads(uploadedFiles);
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+      return;
+    }
+
     if (!uploadedFiles) {
       // Never expected: the OpenAPI schema only documents a
       // `multipart/form-data` request body for this endpoint now, so
@@ -875,6 +884,12 @@ export function createCardsRouter(
       return;
     }
 
+    // Story 32: a locked binder rejects a bulk card-creation request too.
+    if (binder.locked) {
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+      return;
+    }
+
     const body = request.body as BulkCreateCardsRequestBody;
 
     if (body.targetPlacement) {
@@ -1066,6 +1081,17 @@ export function createCardsRouter(
         return;
       }
 
+      // Story 32: editing a card's variation is a restricted mutation too.
+      const binderForVariationEdit = database
+        .select({ locked: binders.locked })
+        .from(binders)
+        .where(eq(binders.id, existing.binderId))
+        .get();
+      if (binderForVariationEdit?.locked) {
+        response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+        return;
+      }
+
       // Blank input normalizes to null; a nonblank value is trimmed
       // (planning.md), mirroring card creation's own variation handling.
       const variation = body.variation?.trim() || null;
@@ -1150,6 +1176,12 @@ export function createCardsRouter(
         .status(404)
         .type('application/problem+json')
         .json(problem(404, 'Not Found', 'No binder exists for the given card(s).'));
+      return;
+    }
+
+    // Story 32: moving/swapping cards is a restricted mutation too.
+    if (binder.locked) {
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
       return;
     }
 
@@ -1250,6 +1282,26 @@ export function createCardsRouter(
   router.delete('/cards/:cardId', (request, response) => {
     const { cardId } = request.params;
 
+    // Story 32: removing a card is a restricted mutation - checked before
+    // the transaction below even starts. A card that doesn't exist has no
+    // binder to check, so this falls through to the existing no-op delete.
+    const cardForLockCheck = database
+      .select({ binderId: cards.binderId })
+      .from(cards)
+      .where(eq(cards.id, cardId))
+      .get();
+    if (cardForLockCheck) {
+      const binderForLockCheck = database
+        .select({ locked: binders.locked })
+        .from(binders)
+        .where(eq(binders.id, cardForLockCheck.binderId))
+        .get();
+      if (binderForLockCheck?.locked) {
+        response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+        return;
+      }
+    }
+
     const orphanedFilePath = database.transaction((tx) => {
       const card = tx
         .select({ imageAssetId: cards.imageAssetId })
@@ -1329,6 +1381,17 @@ export function createCardsRouter(
         .status(404)
         .type('application/problem+json')
         .json(problem(404, 'Not Found', `No card exists with id "${cardId}".`));
+      return;
+    }
+
+    // Story 32: duplicating a card is a restricted mutation too.
+    const binderForDuplicate = database
+      .select({ locked: binders.locked })
+      .from(binders)
+      .where(eq(binders.id, source.binderId))
+      .get();
+    if (binderForDuplicate?.locked) {
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
       return;
     }
 

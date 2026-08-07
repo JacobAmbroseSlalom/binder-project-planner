@@ -292,7 +292,10 @@ export default function BinderDetailsPage() {
           `onBlur`, so this one handler covers every field's blur without
           registering a per-field listener. */}
       <form onBlur={handleBlur} className="flex w-full max-w-2xl flex-col gap-8">
-        <BinderDetailsForm form={form} />
+        {/* Story 32: every field is fully read-only while the binder is
+            locked - `BinderDetailsForm` already threads `disabled` through
+            every input, the color-swatch input, and every reset button. */}
+        <BinderDetailsForm form={form} disabled={binder.locked} />
       </form>
       {resizeConfirmation && (
         <ResizeRelocationConfirmDialog

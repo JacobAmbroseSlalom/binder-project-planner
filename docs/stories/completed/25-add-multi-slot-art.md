@@ -5,22 +5,22 @@ criteria and technical requirements below, with the following deliberate scope-d
 carried over for a later story to close:
 
 - **Image-asset cross-dedup gap**: `artImageAssets` is its own table, separate from
-	`cardImageAssets` (story 12). The SHA-256 digest dedup described below applies only
-	within each table - identical bytes uploaded once as a custom card and once as
-	multi-slot art create two separate image assets rather than the one global asset the
-	acceptance criteria describe. Merging the two tables (or adding a lookup across both)
-	is deferred; flagged here so a future story can decide whether it's worth the
-	migration.
+  `cardImageAssets` (story 12). The SHA-256 digest dedup described below applies only
+  within each table - identical bytes uploaded once as a custom card and once as
+  multi-slot art create two separate image assets rather than the one global asset the
+  acceptance criteria describe. Merging the two tables (or adding a lookup across both)
+  is deferred; flagged here so a future story can decide whether it's worth the
+  migration.
 - **Client-side image-quality calculation**: the quality warning's effective PPI is
-	computed entirely in the browser from the selected `File`'s natural pixel dimensions
-	(via `HTMLImageElement.naturalWidth`/`naturalHeight`), not from the backend's stored
-	`pixelWidth`/`pixelHeight` columns - the OpenAPI `Art`/`CreateArtRequest` schemas don't
-	expose those columns to the frontend, and didn't need to for this calculation.
+  computed entirely in the browser from the selected `File`'s natural pixel dimensions
+  (via `HTMLImageElement.naturalWidth`/`naturalHeight`), not from the backend's stored
+  `pixelWidth`/`pixelHeight` columns - the OpenAPI `Art`/`CreateArtRequest` schemas don't
+  expose those columns to the frontend, and didn't need to for this calculation.
 - **Modern-browser EXIF assumption**: the client-side quality calculation and Konva
-	editor both assume the browser's own image decoding already applies EXIF orientation
-	to `naturalWidth`/`naturalHeight` (true in current Chrome/Firefox/Safari) rather than
-	re-deriving orientation client-side; the backend's own `sharp`-based normalization is
-	authoritative for the persisted/served image regardless.
+  editor both assume the browser's own image decoding already applies EXIF orientation
+  to `naturalWidth`/`naturalHeight` (true in current Chrome/Firefox/Safari) rather than
+  re-deriving orientation client-side; the backend's own `sharp`-based normalization is
+  authoritative for the persisted/served image regardless.
 
 #### Acceptance criteria
 

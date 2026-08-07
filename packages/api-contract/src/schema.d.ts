@@ -597,6 +597,8 @@ export interface components {
             borderWidth?: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage?: components["schemas"]["BinderPreviewPhysicalPage"];
             notes?: components["schemas"]["BinderNotes"];
+            /** @description Story 32: when true, rejects every restricted details/layout/ card/art mutation for this binder with a `409 Conflict` whose Problem Details `type` is the stable `/problems/locked-binder` value - this field itself is always accepted regardless of the binder's current lock state, so a locked binder can still be unlocked through this same request. */
+            locked?: boolean;
             /** @description Story 27: include only after the user confirms relocation for an affecting resize. When true, the backend atomically updates binder details and clears placement coordinates for every item affected at transaction time. */
             moveAffectedItemsToUnplaced?: boolean;
         };
@@ -627,7 +629,7 @@ export interface components {
         /** @description `POST /binders/{binderId}/exports/pdf`'s request body (story 29). */
         ExportBinderPdfRequest: {
             /**
-             * @description When true, renders each card's saved variation label below it in the generated PDF, mirroring the layout route's own `variations=true` toggle. The frontend sends `false` (or omits the field) whenever that toggle is off.
+             * @description When true, renders each card's saved variation label below it in the generated PDF, mirroring the layout tab's own persisted (local storage) card-variations visibility toggle. The frontend sends `false` (or omits the field) whenever that toggle is off.
              * @default false
              */
             includeVariations: boolean;
@@ -653,6 +655,8 @@ export interface components {
             borderWidth: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage: components["schemas"]["BinderPreviewPhysicalPage"];
             notes: components["schemas"]["BinderNotes"];
+            /** @description Story 32: whether restricted details/layout/card/art mutations are currently rejected for this binder with a `409 Conflict`. */
+            locked: boolean;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -675,6 +679,8 @@ export interface components {
             borderWidth: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage: components["schemas"]["BinderPreviewPhysicalPage"];
             notes: components["schemas"]["BinderNotes"];
+            /** @description Story 32: whether restricted details/layout/card/art mutations are currently rejected for this binder with a `409 Conflict`. */
+            locked: boolean;
             /** @description Story 22: the total number of card slots in the binder (width * height * 2 * pages). The client derives the slot-completion percentage as occupiedSlots / totalSlots * 100. */
             totalSlots: number;
             /** @description Story 22: how many slots hold a card or are covered by placed multi-slot art, deduplicated across overlaps. Unplaced cards and art are excluded. */

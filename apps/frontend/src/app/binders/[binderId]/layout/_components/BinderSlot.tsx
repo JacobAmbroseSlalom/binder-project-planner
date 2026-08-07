@@ -27,6 +27,7 @@ export function BinderSlot({
   isDuplicatePending,
   variationsVisible = false,
   slotAspectRatio,
+  isLocked = false,
 }: {
   physicalPage: number;
   row: number;
@@ -66,6 +67,10 @@ export function BinderSlot({
   // Story 24: the binder's configured single-slot width-to-height ratio,
   // threaded down from `BinderLayoutView` through `BinderSide`.
   slotAspectRatio: number;
+  // Story 32: true while the binder is locked - disables both this slot's
+  // droppable/draggable and its empty-slot add affordance, and suppresses
+  // its occupying card's hover-action overlay via `CardTile`.
+  isLocked?: boolean;
 }) {
   // Every slot - occupied or empty - is a drop target (a drop onto an
   // occupied slot swaps the two cards). `id` matches the coordinate shape
@@ -74,7 +79,7 @@ export function BinderSlot({
   const { setNodeRef: setDroppableRef, isOver } = useDroppable({
     id: `${physicalPage}-${row}-${column}`,
     data: { physicalPage, row, column },
-    disabled: isMovePending,
+    disabled: isMovePending || isLocked,
   });
 
   // Only an occupied slot's card itself is draggable; disabled while its
@@ -88,7 +93,7 @@ export function BinderSlot({
   } = useDraggable({
     id: card?.id ?? `empty-${physicalPage}-${row}-${column}`,
     data: card ? { card } : undefined,
-    disabled: !card || isMovePending || isRemovalPending,
+    disabled: !card || isMovePending || isRemovalPending || isLocked,
   });
 
   // Story 14's single destination-highlight style: applied to whichever
@@ -128,6 +133,7 @@ export function BinderSlot({
         slotAspectRatio={slotAspectRatio}
         gridRow={row}
         gridColumn={column}
+        isLocked={isLocked}
       />
     );
   }
@@ -147,7 +153,7 @@ export function BinderSlot({
     <button
       ref={setDroppableRef}
       type="button"
-      disabled={isPendingPlacement}
+      disabled={isPendingPlacement || isLocked}
       onClick={() => onSlotClick(row, column)}
       aria-label={`Add a card to row ${row}, column ${column}`}
       className={`flex cursor-pointer items-center justify-center rounded-standard border border-neutral-700 bg-neutral-800 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${highlightClassName}`}

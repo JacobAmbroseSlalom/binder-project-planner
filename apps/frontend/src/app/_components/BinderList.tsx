@@ -8,7 +8,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
-import { deleteBinder, duplicateBinder, listBinders, type BinderSummary } from '@/lib/api';
+import {
+  deleteBinder,
+  duplicateBinder,
+  listBinders,
+  updateBinder,
+  type BinderSummary,
+} from '@/lib/api';
 import {
   LoadingIndicator,
   toProblemDetailsInfo,
@@ -56,6 +62,10 @@ export function BinderList() {
   // real `duplicateBinder` request is in flight, per "the temporary binder
   // is disabled while copying".
   const [pendingCopyIds, setPendingCopyIds] = useState<ReadonlySet<string>>(new Set());
+  // Story 32: binders whose lock state toggle is currently in flight -
+  // every home-page action for that one binder is disabled until it
+  // settles, mirroring `pendingCopyIds`'s own tracking pattern.
+  const [pendingLockToggleIds, setPendingLockToggleIds] = useState<ReadonlySet<string>>(new Set());
   // The binder awaiting delete confirmation (story 21: "Clicking delete
   // opens a confirmation dialog naming the binder before any deletion
   // occurs"), or `null` when no confirmation dialog is open.
@@ -182,6 +192,51 @@ export function BinderList() {
     }
   }
 
+  // Story 32's lock/unlock action: optimistically flips `locked` in local
+  // state immediately and disables every action for this one binder until
+  // the request settles, then reconciles with the authoritative persisted
+  // `locked`/`updatedAt` on success or rolls back and shows a failed toast
+  // otherwise - mirroring `handleCopyBinder`/`handleConfirmDelete`'s own
+  // optimistic-update-then-reconcile pattern. Only `locked`/`updatedAt` are
+  // merged in (rather than replacing the whole summary with the update
+  // response) since that response is a plain `Binder`, not a `BinderSummary`,
+  // and would otherwise drop this entry's completion-metric/preview fields.
+  async function handleToggleLock(binder: BinderSummary) {
+    const desiredLocked = !binder.locked;
+    setBinders((previous) =>
+      previous.map((entry) =>
+        entry.id === binder.id ? { ...entry, locked: desiredLocked } : entry,
+      ),
+    );
+    setPendingLockToggleIds((previous) => new Set(previous).add(binder.id));
+
+    const toast = start(`toggle-lock-binder-${binder.id}`);
+    try {
+      const updated = await updateBinder(binder.id, { locked: desiredLocked });
+      setBinders((previous) =>
+        previous.map((entry) =>
+          entry.id === binder.id
+            ? { ...entry, locked: updated.locked, updatedAt: updated.updatedAt }
+            : entry,
+        ),
+      );
+      toast.markSaved();
+    } catch (error) {
+      setBinders((previous) =>
+        previous.map((entry) =>
+          entry.id === binder.id ? { ...entry, locked: binder.locked } : entry,
+        ),
+      );
+      toast.markFailed(error);
+    } finally {
+      setPendingLockToggleIds((previous) => {
+        const next = new Set(previous);
+        next.delete(binder.id);
+        return next;
+      });
+    }
+  }
+
   return (
     // Full page width (no max-width container, per the styling conventions);
     // binders wrap onto additional centered rows as more are added.
@@ -196,18 +251,27 @@ export function BinderList() {
         <ul className="flex flex-wrap justify-center gap-12">
           {binders.map((binder) => {
             const isPendingCopy = pendingCopyIds.has(binder.id);
+            const isPendingLockToggle = pendingLockToggleIds.has(binder.id);
+            // Story 32: every action for this binder is disabled while its
+            // own lock toggle is in flight, on top of each action's existing
+            // disabled conditions.
+            const isActionDisabled = isPendingCopy || isPendingLockToggle;
             return (
               <li key={binder.id} className="group relative flex flex-col items-center gap-2">
                 {/* Story 21: hover-revealed delete/copy/edit actions,
-                    disabled on the temporary tile for an in-flight copy. */}
+                    disabled on the temporary tile for an in-flight copy;
+                    story 32 adds the lock/unlock toggle. */}
                 <BinderActionsOverlay
                   name={binder.name}
-                  isEditDisabled={isPendingCopy}
-                  isCopyDisabled={isPendingCopy}
-                  isDeleteDisabled={isPendingCopy}
+                  locked={binder.locked}
+                  isEditDisabled={isActionDisabled}
+                  isCopyDisabled={isActionDisabled}
+                  isDeleteDisabled={isActionDisabled}
+                  isLockToggleDisabled={isActionDisabled}
                   onEdit={() => router.push(`/binders/${binder.id}/details`)}
                   onCopy={() => handleCopyBinder(binder)}
                   onDelete={() => setConfirmDeleteBinder(binder)}
+                  onToggleLock={() => handleToggleLock(binder)}
                 />
                 {/* Story 7: opens the binder's view/edit page with the "Edit
                     Layout" tab selected. The optimistic copy tile isn't

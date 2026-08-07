@@ -9,6 +9,7 @@ import {
   ART_PRINT_TILE_OVERLAP_INCHES,
   BINDER_NAME_MAX_LENGTH,
   BINDER_NOTES_MAX_LENGTH,
+  DEFAULT_BINDER_LOCKED,
   DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
   DEFAULT_BORDER_COLOR,
   DEFAULT_BORDER_RADIUS_PERCENT,
@@ -31,6 +32,7 @@ import {
   findIdempotentOutcome,
   saveIdempotentOutcome,
 } from '../idempotency/mutationIdempotency.js';
+import { lockedBinderConflictProblem } from '../lockedBinderProblem.js';
 import { generateArtPrintPdf } from '../pdf/artPrintPdf.js';
 import { generateBinderLayoutPdf } from '../pdf/binderLayoutPdf.js';
 import { countOccupiedSlots } from '../placement/occupancy.js';
@@ -59,10 +61,10 @@ interface CreateBinderRequestBody {
 }
 
 // The validated, OpenAPI-typed shape of an update-binder request body
-// (story 7; story 24 adds the dimension/style fields). Every field is
-// optional since it's a partial update; the OpenAPI schema already
-// guarantees at least one field is present and that no undocumented field
-// slipped through.
+// (story 7; story 24 adds the dimension/style fields; story 32 adds
+// `locked`). Every field is optional since it's a partial update; the
+// OpenAPI schema already guarantees at least one field is present and that
+// no undocumented field slipped through.
 interface UpdateBinderRequestBody {
   name?: string;
   width?: number;
@@ -77,6 +79,7 @@ interface UpdateBinderRequestBody {
   borderWidth?: number;
   previewPhysicalPage?: number;
   notes?: string | null;
+  locked?: boolean;
   moveAffectedItemsToUnplaced?: boolean;
 }
 
@@ -106,6 +109,7 @@ interface BinderRow {
   borderWidthHundredths: number;
   previewPhysicalPage: number;
   notes: string | null;
+  locked: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -150,6 +154,7 @@ function serializeBinder(row: BinderRow) {
     borderWidth: fromHundredths(row.borderWidthHundredths),
     previewPhysicalPage: row.previewPhysicalPage,
     notes: row.notes,
+    locked: row.locked,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -463,6 +468,10 @@ export function createBindersRouter(
       // Story 23: notes aren't part of binder creation (they're edited on
       // the Edit Layout tab), so a new binder always starts with none.
       notes: null,
+      // Story 32: binder creation never exposes or accepts a
+      // client-selected initial lock state - every new binder starts
+      // unlocked.
+      locked: DEFAULT_BINDER_LOCKED,
       createdAt: now,
       updatedAt: now,
     };
@@ -538,9 +547,23 @@ export function createBindersRouter(
       return;
     }
 
+    // Story 32: a currently locked binder only ever accepts an update
+    // containing solely the `locked` field itself (so it can still be
+    // unlocked through this same endpoint) - every other details/layout
+    // field is rejected with a stable locked-binder `409 Conflict`
+    // regardless of what this same request's `locked` value would set it
+    // to next.
+    const isRestrictedFieldsOnlyUpdate =
+      Object.keys(body).length === 1 && body.locked !== undefined;
+    if (existing.locked && !isRestrictedFieldsOnlyUpdate) {
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+      return;
+    }
+
     // Only `name` needs post-trim re-validation and re-normalization here;
     // width/height/pages are already fully validated by the OpenAPI schema.
     const updates: Partial<BinderRow> = {};
+    if (body.locked !== undefined) updates.locked = body.locked;
     if (body.name !== undefined) {
       const trimmedName = body.name.trim();
       if (trimmedName.length === 0 || trimmedName.length > BINDER_NAME_MAX_LENGTH) {
@@ -791,14 +814,17 @@ export function createBindersRouter(
   // schema's `onDelete: 'cascade'` foreign keys) in one transaction, then -
   // still within that same transaction - deletes any card/art image-asset
   // record this binder's own cards/art referenced that no other card or
-  // art (in any binder) still references. Note: story 32 ("Lock a
-  // binder"), which planning.md's acceptance criteria for this story
-  // depend on for rejecting deletion of a locked binder with `409
-  // Conflict`, hasn't been implemented yet - there's no `locked` column on
-  // `binders` at all yet, so that specific acceptance criterion is a known
-  // gap deferred until story 32 adds the lock feature this one builds on.
+  // art (in any binder) still references. Story 32: a locked binder can
+  // never be deleted; rejected with a stable locked-binder `409 Conflict`
+  // before the transaction below even starts.
   router.delete('/binders/:binderId', (request, response) => {
     const { binderId } = request.params;
+
+    const existingBinder = database.select().from(binders).where(eq(binders.id, binderId)).get();
+    if (existingBinder?.locked) {
+      response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+      return;
+    }
 
     const orphanedFilePaths = database.transaction((tx) => {
       const existing = tx
@@ -970,6 +996,10 @@ export function createBindersRouter(
         id: newBinderId,
         name: uniqueName,
         normalizedName: uniqueName.toLowerCase(),
+        // Story 32: a duplicate never copies the source binder's lock
+        // state - it's always created unlocked, even when duplicating a
+        // currently locked binder.
+        locked: DEFAULT_BINDER_LOCKED,
         createdAt: now,
         updatedAt: now,
       };
