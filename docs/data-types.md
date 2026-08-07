@@ -85,7 +85,9 @@ the remaining covered slots are derived from the art's slot width and height.
 | `createdAt`      | UTC timestamp          | Yes          | Used for deterministic unplaced-item ordering.                                                                            |
 | `updatedAt`      | UTC timestamp          | Expected     | New card instances receive backend-managed UTC timestamps; exact serialization key is **TBD**.                            |
 | `acquired`       | boolean                | Yes          | Defaults to `false`. Updated via `PATCH /cards/{cardId}` with `{ "acquired": boolean }`; optionally set at creation time through `POST /binders/{binderId}/cards` or the shared checkbox in `POST /binders/{binderId}/cards/bulk` (Story 36). |
-| price fields     | **TBD**                | **TBD**      | Story 38 requires saved manual and provider prices, source, and retrieval timing, but the shape is not defined.           |
+| `price`          | positive currency (integer cents) or `null` | Yes | Saved card price; `null` until first fetched or manually entered. Updated only through `PATCH /binders/{binderId}/cards/prices` (Story 38). |
+| `isManualPrice`  | boolean                | Yes          | Defaults to `false`. `true` when `price`'s value was hand-edited rather than auto-filled from an unedited market/lowest price; a re-confirmed manual price (auto-filled from the currently saved price and left unedited) keeps its existing value rather than resetting (Story 38). |
+| `priceUpdatedAt` | UTC timestamp or `null` | Yes         | Set whenever `price` changes; displayed alongside `price` on the Card Checklist (Story 38).                               |
 
 **Constraints:** At most one card may occupy a binder and placement-coordinate triple.
 Card deletion cascades dependent variation, acquisition, checklist, and pricing data.
@@ -490,7 +492,6 @@ and resets on binder-route unmount, page refresh, or a full binder reload.
 | Area                           | Required future types or fields                                                                                                                   |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Full-data export and import    | Archive manifest, schema-version record, archive entry inventory, identifier and storage-path remapping, import preview, and transaction outcome. |
-| Card finances                  | Pricing-provider match, price quote, saved price, price source, retrieval time, refresh preview, and financial totals.                            |
 
 ## Relationship Summary
 
@@ -503,5 +504,5 @@ erDiagram
     BINDER ||--o{ MUTATION_IDEMPOTENCY_OUTCOME : scopes
 ```
 
-The exact database technology, table names, image-derivative representation, financial
-model, and archive schema remain open decisions.
+The exact database technology, table names, image-derivative representation, and
+archive schema remain open decisions.

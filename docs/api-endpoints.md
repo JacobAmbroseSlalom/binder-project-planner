@@ -90,8 +90,15 @@ truth; update this reference when a story adds, removes, or changes a route.
 This story's three physical cost catalogs and `financeSettings` support create and
 update only; delete is deferred to story 44 ("Delete custom art finance cost entries").
 
+## Card Finances (Story 38)
+
+| Method  | Path                                | Description                                                                                                                                                                                                                                                                |
+| ------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PATCH` | `/binders/{binderId}/cards/prices`  | Commits the price-review table's "Save all" action. Accepts `{ "prices": [{ "cardId": string, "price": number, "isManualPrice": boolean }] }` for every reviewed row at once and returns a per-card success/failure outcome, so a failure on one card rolls back only that card. |
+| `POST`  | `/binders/{binderId}/cards/prices/fetch` | Backend-mediated "Fetch card prices" lookup. Accepts `{ "cardIds": string[] }`, looks up and requests pokemontcg.io pricing server-side, and returns normalized per-card price data (available variants, market/lowest price, and TCGplayer link per variant). |
+
 ## Planned Endpoint Gaps
 
 The following planned features do not yet specify an endpoint path and are intentionally
-absent from this reference: full-data export and import, card finances, and deleting
-custom art finance cost entries.
+absent from this reference: full-data export and import, and deleting custom art finance
+cost entries.
