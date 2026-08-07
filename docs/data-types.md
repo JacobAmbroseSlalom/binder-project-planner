@@ -167,6 +167,7 @@ A shared, reusable catalog entry (Story 34) selectable from any binder's Finance
 | `width`  | positive integer, `1` to `8` | Yes     | Hidden from the user; used only to filter the dropdown to binders with matching dimensions. |
 | `height` | positive integer, `1` to `8` | Yes     | Hidden from the user; same filtering role as `width`.                                     |
 | `pages`  | positive integer             | Yes     | Hidden from the user; same filtering role as `width`/`height`.                             |
+| `binderCount` | nonnegative integer      | API only | Count of binders currently using this entry as `selectedBinderCostEntryId`; shown in the "Manage cost entries" modal (Story 44), not persisted on the entry itself. |
 
 ### PrintingCostEntry
 
@@ -177,6 +178,7 @@ A shared, reusable catalog entry (Story 34) selectable from any binder's Finance
 | `id`            | UUID                           | Yes      | Backend-generated.                                                          |
 | `name`          | string                         | Yes      | Trimmed, 1 to 100 characters; duplicate names across entries are allowed.  |
 | `pricePerPage`  | positive currency (integer cents) | Yes  | Cost is `pricePerPage * pageCount` (art-print-PDF page count for this binder). |
+| `binderCount`   | nonnegative integer            | API only | Count of binders currently using this entry as `selectedPrintingCostEntryId`; shown in the "Manage cost entries" modal (Story 44), not persisted on the entry itself. |
 
 ### HolographicPaperCostEntry
 
@@ -188,6 +190,7 @@ A shared, reusable catalog entry (Story 34) selectable from any binder's Finance
 | `name`           | string                         | Yes      | Trimmed, 1 to 100 characters; duplicate names across entries are allowed.                          |
 | `price`          | positive currency (integer cents) | Yes  | Total price for a pack of `pagesIncluded` pages.                                                    |
 | `pagesIncluded`  | positive integer               | Yes      | Cost is `(price / pagesIncluded) * pageCount` (art-print-PDF page count for this binder).            |
+| `binderCount`    | nonnegative integer            | API only | Count of binders currently using this entry as `selectedHolographicPaperCostEntryId`; shown in the "Manage cost entries" modal (Story 44), not persisted on the entry itself. |
 
 ## Derived API Representations
 
