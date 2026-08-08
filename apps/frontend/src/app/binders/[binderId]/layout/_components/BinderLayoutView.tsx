@@ -1,90 +1,35 @@
 'use client';
 
+import { DndContext, DragOverlay, pointerWithin } from '@dnd-kit/core';
 import {
-  DndContext,
-  DragOverlay,
-  pointerWithin,
-  useSensor,
-  useSensors,
-  PointerSensor,
-  type DragEndEvent,
-  type DragOverEvent,
-  type DragStartEvent,
-} from '@dnd-kit/core';
-import {
-  CARD_DRAG_ACTIVATION_DISTANCE_PX,
   DEFAULT_BINDER_MICHI_INDICATORS_VISIBLE,
   DEFAULT_BINDER_NOTES_VISIBLE,
   DEFAULT_BINDER_VARIATIONS_VISIBLE,
 } from '@binder-project-planner/shared';
-import { Check, ChevronLeft, ChevronRight, Images, Printer, Redo2, Undo2 } from 'lucide-react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-import {
-  exportBinderLayoutPdf,
-  resolveCardImageUrl,
-  type Art,
-  type Card,
-  type TcgDexCatalogCard,
-} from '@/lib/api';
+import { exportBinderLayoutPdf, resolveCardImageUrl } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 import { useLocalStorageBoolean } from '@/shared/hooks/useLocalStorageBoolean';
 
-import { useBinderRouteContext, type CustomCardFormValues } from '../../BinderRouteContext';
-import { getFootprintCells, isFootprintBlocked, isFootprintInBounds } from '../../artFootprint';
-import {
-  getMaxPhysicalPage,
-  getNextPhysicalPage,
-  getPreviousPhysicalPage,
-  getSpreadLabel,
-  parsePhysicalPageInput,
-  resolvePhysicalPageParam,
-  resolveSpread,
-} from '../layoutSpread';
+import { useBinderRouteContext } from '../../BinderRouteContext';
+import { getSpreadLabel } from '../layoutSpread';
+import { useArtModalState } from '../useArtModalState';
+import { UNPLACED_SLOT_TARGET, useCardSelectionModalState } from '../useCardSelectionModalState';
+import { useLayoutDragAndDrop } from '../useLayoutDragAndDrop';
+import { useLayoutSpreadNavigation } from '../useLayoutSpreadNavigation';
 import { ArtTile } from './art/ArtTile';
 import { CreateArtModal } from './art/CreateArtModal';
 import { PrintArtModal } from './art/PrintArtModal';
 import { UnplacedArtPanel } from './art/UnplacedArtPanel';
 import { BinderLayoutSummaryStats } from './BinderLayoutSummaryStats';
 import { BinderNotesSection } from './BinderNotesSection';
-import { BinderSide } from './BinderSide';
 import { BulkAddFailuresModal } from './card/BulkAddFailuresModal';
 import { CardSelectionModal } from './card/CardSelectionModal';
 import { EditCardVariationModal } from './card/EditCardVariationModal';
 import { UnplacedCardsPanel } from './card/UnplacedCardsPanel';
-
-// The slot (or unplaced-panel target) currently targeted by an open
-// card-selection modal (story 11; unplaced target added in story 15):
-// `null` while no modal is open. Physical page is captured alongside
-// row/column (rather than re-derived from the spread at selection time) so
-// the modal's target stays fixed even if the user could somehow navigate
-// spreads while it's open. All 3 fields are `null` together for the
-// unplaced panel's own add button - never partially null - mirroring the
-// backend's own all-or-none placement shape.
-interface SelectedSlot {
-  physicalPage: number | null;
-  row: number | null;
-  column: number | null;
-}
-
-// The unplaced panel's add-button target (story 15): reused as-is by both
-// `handleSelectCard` and `handleSubmitCustomCard` below, since its shape
-// already matches a concrete slot's, so neither handler needs a separate
-// branch for "no slot at all."
-const UNPLACED_SLOT_TARGET: SelectedSlot = { physicalPage: null, row: null, column: null };
-
-// Shared styling for the previous/next icon buttons, matching the app's
-// disabled-state convention (reduced opacity + not-allowed cursor).
-const ARROW_BUTTON_CLASS_NAME =
-  'cursor-pointer rounded-full p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50';
-
-// The direct page-number input's styling: the same filled-input treatment
-// documented in styling.instructions.md's "Forms & inputs" section
-// (neutral-800 fill, primary border on focus), sized narrow and centered
-// for a short numeric value rather than a full-width form field.
-const PAGE_INPUT_CLASS_NAME =
-  'w-20 rounded-standard border border-transparent bg-neutral-800 px-2 py-1 text-center focus:border-primary focus:outline-none';
+import { LayoutSpreadView } from './LayoutSpreadView';
+import { LayoutToolbar } from './LayoutToolbar';
 
 // The "Edit Layout" tab's real content (stories 8 and 9): visualizes the
 // binder as a sequence of displayed spreads - the first showing only the
@@ -94,6 +39,15 @@ const PAGE_INPUT_CLASS_NAME =
 // by the route's `page` query parameter (a one-based physical page) so
 // refreshes and copied URLs retain it; see `layoutSpread.ts` for the
 // physical-page/spread math this component drives.
+//
+// Most of this tab's individual concerns - drag-and-drop (story 14/26),
+// page/spread navigation (story 8/9), the card-selection modal's target/
+// restore state (story 11/12/17/18), and the create/edit art modals'
+// target state (story 25/26) - are each owned by their own extracted hook
+// (see the `use*` imports above) rather than living directly in this
+// component, which composes them and owns only what's left: the
+// edit-variation modal, the undo/redo history reveal, the visibility
+// toggles, and PDF export.
 export function BinderLayoutView() {
   const {
     binder,
@@ -139,9 +93,6 @@ export function BinderLayoutView() {
     duplicateArt,
     pendingArtDuplicateIds,
   } = useBinderRouteContext();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const { start } = useSaveStatusToast();
 
   // Story 24: the binder's configured one-slot width/height (per-slot cm
@@ -159,46 +110,47 @@ export function BinderLayoutView() {
   // them to act on once every mutation is unavailable.
   const isLocked = binder.locked;
 
-  // The slot (if any) currently targeted by an open card-selection modal
-  // (story 11).
-  const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
-  // Whether the create-art modal was opened via the unplaced-art panel's
-  // own add button (story 25) - `showCreateArtModal` below also reopens it
-  // automatically after a failed create, without this flag needing to be
-  // set for that case.
-  const [isCreateArtModalOpen, setIsCreateArtModalOpen] = useState(false);
-  // The modal is visible either because the user just clicked "Add art" or
-  // because a previous create attempt failed and needs correcting
-  // (planning.md: "Failure ... reopens the editor with the image,
-  // metadata ... preserved").
-  const showCreateArtModal = isCreateArtModalOpen || artCreateRestore !== null;
+  // Story 11/12/17/18's card-selection modal target/restore state and
+  // Add-Card/Add-More submission handlers - see `useCardSelectionModalState`.
+  const {
+    selectedSlot,
+    setSelectedSlot,
+    manualEntryDraft,
+    bulkSelectionDraft,
+    handleAddCards,
+    handleAddMoreCards,
+    handleSubmitCustomCard,
+    handleSubmitCustomCardAddMore,
+    closeCardSelectionModal,
+  } = useCardSelectionModalState({
+    assignCards,
+    assignCustomCard,
+    manualEntryRestore,
+    clearManualEntryRestore,
+    bulkSelectionRestore,
+    clearBulkSelectionRestore,
+  });
 
-  function handleCloseCreateArtModal() {
-    setIsCreateArtModalOpen(false);
-    // A no-op when there's no pending restore to discard, but clears one
-    // if the user manually closes a modal that was auto-reopened after a
-    // failure, so it doesn't keep reopening itself.
-    clearArtCreateRestore();
-  }
-
-  // The art item currently targeted by an open edit-art modal (story 26),
-  // set by an `ArtActionsOverlay`'s Edit button; `null` while no edit
-  // modal is open and no edit attempt has failed. A failed edit's restore
-  // clears its own optimistic changes back to the original record in the
-  // route context, so looking the id back up in `art` here (rather than
-  // keeping a stale local copy) always finds the right record to reopen
-  // with, combined with `artEditRestore`'s own preserved form values/file.
-  const [editingArtId, setEditingArtId] = useState<string | null>(null);
-  const editingArtRecordId = editingArtId ?? artEditRestore?.artId ?? null;
-  const editingArt = editingArtRecordId
-    ? (art.find((item) => item.id === editingArtRecordId) ?? null)
-    : null;
-  const showEditArtModal = editingArt !== null;
-
-  function handleCloseEditArtModal() {
-    setEditingArtId(null);
-    clearArtEditRestore();
-  }
+  // Story 25/26's create-art/edit-art modal target state and placement-
+  // conflict check - see `useArtModalState`.
+  const {
+    setIsCreateArtModalOpen,
+    showCreateArtModal,
+    handleCloseCreateArtModal,
+    setEditingArtId,
+    editingArt,
+    showEditArtModal,
+    handleCloseEditArtModal,
+    checkEditPlacementConflict,
+  } = useArtModalState({
+    binder,
+    cards,
+    art,
+    artCreateRestore,
+    clearArtCreateRestore,
+    artEditRestore,
+    clearArtEditRestore,
+  });
 
   // The card currently targeted by an open edit-variation modal (story
   // 16), set by a `CardTile`'s hover-revealed Pencil action; `null` while
@@ -215,356 +167,32 @@ export function BinderLayoutView() {
     editCardVariation(editingCard.id, variation);
   }
 
-  // Story 26's nested "Save and Move to Unplaced" conflict check, passed
-  // to the edit modal: only art that's currently placed on the layout can
-  // conflict at all - unplaced art has nowhere to overlap or go out of
-  // bounds - and the art being edited is excluded from its own overlap
-  // check via `isFootprintBlocked`'s `excludeArtId`.
-  function checkEditPlacementConflict(widthSlots: number, heightSlots: number): boolean {
-    if (!editingArt) return false;
-    const { physicalPage, row, column } = editingArt.placement;
-    if (physicalPage === null || row === null || column === null) return false;
+  // Story 14/26's drag-and-drop lifecycle - see `useLayoutDragAndDrop`.
+  const {
+    activeDragCard,
+    activeDragArt,
+    dragCandidateFootprint,
+    sensors,
+    handleDragStart,
+    handleDragOver,
+    handleDragEnd,
+    handleDragCancel,
+  } = useLayoutDragAndDrop({ binder, cards, art, moveCard, moveArt });
 
-    if (!isFootprintInBounds(row, column, widthSlots, heightSlots, binder.width, binder.height)) {
-      return true;
-    }
-
-    const cells = getFootprintCells(row, column, widthSlots, heightSlots);
-    return isFootprintBlocked(cards, art, physicalPage, cells, editingArt.id);
-  }
-
-  // The card currently being dragged (story 14), or `null` while no drag
-  // is in progress - drives the `DragOverlay`'s content, the source slot's
-  // empty-placeholder rendering (in `BinderSlot`), and disabling page
-  // navigation while a drag is active.
-  const [activeDragCard, setActiveDragCard] = useState<Card | null>(null);
-  // The art item currently being dragged (story 26), alongside the grabbed
-  // cell's offset from the art's own top-left anchor - captured once at
-  // drag start (planning.md: "Art dragging records the relative footprint
-  // cell under the initial pointer") and reused on every drag-over/drag-end
-  // to derive the destination anchor from whichever cell is hovered/
-  // dropped, by subtracting these offsets back off.
-  const [activeDragArt, setActiveDragArt] = useState<{
-    art: Art;
-    rowOffset: number;
-    columnOffset: number;
-  } | null>(null);
-  // The destination footprint currently being previewed during an art drag
-  // (story 26), or `null` while no art drag is in progress or the pointer
-  // isn't over any slot - computed in `handleDragOver` below and passed
-  // down to whichever `BinderSide` matches its `physicalPage` for the
-  // valid/blocked highlight overlay.
-  const [dragCandidateFootprint, setDragCandidateFootprint] = useState<{
-    physicalPage: number;
-    anchorRow: number;
-    anchorColumn: number;
-    widthSlots: number;
-    heightSlots: number;
-    valid: boolean;
-  } | null>(null);
-  // Only a `PointerSensor` (mouse/touch pointer) is wired up for story 14
-  // - keyboard dragging is explicitly deferred. `activationConstraint`
-  // requires the pointer to move a few pixels before a drag starts, so an
-  // ordinary click (e.g. a future card-details action) isn't mistaken for
-  // a drag attempt.
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: CARD_DRAG_ACTIVATION_DISTANCE_PX },
-    }),
-  );
-
-  // Tracks which card or art item is being dragged, once the pointer
-  // sensor's activation distance is exceeded. For art (story 26), also
-  // captures the grabbed cell's offset from the art's own top-left anchor:
-  // the activator event's pointer position within the dragged tile's
-  // initial rect, normalized to a 0-1 fraction and floored into a footprint
-  // cell index (planning.md: "the initial pointer's normalized position
-  // within the thumbnail maps to the corresponding footprint cell").
-  function handleDragStart(event: DragStartEvent) {
-    const card = event.active.data.current?.card as Card | undefined;
-    const draggedArtItem = event.active.data.current?.art as Art | undefined;
-    setActiveDragCard(card ?? null);
-
-    if (!draggedArtItem) {
-      setActiveDragArt(null);
-      return;
-    }
-
-    const rect = event.active.rect.current.initial;
-    let rowOffset = 0;
-    let columnOffset = 0;
-    if (rect && event.activatorEvent instanceof PointerEvent) {
-      const normalizedX = (event.activatorEvent.clientX - rect.left) / rect.width;
-      const normalizedY = (event.activatorEvent.clientY - rect.top) / rect.height;
-      columnOffset = Math.min(
-        Math.max(Math.floor(normalizedX * draggedArtItem.widthSlots), 0),
-        draggedArtItem.widthSlots - 1,
-      );
-      rowOffset = Math.min(
-        Math.max(Math.floor(normalizedY * draggedArtItem.heightSlots), 0),
-        draggedArtItem.heightSlots - 1,
-      );
-    }
-    setActiveDragArt({ art: draggedArtItem, rowOffset, columnOffset });
-  }
-
-  // Live-updates the candidate destination footprint while an art drag is
-  // in progress (story 26: "the client highlights every slot in the
-  // derived candidate footprint and uses distinct valid and blocked
-  // styles"). The hovered slot minus the drag's own captured grab offset
-  // gives the destination top-left anchor; out-of-bounds or occupied
-  // cells (excluding the dragged art's own current footprint) mark it
-  // blocked rather than valid. Hovering the unplaced panel or nothing at
-  // all clears the highlight entirely, since dropping there never
-  // conflicts with anything.
-  function handleDragOver(event: DragOverEvent) {
-    if (!activeDragArt) return;
-
-    const overData = event.over?.data.current as
-      { physicalPage: number; row: number; column: number } | { unplaced: true } | undefined;
-    if (!overData || 'unplaced' in overData) {
-      setDragCandidateFootprint(null);
-      return;
-    }
-
-    const { art: draggedArtItem, rowOffset, columnOffset } = activeDragArt;
-    const anchorRow = overData.row - rowOffset;
-    const anchorColumn = overData.column - columnOffset;
-    const inBounds = isFootprintInBounds(
-      anchorRow,
-      anchorColumn,
-      draggedArtItem.widthSlots,
-      draggedArtItem.heightSlots,
-      binder.width,
-      binder.height,
-    );
-    const blocked =
-      !inBounds ||
-      isFootprintBlocked(
-        cards,
-        art,
-        overData.physicalPage,
-        getFootprintCells(
-          anchorRow,
-          anchorColumn,
-          draggedArtItem.widthSlots,
-          draggedArtItem.heightSlots,
-        ),
-        draggedArtItem.id,
-      );
-
-    setDragCandidateFootprint({
-      physicalPage: overData.physicalPage,
-      anchorRow,
-      anchorColumn,
-      widthSlots: draggedArtItem.widthSlots,
-      heightSlots: draggedArtItem.heightSlots,
-      valid: !blocked,
-    });
-  }
-
-  // Resolves a completed drag into a move/swap request (story 14), or a
-  // silent no-op if dropped outside any drop target or back onto its own
-  // current location - per the story's "dropping a card onto its own
-  // source slot ends the drag without changing anything" requirement,
-  // generalized to the unplaced panel too (story 15): a drop target's
-  // `data.current` is either a concrete slot's `{ physicalPage, row,
-  // column }` or the unplaced panel's `{ unplaced: true }` marker (see
-  // `UnplacedCardsPanel`), which resolves to an all-null destination. Art
-  // drags (story 26) are resolved the same way, but the destination
-  // anchor is the hovered slot minus the drag's own captured grab offset
-  // rather than the hovered slot itself; a client-known blocked drop
-  // cancels silently (planning.md: "no request or toast") since
-  // `dragCandidateFootprint` already reflects that.
-  function handleDragEnd(event: DragEndEvent) {
-    const { active, over } = event;
-    setActiveDragCard(null);
-
-    const draggedArtItem = active.data.current?.art as Art | undefined;
-    if (draggedArtItem) {
-      const dragState = activeDragArt;
-      setActiveDragArt(null);
-      setDragCandidateFootprint(null);
-      if (!dragState || !over) return;
-
-      const overData = over.data.current as
-        { physicalPage: number; row: number; column: number } | { unplaced: true } | undefined;
-      if (!overData) return;
-
-      const destination: {
-        physicalPage: number | null;
-        row: number | null;
-        column: number | null;
-      } =
-        'unplaced' in overData
-          ? { physicalPage: null, row: null, column: null }
-          : {
-              physicalPage: overData.physicalPage,
-              row: overData.row - dragState.rowOffset,
-              column: overData.column - dragState.columnOffset,
-            };
-
-      const source = draggedArtItem.placement;
-      if (
-        source.physicalPage === destination.physicalPage &&
-        source.row === destination.row &&
-        source.column === destination.column
-      ) {
-        return;
-      }
-
-      moveArt(draggedArtItem.id, destination);
-      return;
-    }
-
-    const draggedCard = active.data.current?.card as Card | undefined;
-    if (!draggedCard || !over) return;
-
-    const overData = over.data.current as
-      { physicalPage: number; row: number; column: number } | { unplaced: true } | undefined;
-    if (!overData) return;
-
-    const destination: { physicalPage: number | null; row: number | null; column: number | null } =
-      'unplaced' in overData ? { physicalPage: null, row: null, column: null } : overData;
-
-    const source = draggedCard.placement;
-    if (
-      source.physicalPage === destination.physicalPage &&
-      source.row === destination.row &&
-      source.column === destination.column
-    ) {
-      return;
-    }
-
-    moveCard(draggedCard.id, destination);
-  }
-
-  function handleDragCancel() {
-    setActiveDragCard(null);
-    setActiveDragArt(null);
-    setDragCandidateFootprint(null);
-  }
-
-  // The manual-entry values/file to seed the modal with, only set while
-  // reopening it to correct a failed custom-card submission (story 12) -
-  // `null` for a normal (blank) modal open.
-  const [manualEntryDraft, setManualEntryDraft] = useState<{
-    values: CustomCardFormValues;
-    file: File;
-  } | null>(null);
-
-  // Stories 17/18: the failed TCGdex selection/variation to seed the modal
-  // with, only set while reopening it to correct a failed Add-Card bulk
-  // submission - `null` for a normal (blank) modal open.
-  const [bulkSelectionDraft, setBulkSelectionDraft] = useState<{
-    cards: TcgDexCatalogCard[];
-    variation: string | null;
-  } | null>(null);
-
-  // Auto-reopens the card-selection modal, pre-filled, once a custom-card
-  // submission fails (story 12). Derived during render (comparing against
-  // the last-seen restore signal), matching this file's own
-  // `lastSyncedPhysicalPage` convention below, rather than in a `useEffect`
-  // - React's documented "adjusting state when a prop changes" pattern -
-  // since `manualEntryRestore` is an ordinary context value, not a
-  // subscription to an external system. A `null` `placement` reopens
-  // targeting the unplaced panel (story 15) rather than being skipped, now
-  // that section exists in the UI.
-  const [lastSeenManualEntryRestore, setLastSeenManualEntryRestore] = useState(manualEntryRestore);
-  if (manualEntryRestore !== lastSeenManualEntryRestore) {
-    setLastSeenManualEntryRestore(manualEntryRestore);
-    if (manualEntryRestore) {
-      setSelectedSlot(manualEntryRestore.placement ?? UNPLACED_SLOT_TARGET);
-      setManualEntryDraft({
-        values: manualEntryRestore.values,
-        file: manualEntryRestore.file,
-      });
-    }
-  }
-
-  // Clears the one-shot restore signal once this component has consumed it
-  // above - a genuine "notify an external owner" side effect (rather than
-  // local state), so it belongs in an effect unlike the derivation above.
-  useEffect(() => {
-    if (manualEntryRestore) clearManualEntryRestore();
-  }, [manualEntryRestore, clearManualEntryRestore]);
-
-  // Mirrors the `manualEntryRestore` derivation above, but for an Add-Card
-  // TCGdex bulk submission's failure (story 17).
-  const [lastSeenBulkSelectionRestore, setLastSeenBulkSelectionRestore] =
-    useState(bulkSelectionRestore);
-  if (bulkSelectionRestore !== lastSeenBulkSelectionRestore) {
-    setLastSeenBulkSelectionRestore(bulkSelectionRestore);
-    if (bulkSelectionRestore) {
-      setSelectedSlot(bulkSelectionRestore.placement ?? UNPLACED_SLOT_TARGET);
-      setBulkSelectionDraft({
-        cards: bulkSelectionRestore.cards,
-        variation: bulkSelectionRestore.variation,
-      });
-    }
-  }
-
-  useEffect(() => {
-    if (bulkSelectionRestore) clearBulkSelectionRestore();
-  }, [bulkSelectionRestore, clearBulkSelectionRestore]);
-
-  // "Add Card" for the search view's checkbox selection (stories 17/18,
-  // replacing story 11's single-card `handleSelectCard`): fires-and-forgets
-  // through `assignCards` and closes the modal immediately - the route
-  // context owns the optimistic-update/request lifecycle from here (see
-  // `BinderRouteContext.tsx`). `targetPlacement` is already this session's
-  // resolved target (or `null`), computed by the modal itself.
-  function handleAddCards(
-    selection: TcgDexCatalogCard[],
-    variation: string | null,
-    targetPlacement: { physicalPage: number; row: number; column: number } | null,
-  ) {
-    void assignCards(selection, variation, targetPlacement, true);
-    setSelectedSlot(null);
-    setBulkSelectionDraft(null);
-  }
-
-  // "Add More" for the search view's checkbox selection (story 18): keeps
-  // the modal open, so this just forwards to `assignCards` without closing
-  // anything - the modal itself awaits the returned promise to decide
-  // whether to clear its own search state.
-  function handleAddMoreCards(
-    selection: TcgDexCatalogCard[],
-    variation: string | null,
-    targetPlacement: { physicalPage: number; row: number; column: number } | null,
-  ): Promise<boolean> {
-    return assignCards(selection, variation, targetPlacement, false);
-  }
-
-  // Submits the manual-entry form's custom card via "Add Card" (story 12)
-  // and closes the modal immediately, mirroring `handleAddCards` above.
-  function handleSubmitCustomCard(
-    values: CustomCardFormValues,
-    file: File,
-    targetPlacement: { physicalPage: number; row: number; column: number } | null,
-  ) {
-    void assignCustomCard(values, file, targetPlacement, true);
-    setSelectedSlot(null);
-    setManualEntryDraft(null);
-  }
-
-  // The manual-entry view's own "Add More" (story 18), mirroring
-  // `handleAddMoreCards`.
-  function handleSubmitCustomCardAddMore(
-    values: CustomCardFormValues,
-    file: File,
-    targetPlacement: { physicalPage: number; row: number; column: number } | null,
-  ): Promise<boolean> {
-    return assignCustomCard(values, file, targetPlacement, false);
-  }
-
-  const maxPhysicalPage = getMaxPhysicalPage(binder.pages);
-  const rawPage = searchParams.get('page');
-  const { physicalPage, replacementPage } = resolvePhysicalPageParam(
-    rawPage,
+  // Story 8/9's physical-page/spread navigation - see
+  // `useLayoutSpreadNavigation`.
+  const {
     maxPhysicalPage,
-    layoutFocalPage,
-  );
+    physicalPage,
+    spread,
+    isFirstSpread,
+    isLastSpread,
+    totalPhysicalPages,
+    navigateToPhysicalPage,
+    pageInputValue,
+    setPageInputValue,
+    commitPageInput,
+  } = useLayoutSpreadNavigation({ totalPages: binder.pages, layoutFocalPage, setLayoutFocalPage });
 
   // Story 10's Michi-indicator toggle is a presentation preference,
   // persisted in local storage (mirroring notes visibility) rather than
@@ -583,85 +211,13 @@ export function BinderLayoutView() {
     DEFAULT_BINDER_NOTES_VISIBLE,
   );
 
-  // Keeps the URL in sync for the `page` query parameter only, using
-  // history replacement so spread navigation doesn't grow browser history.
-  useEffect(() => {
-    if (replacementPage === undefined) return;
-
-    const params = new URLSearchParams(searchParams);
-    if (replacementPage !== undefined) params.set('page', String(replacementPage));
-    router.replace(`${pathname}?${params.toString()}`);
-  }, [replacementPage, pathname, router, searchParams]);
-
-  // Records the displayed physical page as the route's retained layout
-  // focal page, but only once it's explicit in the URL - the very first,
-  // param-less visit is left untouched so it keeps defaulting to physical
-  // page 1 without ever adding `?page=1` to the URL (story 8).
-  useEffect(() => {
-    if (rawPage !== null) {
-      setLayoutFocalPage(physicalPage);
-    }
-  }, [rawPage, physicalPage, setLayoutFocalPage]);
-
-  const spread = resolveSpread(physicalPage, maxPhysicalPage);
-  const isFirstSpread = spread.left === null;
-  const isLastSpread = spread.right === null;
-  // The denominator in the page label uses total physical pages (stored
-  // pages × 2), so users see progress against the binder's actual page
-  // count, e.g. `Pages 2–3 / 40` for a 20-page binder.
-  const totalPhysicalPages = maxPhysicalPage;
-
-  function navigateToPhysicalPage(targetPage: number) {
-    const params = new URLSearchParams(searchParams);
-    params.set('page', String(targetPage));
-    router.replace(`${pathname}?${params.toString()}`);
-  }
-
-  // The direct page-number input's own text state (story 9), separate from
-  // `physicalPage` so keystrokes don't navigate until the value commits on
-  // blur/Enter. Re-synced whenever `physicalPage` changes for any other
-  // reason (arrows, URL edits) by comparing against the last-seen value
-  // during render (React's documented "adjusting state when a prop
-  // changes" pattern) rather than in an effect, which would cause an extra
-  // render pass after every navigation.
-  const [lastSyncedPhysicalPage, setLastSyncedPhysicalPage] = useState(physicalPage);
-  const [pageInputValue, setPageInputValue] = useState(() => String(physicalPage));
-  if (physicalPage !== lastSyncedPhysicalPage) {
-    setLastSyncedPhysicalPage(physicalPage);
-    setPageInputValue(String(physicalPage));
-  }
-
-  // Commits the page input's current text (story 9): a valid in-range
-  // integer navigates to that physical page's spread; anything else
-  // (empty, non-integer, out-of-range) leaves the spread unchanged, shows
-  // the shared failed toast, and resets the input back to the current
-  // focal physical page.
-  function commitPageInput() {
-    const parsed = parsePhysicalPageInput(pageInputValue, maxPhysicalPage);
-    if (parsed === null) {
-      start().markFailed({
-        detail: `Enter a page number between 1 and ${maxPhysicalPage}.`,
-      });
-      setPageInputValue(String(physicalPage));
-      return;
-    }
-    navigateToPhysicalPage(parsed);
-  }
-
-  // Flips the persisted Michi-indicator preference.
-  function toggleMichiIndicators() {
-    setMichiIndicatorsVisible(!michiIndicatorsVisible);
-  }
-
-  // Story 29's print-to-PDF button disables itself while its own export is
-  // in flight; a fresh `useState` (rather than a shared pending-set) is
-  // enough since only one binder's layout tab renders at a time.
-  const [isExportingPdf, setIsExportingPdf] = useState(false);
-
-  // Story 30's print-art button opens a selection modal rather than
-  // immediately generating a PDF; the modal itself owns the in-flight
-  // export state (see `PrintArtModal.tsx`).
-  const [isPrintArtModalOpen, setIsPrintArtModalOpen] = useState(false);
+  // Story 16's card-variation overlay toggle is a persisted presentation
+  // preference (hidden by default), and story 29's PDF export reads this
+  // same state so printed output matches what's shown on screen.
+  const [variationsVisible, setVariationsVisible] = useLocalStorageBoolean(
+    'binder-layout-variations-visible',
+    DEFAULT_BINDER_VARIATIONS_VISIBLE,
+  );
 
   // Story 28 post-undo/redo unplaced navigation: when the resulting focal
   // placement is unplaced, keep the current spread and ask the matching
@@ -712,25 +268,15 @@ export function BinderLayoutView() {
   // and is never included in the PDF").
   const placedArt = art.filter((item) => item.placement.physicalPage !== null);
 
-  // Story 16's card-variation overlay toggle is a persisted presentation
-  // preference (hidden by default), and story 29's PDF export reads this
-  // same state so printed output matches what's shown on screen.
-  const [variationsVisible, setVariationsVisible] = useLocalStorageBoolean(
-    'binder-layout-variations-visible',
-    DEFAULT_BINDER_VARIATIONS_VISIBLE,
-  );
+  // Story 29's print-to-PDF button disables itself while its own export is
+  // in flight; a fresh `useState` (rather than a shared pending-set) is
+  // enough since only one binder's layout tab renders at a time.
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
-  // Flips the persisted variations-visibility preference.
-  function toggleVariationsVisible() {
-    setVariationsVisible(!variationsVisible);
-  }
-
-  // Flips the persisted notes-visibility preference (story 23), which
-  // `useLocalStorageBoolean` writes to browser local storage so it's
-  // remembered on the next visit.
-  function toggleNotesVisible() {
-    setNotesVisible(!notesVisible);
-  }
+  // Story 30's print-art button opens a selection modal rather than
+  // immediately generating a PDF; the modal itself owns the in-flight
+  // export state (see `PrintArtModal.tsx`).
+  const [isPrintArtModalOpen, setIsPrintArtModalOpen] = useState(false);
 
   // Generates and downloads the binder's layout PDF (story 29): drives the
   // shared save-status toast exactly like every other mutation (a
@@ -815,169 +361,31 @@ export function BinderLayoutView() {
         )}
 
         <div className={`flex h-full min-h-0 flex-col gap-4`}>
-          {/* The Michi-indicator toggle (story 10) and the direct page-number
-              input (story 9), side by side on their own row above the binder
-              visualization. */}
-          <div className="flex items-center justify-center gap-10">
-            {/* Story 10's toggle: custom-styled checkbox matching the app's
-              checkbox convention (styling.instructions.md's "Forms & inputs"
-              section). `michiIndicatorsVisible` is a persisted (local
-              storage) preference defaulting to off, not a URL query param.
-              The label is forced onto 2 short lines (rather than one long
-              line) so this control stays narrow next to the page input. */}
-            <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
-              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                <input
-                  id="michi-indicators-toggle"
-                  type="checkbox"
-                  checked={michiIndicatorsVisible}
-                  onChange={toggleMichiIndicators}
-                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-                />
-                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-              </span>
-              <span className="flex flex-col text-caption leading-tight text-neutral-500">
-                <span>Show Michi</span>
-                <span>slot indicators</span>
-              </span>
-            </label>
-
-            {/* Story 16's toggle: same custom-styled checkbox as the Michi
-                toggle above. `variationsVisible` is a persisted (local
-                storage) preference defaulting to off (hidden), per the
-                acceptance criteria - not a URL query param. */}
-            <label htmlFor="variations-visible-toggle" className="flex items-center gap-2">
-              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                <input
-                  id="variations-visible-toggle"
-                  type="checkbox"
-                  checked={variationsVisible}
-                  onChange={toggleVariationsVisible}
-                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-                />
-                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-              </span>
-              <span className="flex flex-col text-caption leading-tight text-neutral-500">
-                <span>Show card</span>
-                <span>variations</span>
-              </span>
-            </label>
-
-            {/* Story 23's toggle: same custom-styled checkbox as the toggles
-                above; its checked state is the persisted (local-storage)
-                notes-visibility preference, defaulting to on. Story 32:
-                hidden entirely while the binder is locked, since the notes
-                section itself is never rendered in that state (see the
-                gated `<BinderNotesSection>` below) - leaving the toggle
-                visible would let the user "show" a section that can never
-                actually appear. */}
-            {!isLocked && (
-              <label htmlFor="notes-visible-toggle" className="flex items-center gap-2">
-                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                  <input
-                    id="notes-visible-toggle"
-                    type="checkbox"
-                    checked={notesVisible}
-                    onChange={toggleNotesVisible}
-                    className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-                  />
-                  <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-                </span>
-                <span className="flex flex-col text-caption leading-tight text-neutral-500">
-                  <span>Show</span>
-                  <span>notes</span>
-                </span>
-              </label>
-            )}
-
-            <div className="flex flex-col items-center gap-1">
-              <label htmlFor="layout-page-input" className="text-caption text-neutral-500">
-                Go to page
-              </label>
-              <input
-                id="layout-page-input"
-                type="number"
-                min={1}
-                max={maxPhysicalPage}
-                step={1}
-                value={pageInputValue}
-                onChange={(event) => setPageInputValue(event.target.value)}
-                onBlur={commitPageInput}
-                onKeyDown={(event) => {
-                  // Commits on Enter by blurring, which routes through the same
-                  // `commitPageInput` handler instead of duplicating its logic.
-                  if (event.key === 'Enter') event.currentTarget.blur();
-                }}
-                className={PAGE_INPUT_CLASS_NAME}
-              />
-            </div>
-
-            {/* Story 32: Undo/Redo are hidden entirely (not merely
-                disabled) while the binder is locked - every mutation they
-                could reverse is itself unavailable. */}
-            {!isLocked && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => void handleUndoLayoutMovement()}
-                  disabled={!canUndoLayoutMovement || isMovePending}
-                  aria-label="Undo layout movement"
-                  title="Undo"
-                  className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Undo2 className="size-5" />
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => void handleRedoLayoutMovement()}
-                  disabled={!canRedoLayoutMovement || isMovePending}
-                  aria-label="Redo layout movement"
-                  title="Redo"
-                  className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <Redo2 className="size-5" />
-                </button>
-              </>
-            )}
-
-            {/* Story 29's print-to-PDF button: available regardless of
-                lock state (story 32 leaves printing unrestricted since it
-                doesn't mutate the binder), disabled only while its own
-                export is in flight. Icon-only, so it relies on
-                `aria-label`/`title` for its accessible name rather than
-                visible text. */}
-            <button
-              type="button"
-              onClick={handleExportPdf}
-              disabled={isExportingPdf}
-              aria-label="Print to PDF"
-              title="Print to PDF"
-              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Printer className="size-5" />
-            </button>
-
-            {/* Story 30's print-art button: opens the selection modal
-                rather than immediately generating a PDF, and (like
-                `Printer` above) is available regardless of lock state.
-                Disabled with an explanatory tooltip when the binder has
-                no placed multi-slot art at all (planning.md: "the modal
-                cannot be opened"). Icon-only, so it relies on
-                `aria-label`/`title` for its accessible name. */}
-            <button
-              type="button"
-              onClick={() => setIsPrintArtModalOpen(true)}
-              disabled={placedArt.length === 0}
-              aria-label="Print art to PDF"
-              title={
-                placedArt.length === 0 ? 'Place multi-slot art to enable this' : 'Print art to PDF'
-              }
-              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Images className="size-5" />
-            </button>
-          </div>
+          {/* The toolbar row (michi/variations/notes toggles, direct
+              page-number input, undo/redo, print buttons) - see
+              `LayoutToolbar`. */}
+          <LayoutToolbar
+            michiIndicatorsVisible={michiIndicatorsVisible}
+            onToggleMichiIndicators={() => setMichiIndicatorsVisible(!michiIndicatorsVisible)}
+            variationsVisible={variationsVisible}
+            onToggleVariationsVisible={() => setVariationsVisible(!variationsVisible)}
+            notesVisible={notesVisible}
+            onToggleNotesVisible={() => setNotesVisible(!notesVisible)}
+            isLocked={isLocked}
+            maxPhysicalPage={maxPhysicalPage}
+            pageInputValue={pageInputValue}
+            onPageInputChange={setPageInputValue}
+            onCommitPageInput={commitPageInput}
+            canUndoLayoutMovement={canUndoLayoutMovement}
+            canRedoLayoutMovement={canRedoLayoutMovement}
+            isMovePending={isMovePending}
+            onUndo={() => void handleUndoLayoutMovement()}
+            onRedo={() => void handleRedoLayoutMovement()}
+            isExportingPdf={isExportingPdf}
+            onExportPdf={handleExportPdf}
+            placedArtCount={placedArt.length}
+            onOpenPrintArtModal={() => setIsPrintArtModalOpen(true)}
+          />
 
           {/* Story 40: summary stats (slots filled + unplaced counts, with
               an over-capacity warning) on their own row above the spread
@@ -990,125 +398,41 @@ export function BinderLayoutView() {
             {getSpreadLabel(spread)} / {totalPhysicalPages}
           </p>
 
-          {/* Two nested containers split "claim the leftover height" from
-              "center the visible content": the OUTER div reserves the tab's
-              full remaining height (`flex-1`) and pins its child to the TOP
-              of it (`items-start`), so the binder visualization renders
-              right under the label - any leftover height (the fitting area
-              is often shorter than the full remaining space) falls below
-              the content rather than pushing it down the tab. The INNER row
-              is not stretched - it only hugs its own real content height -
-              so its own `items-center` correctly centers the chevrons
-              against the actual rendered grid height, with no artificial
-              extra space to throw that off. */}
-          <div className="flex shrink-0 items-start justify-center">
-            <div className="flex w-full items-center justify-center gap-4">
-              <button
-                type="button"
-                aria-label="Previous page"
-                disabled={isFirstSpread || activeDragCard !== null || activeDragArt !== null}
-                onClick={() =>
-                  navigateToPhysicalPage(getPreviousPhysicalPage(physicalPage, maxPhysicalPage))
-                }
-                className={ARROW_BUTTON_CLASS_NAME}
-              >
-                <ChevronLeft className="size-6" />
-              </button>
-
-              {/* Only the active spread's data is mounted - the previous/next
-                spreads are never rendered or retained as hidden elements. A
-                tight gap keeps the two sides reading as one bound spread (like
-                facing pages meeting at the spine), and the max-width cap keeps
-                the overall visualization compact. Both flex slots always
-                render (a blank, non-content placeholder standing in for the
-                side missing on the first/last spread) so that single-sided
-                spread reserves the exact same half-row share of space as a
-                two-sided spread instead of its lone binder side stretching to
-                fill the whole row. */}
-              <div className="flex max-w-2xl flex-1 items-stretch justify-center gap-1">
-                {spread.left !== null ? (
-                  <BinderSide
-                    side="left"
-                    width={binder.width}
-                    height={binder.height}
-                    physicalPage={spread.left}
-                    binder={binder}
-                    cards={cards}
-                    art={art}
-                    pendingPlacementKeys={pendingPlacementKeys}
-                    onSlotClick={(row, column) =>
-                      setSelectedSlot({ physicalPage: spread.left as number, row, column })
-                    }
-                    onRemoveCard={removeCard}
-                    pendingCardDeletionIds={pendingCardDeletionIds}
-                    onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
-                    pendingCardVariationEditIds={pendingCardVariationEditIds}
-                    onDuplicateCard={duplicateCard}
-                    pendingCardDuplicateIds={pendingCardDuplicateIds}
-                    variationsVisible={variationsVisible}
-                    pendingArtEditIds={pendingArtEditIds}
-                    pendingArtDeletionIds={pendingArtDeletionIds}
-                    pendingArtDuplicateIds={pendingArtDuplicateIds}
-                    onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
-                    onRemoveArt={removeArt}
-                    onDuplicateArt={duplicateArt}
-                    isMovePending={isMovePending}
-                    michiIndicatorsVisible={michiIndicatorsVisible}
-                    slotAspectRatio={slotAspectRatio}
-                    dragCandidateFootprint={dragCandidateFootprint}
-                  />
-                ) : (
-                  <div className="w-full min-w-0 flex-1" aria-hidden="true" />
-                )}
-                {spread.right !== null ? (
-                  <BinderSide
-                    side="right"
-                    width={binder.width}
-                    height={binder.height}
-                    physicalPage={spread.right}
-                    binder={binder}
-                    cards={cards}
-                    art={art}
-                    pendingPlacementKeys={pendingPlacementKeys}
-                    onSlotClick={(row, column) =>
-                      setSelectedSlot({ physicalPage: spread.right as number, row, column })
-                    }
-                    onRemoveCard={removeCard}
-                    pendingCardDeletionIds={pendingCardDeletionIds}
-                    onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
-                    pendingCardVariationEditIds={pendingCardVariationEditIds}
-                    onDuplicateCard={duplicateCard}
-                    pendingCardDuplicateIds={pendingCardDuplicateIds}
-                    variationsVisible={variationsVisible}
-                    pendingArtEditIds={pendingArtEditIds}
-                    pendingArtDeletionIds={pendingArtDeletionIds}
-                    pendingArtDuplicateIds={pendingArtDuplicateIds}
-                    onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
-                    onRemoveArt={removeArt}
-                    onDuplicateArt={duplicateArt}
-                    isMovePending={isMovePending}
-                    michiIndicatorsVisible={michiIndicatorsVisible}
-                    slotAspectRatio={slotAspectRatio}
-                    dragCandidateFootprint={dragCandidateFootprint}
-                  />
-                ) : (
-                  <div className="w-full min-w-0 flex-1" aria-hidden="true" />
-                )}
-              </div>
-
-              <button
-                type="button"
-                aria-label="Next page"
-                disabled={isLastSpread || activeDragCard !== null || activeDragArt !== null}
-                onClick={() =>
-                  navigateToPhysicalPage(getNextPhysicalPage(physicalPage, maxPhysicalPage))
-                }
-                className={ARROW_BUTTON_CLASS_NAME}
-              >
-                <ChevronRight className="size-6" />
-              </button>
-            </div>
-          </div>
+          {/* The chevron-flanked spread visualization itself - see
+              `LayoutSpreadView`. */}
+          <LayoutSpreadView
+            binder={binder}
+            cards={cards}
+            art={art}
+            pendingPlacementKeys={pendingPlacementKeys}
+            spread={spread}
+            physicalPage={physicalPage}
+            maxPhysicalPage={maxPhysicalPage}
+            isFirstSpread={isFirstSpread}
+            isLastSpread={isLastSpread}
+            isDragActive={activeDragCard !== null || activeDragArt !== null}
+            navigateToPhysicalPage={navigateToPhysicalPage}
+            onSlotClick={(pageForSlot, row, column) =>
+              setSelectedSlot({ physicalPage: pageForSlot, row, column })
+            }
+            onRemoveCard={removeCard}
+            pendingCardDeletionIds={pendingCardDeletionIds}
+            onEditVariation={(clickedCard) => setEditingCardId(clickedCard.id)}
+            pendingCardVariationEditIds={pendingCardVariationEditIds}
+            onDuplicateCard={duplicateCard}
+            pendingCardDuplicateIds={pendingCardDuplicateIds}
+            variationsVisible={variationsVisible}
+            pendingArtEditIds={pendingArtEditIds}
+            pendingArtDeletionIds={pendingArtDeletionIds}
+            pendingArtDuplicateIds={pendingArtDuplicateIds}
+            onEditArt={(clickedArt) => setEditingArtId(clickedArt.id)}
+            onRemoveArt={removeArt}
+            onDuplicateArt={duplicateArt}
+            isMovePending={isMovePending}
+            michiIndicatorsVisible={michiIndicatorsVisible}
+            slotAspectRatio={slotAspectRatio}
+            dragCandidateFootprint={dragCandidateFootprint}
+          />
 
           {/* Story 23: the notes section, within the center column below
                 the spread (not spanning the unplaced side panels), shown
@@ -1174,11 +498,7 @@ export function BinderLayoutView() {
 
       {selectedSlot && (
         <CardSelectionModal
-          onClose={() => {
-            setSelectedSlot(null);
-            setManualEntryDraft(null);
-            setBulkSelectionDraft(null);
-          }}
+          onClose={closeCardSelectionModal}
           initialTarget={selectedSlot}
           onAddCards={handleAddCards}
           onAddMoreCards={handleAddMoreCards}

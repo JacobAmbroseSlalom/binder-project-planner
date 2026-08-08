@@ -1,22 +1,12 @@
 'use client';
 
-import {
-  CARD_SEARCH_DEBOUNCE_MS,
-  CARD_SEARCH_MIN_QUERY_LENGTH,
-} from '@binder-project-planner/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useVirtualizer } from '@tanstack/react-virtual';
-import { ArrowLeft, Check, X } from 'lucide-react';
+import { ArrowLeft, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { resolveCardImageUrl, searchCardCatalog, type TcgDexCatalogCard } from '@/lib/api';
-import {
-  LoadingIndicator,
-  toProblemDetailsInfo,
-  useDelayedLoading,
-  useToastContext,
-} from '@/shared/feedback';
+import { type TcgDexCatalogCard } from '@/lib/api';
+import { useModalFocusTrap } from '@/shared/hooks/useModalFocusTrap';
 import { VariationCombobox } from '@/shared/forms';
 
 import { useBinderRouteContext, type CustomCardFormValues } from '../../../BinderRouteContext';
@@ -26,43 +16,9 @@ import {
   manualCardSchema,
   type ManualCardFormValues,
 } from './manualCardSchema';
-
-// The number of results per virtualized row. Not a shared/application
-// default (per coding-conventions.instructions.md, `defaults.ts` only holds
-// application-owned values) - it's purely a presentation detail of this
-// modal's own grid.
-const RESULTS_PER_ROW = 4;
-
-// Only an initial guess for the virtualizer's scrollbar/offset math before
-// a row has actually been measured (see `measureElement` below) - actual
-// row heights are measured from real rendered content, so this no longer
-// needs to precisely match the card's content height.
-const ESTIMATED_RESULT_ROW_HEIGHT_PX = 190;
-
-// Fixed toast id for search failures (story 11), matching the pattern
-// established elsewhere (e.g. `OPEN_BINDER_TOAST_ID`): a later attempt
-// replaces this operation's own toast rather than stacking a new one.
-const CARD_SEARCH_TOAST_ID = 'card-catalog-search';
-
-// Remembers the last-typed search query across the modal's mount/unmount
-// lifecycle - the modal fully unmounts on close (see the component comment
-// below), so component state alone can't survive a reopen. A module-level
-// variable is enough here since only one instance of this modal is ever
-// open at a time; it naturally resets on a full page reload, which is an
-// acceptable scope for "remember the last search".
-let lastSearchQuery = '';
-
-// Remembers the results list's scroll offset alongside `lastSearchQuery`
-// above, for the same reason (the modal fully unmounts on close, so
-// component state can't survive a reopen) - lets a reopened modal restore
-// the user's previous scroll position instead of resetting to the top.
-let lastScrollOffset = 0;
-
-// The selectors `focusableSelector` below considers tabbable, for the
-// modal's own focus trap (styling.instructions.md requires interactive
-// components to be fully custom-built, including dialog focus trapping).
-const FOCUSABLE_SELECTOR =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+import { SearchResultsView } from './SearchResultsView';
+import { useCardCatalogSearch } from './useCardCatalogSearch';
+import { useCardSelectionState } from './useCardSelectionState';
 
 // The custom card-selection modal (stories 11 and 12): searches the TCGdex
 // catalog through a debounced, cancellable search box and lets the user
@@ -71,6 +27,14 @@ const FOCUSABLE_SELECTOR =
 // Rendered by `BinderLayoutView` only while a slot is selected; unmounting
 // it (on close or successful selection) is what restores focus to the
 // triggering slot button below.
+//
+// The catalog search/virtualized-results machinery and the checkbox
+// multi-select state are each owned by their own extracted hook (see the
+// `use*` imports above), and the search view's own large JSX block lives
+// in `SearchResultsView` - this component composes them and owns what's
+// left: the manual-entry view's form state, the shared variation field,
+// this session's target-placement/submission-tracking rules (story 17),
+// and the dialog's own focus/keyboard handling.
 export function CardSelectionModal({
   onClose,
   initialTarget,
@@ -153,7 +117,6 @@ export function CardSelectionModal({
   // restore's ids simply arrive pre-checked among them.
   initialSelectionRestore?: { cards: TcgDexCatalogCard[]; variation: string | null };
 }) {
-  const { markFailed, dismiss } = useToastContext();
   // Story 41's language toggle lives in the route context (rather than as
   // local state) so it survives this modal's own mount/unmount cycle within
   // the same binder visit. The TCG Pocket inclusion toggle lives there for
@@ -161,34 +124,32 @@ export function CardSelectionModal({
   const { cardSearchLanguage, setCardSearchLanguage, includeTcgPocket, setIncludeTcgPocket } =
     useBinderRouteContext();
 
-  // Both seeded from the remembered last query (rather than empty) so a
-  // reopened modal shows and re-searches the previous query right away
-  // instead of waiting out the debounce delay.
-  const [query, setQuery] = useState(lastSearchQuery);
-  const [debouncedQuery, setDebouncedQuery] = useState(lastSearchQuery);
-  const [results, setResults] = useState<TcgDexCatalogCard[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  // Set only when a `language=ja` search's PokéAPI translation attempt
-  // missed and TCGdex was searched using the original entered text instead
-  // (story 41) - rendered as a nonblocking inline warning, never the shared
-  // failed toast.
-  const [translationWarning, setTranslationWarning] = useState(false);
-  // Tracks whether the *current* qualifying query has a completed,
-  // successful search behind it - distinct from `results.length === 0`,
-  // which is also true before any search has ever run. Gates the no-results
-  // message (planning.md story 11: "it is not shown before the first
-  // qualifying search or while a search is loading") so an empty initial
-  // state or an empty in-flight state never renders it.
-  const [hasCompletedSearch, setHasCompletedSearch] = useState(false);
-  // Stories 17/18: a set of `providerCardId`s (rather than a single
-  // selected card) - checkbox multi-select replaces story 11's exclusive
-  // single-select. Seeded from `initialSelectionRestore` (if this modal is
-  // reopening after a failed Add-Card submission) so the failed cards
-  // arrive pre-checked once the remembered-query search effect below
-  // re-fetches them.
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(
-    () => new Set((initialSelectionRestore?.cards ?? []).map((card) => card.providerCardId)),
-  );
+  // The TCGdex catalog search itself - see `useCardCatalogSearch`.
+  const {
+    query,
+    setQuery,
+    debouncedQuery,
+    results,
+    translationWarning,
+    hasCompletedSearch,
+    showLoading,
+    rows,
+    rowVirtualizer,
+    scrollContainerRef,
+    handleScroll,
+    resetSearch,
+  } = useCardCatalogSearch({ cardSearchLanguage, includeTcgPocket });
+
+  // The results checkbox multi-select - see `useCardSelectionState`.
+  const {
+    selectedIds,
+    setSelectedIds,
+    toggleSelected,
+    allResultsSelected,
+    handleToggleSelectAll,
+    selectedResults,
+  } = useCardSelectionState({ results, initialSelectionRestore });
+
   // Story 16: a single shared field for the selected/created card's
   // variation, used by both the search view (TCGdex selection) and the
   // manual-entry view - the story's acceptance criteria describe one
@@ -246,152 +207,43 @@ export function CardSelectionModal({
 
   // A local object-URL preview of the selected file (decoupled from the
   // separate object URL the route context creates for the optimistic
-  // card's `imageUrl` once submitted) - created whenever `customCardFile`
-  // changes and revoked on the next change or on unmount, so this modal's
-  // own preview never leaks a blob URL.
-  const [customCardPreviewUrl, setCustomCardPreviewUrl] = useState<string | null>(null);
+  // card's `imageUrl` once submitted), so this modal's own preview never
+  // leaks a blob URL. `URL.createObjectURL` is a pure, synchronous
+  // derivation of `customCardFile`, so it's computed via `useMemo` (not
+  // `useEffect` + `useState`) - storing it as effect-driven state would
+  // trip React Compiler's `react-hooks/set-state-in-effect` rule, since
+  // nothing here is actually waiting on an external async event. A
+  // separate cleanup-only effect (no `setState` call of its own) revokes
+  // each created url once it's no longer the current one or on unmount.
+  const customCardPreviewUrl = useMemo(
+    () => (customCardFile ? URL.createObjectURL(customCardFile) : null),
+    [customCardFile],
+  );
   useEffect(() => {
-    if (!customCardFile) {
-      setCustomCardPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(customCardFile);
-    setCustomCardPreviewUrl(url);
-    return () => URL.revokeObjectURL(url);
-  }, [customCardFile]);
-
-  const showLoading = useDelayedLoading(isSearching);
+    return () => {
+      if (customCardPreviewUrl) URL.revokeObjectURL(customCardPreviewUrl);
+    };
+  }, [customCardPreviewUrl]);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  // The element focused immediately before this modal mounted (the slot
-  // button that opened it), restored on unmount so keyboard/screen-reader
-  // users land back where they started.
-  const previouslyFocusedElementRef = useRef<HTMLElement | null>(null);
-  // Guards the scroll-restore effect below so it only ever applies once per
-  // mount, rather than re-snapping the list back on every later results
-  // update.
-  const hasRestoredScrollRef = useRef(false);
-  // Captured once at mount: the scroll-restore effect below only restores
-  // `lastScrollOffset` while the query is still this remembered initial
-  // one. If the user starts a new search before the old results repopulate,
-  // restoring the old offset against the new (unrelated) results would be
-  // confusing, so restoring is skipped instead.
-  const initialQueryRef = useRef(query);
+  // The dialog's shared focus-capture/restore-on-unmount lifecycle and
+  // Tab-trap - see `useModalFocusTrap`.
+  const { handleTabTrap } = useModalFocusTrap(dialogRef);
 
-  // Focuses the search input on mount and restores focus to the triggering
-  // element on unmount (close or selection), per the story's dialog
+  // Focuses the search input on mount, per the story's dialog
   // accessibility requirements. `select()` (rather than just `focus()`)
   // highlights any remembered query text, so if the user immediately starts
   // typing it overwrites the previous search instead of being inserted into
   // it.
   useEffect(() => {
-    previouslyFocusedElementRef.current = document.activeElement as HTMLElement | null;
     searchInputRef.current?.focus();
     searchInputRef.current?.select();
-    return () => {
-      previouslyFocusedElementRef.current?.focus();
-    };
   }, []);
 
-  // Keeps the module-level `lastSearchQuery` in sync so the next time this
-  // modal is opened, it can seed itself from the most recent query.
-  useEffect(() => {
-    lastSearchQuery = query;
-  }, [query]);
-
-  // Debounces the raw query text into `debouncedQuery`, which the search
-  // effect below actually acts on - so fast typing never fires a request
-  // per keystroke.
-  useEffect(() => {
-    const timer = setTimeout(() => setDebouncedQuery(query), CARD_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  // Runs the actual search once the debounced query reaches the configured
-  // minimum length; a shorter (including empty) query just clears any
-  // previous results rather than searching. Cancels a still-in-flight
-  // search via `AbortController` as soon as a newer query supersedes it.
-  useEffect(() => {
-    const trimmed = debouncedQuery.trim();
-    if (trimmed.length < CARD_SEARCH_MIN_QUERY_LENGTH) {
-      setResults([]);
-      setIsSearching(false);
-      setHasCompletedSearch(false);
-      setTranslationWarning(false);
-      return;
-    }
-
-    const controller = new AbortController();
-    setIsSearching(true);
-    // Cleared immediately (rather than only on success) so a query change
-    // can never leave a stale no-results message visible during the gap
-    // before `showLoading` itself flips true.
-    setHasCompletedSearch(false);
-
-    searchCardCatalog(trimmed, cardSearchLanguage, includeTcgPocket, controller.signal)
-      .then(({ results: catalogCards, translationWarning: missedTranslation }) => {
-        setResults(catalogCards);
-        setTranslationWarning(missedTranslation);
-        setIsSearching(false);
-        setHasCompletedSearch(true);
-        dismiss(CARD_SEARCH_TOAST_ID);
-      })
-      .catch((error) => {
-        if (controller.signal.aborted) return;
-        setIsSearching(false);
-        markFailed(CARD_SEARCH_TOAST_ID, toProblemDetailsInfo(error));
-      });
-
-    return () => {
-      controller.abort();
-    };
-    // `cardSearchLanguage`/`includeTcgPocket` in the dependency array is
-    // what satisfies planning.md's "changing either toggle immediately
-    // re-searches the current trimmed query... without waiting for
-    // CARD_SEARCH_DEBOUNCE_MS" - a toggle flip re-runs this effect using
-    // whatever `debouncedQuery` already holds, rather than waiting for a new
-    // debounce cycle.
-  }, [debouncedQuery, cardSearchLanguage, includeTcgPocket, markFailed, dismiss]);
-
-  // Chunks the flat results list into fixed-size rows for the virtualizer,
-  // which measures whole rows rather than individual cards.
-  const rows = useMemo(() => {
-    const chunked: TcgDexCatalogCard[][] = [];
-    for (let index = 0; index < results.length; index += RESULTS_PER_ROW) {
-      chunked.push(results.slice(index, index + RESULTS_PER_ROW));
-    }
-    return chunked;
-  }, [results]);
-
-  const rowVirtualizer = useVirtualizer({
-    count: rows.length,
-    getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => ESTIMATED_RESULT_ROW_HEIGHT_PX,
-    overscan: 3,
-  });
-
-  // Restores the previous scroll offset once the reopened modal's results
-  // have repopulated - restoring before any rows exist would just clamp
-  // back to 0, so this waits for `rows` to actually contain something, then
-  // only ever fires once per mount (see `hasRestoredScrollRef` above).
-  useEffect(() => {
-    if (hasRestoredScrollRef.current) return;
-    if (query !== initialQueryRef.current) {
-      // The user has already changed the search since this modal opened;
-      // give up on restoring rather than applying a stale offset later.
-      hasRestoredScrollRef.current = true;
-      return;
-    }
-    if (rows.length === 0) return;
-
-    hasRestoredScrollRef.current = true;
-    scrollContainerRef.current?.scrollTo({ top: lastScrollOffset });
-  }, [rows.length, query]);
-
-  // Escape closes the modal; Tab/Shift+Tab is trapped within the dialog so
-  // focus never escapes to the page behind the backdrop.
+  // Escape closes the modal; Tab/Shift+Tab is delegated to the shared
+  // focus-trap hook so focus never escapes to the page behind the
+  // backdrop.
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key === 'Escape') {
       event.stopPropagation();
@@ -399,24 +251,7 @@ export function CardSelectionModal({
       return;
     }
 
-    if (event.key !== 'Tab') return;
-
-    const container = dialogRef.current;
-    if (!container) return;
-
-    const focusable = Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
-    if (focusable.length === 0) return;
-
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-
-    if (event.shiftKey && document.activeElement === first) {
-      event.preventDefault();
-      last.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault();
-      first.focus();
-    }
+    handleTabTrap(event);
   }
 
   // Resolves this session's target placement for the *next* submission
@@ -437,38 +272,11 @@ export function CardSelectionModal({
     };
   }
 
-  // The currently checked results, in the same order they're displayed -
-  // both `onAddCards`/`onAddMoreCards` calls below and the slot-targeting
-  // rule above treat this array's first entry as "the" card eligible for
-  // `initialTarget`.
-  const selectedResults = results.filter((card) => selectedIds.has(card.providerCardId));
   // Shared disabled-state gate for the search view's Add Card action,
   // reused by both the footer button and the result-tile Enter shortcut
   // below so they stay behaviorally aligned.
   const isSearchAddCardDisabled =
     selectedResults.length === 0 || isBulkAddPending || isAddMoreSubmitting;
-
-  function toggleSelected(providerCardId: string) {
-    setSelectedIds((previous) => {
-      const next = new Set(previous);
-      if (next.has(providerCardId)) {
-        next.delete(providerCardId);
-      } else {
-        next.add(providerCardId);
-      }
-      return next;
-    });
-  }
-
-  // Story 18: toggles between selecting every currently loaded result and
-  // clearing the selection entirely, rather than two separate buttons.
-  const allResultsSelected =
-    results.length > 0 && results.every((card) => selectedIds.has(card.providerCardId));
-  function handleToggleSelectAll() {
-    setSelectedIds(
-      allResultsSelected ? new Set() : new Set(results.map((card) => card.providerCardId)),
-    );
-  }
 
   // "Add Card" (stories 17/18): fires-and-forgets the full checkbox
   // selection - the caller closes this modal right away, so there's
@@ -496,10 +304,7 @@ export function CardSelectionModal({
         targetPlacement,
       );
       if (allSucceeded) {
-        setQuery('');
-        setDebouncedQuery('');
-        setResults([]);
-        setHasCompletedSearch(false);
+        resetSearch();
         setSelectedIds(new Set());
         setVariation('');
         searchInputRef.current?.focus();
@@ -554,7 +359,13 @@ export function CardSelectionModal({
   // Submits the manual-entry form's "Add Card" (story 12). A file is
   // required independently of the RHF/Zod-validated text fields (see
   // `manualCardSchema.ts`'s comment), so it's checked here rather than
-  // through the form's own validation.
+  // through the form's own validation. `hasSubmittedRef` (read via
+  // `resolveTargetPlacement()` and written below) is only ever touched once
+  // this callback actually runs, on a real form submission triggered by a
+  // click handler - never during render, so the disable below silences a
+  // false positive from the compiler's conservative analysis of
+  // `react-hook-form`'s `handleSubmit` wrapper.
+  // eslint-disable-next-line react-hooks/refs
   const handleManualSubmit = manualForm.handleSubmit((values) => {
     if (!customCardFile) {
       setFileError('An image is required.');
@@ -577,7 +388,9 @@ export function CardSelectionModal({
   // The manual-entry view's own "Add More" (story 18), mirroring
   // `handleAddMoreCards`: awaited so the form (and its selected file) only
   // clears on complete success, keeping everything in place for
-  // correction on failure.
+  // correction on failure. See the matching comment on `handleManualSubmit`
+  // above; the same false positive applies here.
+  // eslint-disable-next-line react-hooks/refs
   const handleManualAddMore = manualForm.handleSubmit(async (values) => {
     if (!customCardFile) {
       setFileError('An image is required.');
@@ -648,198 +461,34 @@ export function CardSelectionModal({
         </div>
 
         {viewMode === 'search' ? (
-          <>
-            <div className="flex items-center gap-4">
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search for a card by name…"
-                aria-label="Search for a card by name"
-                className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
-              />
-
-              {/* Story 41's language toggle: matches the Michi-indicator
-              checkbox convention (styling.instructions.md's "Forms &
-              inputs" section). Defaults to English (`cardSearchLanguage`
-              starts at `CARD_SEARCH_LANGUAGE_DEFAULT`); checking it
-              switches to searching TCGdex's Japanese catalog. */}
-              <label
-                htmlFor="card-search-language-toggle"
-                className="flex shrink-0 items-center gap-2"
-              >
-                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                  <input
-                    id="card-search-language-toggle"
-                    type="checkbox"
-                    checked={cardSearchLanguage === 'ja'}
-                    onChange={(event) => setCardSearchLanguage(event.target.checked ? 'ja' : 'en')}
-                    className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-                  />
-                  <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-                </span>
-                <span className="text-caption text-neutral-500">Japanese</span>
-              </label>
-
-              {/* Story 41's TCG Pocket inclusion toggle: same checkbox
-              convention as the language toggle above. Defaults to excluded
-              (`includeTcgPocket` starts at
-              `CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT`); checking it
-              includes Pokémon TCG Pocket cards in results. */}
-              <label
-                htmlFor="card-search-include-tcg-pocket-toggle"
-                className="flex shrink-0 items-center gap-2"
-              >
-                <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-                  <input
-                    id="card-search-include-tcg-pocket-toggle"
-                    type="checkbox"
-                    checked={includeTcgPocket}
-                    onChange={(event) => setIncludeTcgPocket(event.target.checked)}
-                    className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-                  />
-                  <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-                </span>
-                <span className="text-caption text-neutral-500">TCG Pocket</span>
-              </label>
-            </div>
-
-            {/* Nonblocking translation-miss warning (story 41): rendered inline
-            per styling.instructions.md's "Non-blocking warnings" guidance,
-            never as a toast, and never in place of the results/loading/
-            empty-state content below. */}
-            {translationWarning && (
-              <p className="text-caption text-warning">
-                No Japanese translation was found for “{debouncedQuery.trim()}”; showing results for
-                the entered text instead.
-              </p>
-            )}
-
-            {/* Stories 17/18: Select All/Deselect All plus a running
-            selection count, replacing story 11's single-select. Disabled
-            whenever there are no loaded results to select, or while a bulk
-            request for this binder is already in flight. */}
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                onClick={handleToggleSelectAll}
-                disabled={results.length === 0 || isBulkAddPending || isAddMoreSubmitting}
-                className="cursor-pointer rounded-standard px-2 py-1 font-bold text-primary hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {allResultsSelected ? 'Deselect All' : 'Select All'}
-              </button>
-              <span className="text-caption text-neutral-500">{selectedIds.size} selected</span>
-            </div>
-
-            <div
-              ref={scrollContainerRef}
-              onScroll={(event) => {
-                lastScrollOffset = event.currentTarget.scrollTop;
-              }}
-              className="min-h-0 flex-1 overflow-y-auto"
-            >
-              {showLoading ? (
-                <LoadingIndicator label="Searching for cards…" size="8" />
-              ) : hasCompletedSearch && results.length === 0 ? (
-                // Only reached once a qualifying search has actually completed
-                // successfully with zero matches (see `hasCompletedSearch`
-                // above) - never shown for the modal's initial empty state or
-                // while a search is still loading.
-                <p className="text-center text-neutral-500">No cards were found.</p>
-              ) : (
-                <div style={{ height: `${rowVirtualizer.getTotalSize()}px`, position: 'relative' }}>
-                  {rowVirtualizer.getVirtualItems().map((virtualRow) => (
-                    <div
-                      key={virtualRow.key}
-                      data-index={virtualRow.index}
-                      // `measureElement` (rather than a fixed `height`) lets the
-                      // virtualizer read each row's *actual* rendered height via
-                      // ResizeObserver, so row-to-row spacing always matches the
-                      // real card content instead of a guessed pixel constant.
-                      // `pb-3` below supplies the vertical gap itself (there's no
-                      // row-to-row CSS `gap` between these separately positioned
-                      // row divs), matching the `gap-3` used for the horizontal
-                      // gap between cards in the same row.
-                      ref={rowVirtualizer.measureElement}
-                      className="absolute top-0 left-0 grid w-full gap-3 pb-3"
-                      style={{
-                        transform: `translateY(${virtualRow.start}px)`,
-                        gridTemplateColumns: `repeat(${RESULTS_PER_ROW}, 1fr)`,
-                      }}
-                    >
-                      {rows[virtualRow.index].map((card) => {
-                        const isSelected = selectedIds.has(card.providerCardId);
-                        return (
-                          <button
-                            key={card.providerCardId}
-                            type="button"
-                            onClick={() => toggleSelected(card.providerCardId)}
-                            onKeyDown={(event) => {
-                              if (event.key !== 'Enter') return;
-                              // Once a tile has been selected, Enter should
-                              // submit via Add Card (if available) rather
-                              // than re-activating this same tile button,
-                              // which would otherwise toggle it back off.
-                              event.preventDefault();
-                              if (!isSearchAddCardDisabled) handleAddCards();
-                            }}
-                            disabled={isBulkAddPending || isAddMoreSubmitting}
-                            aria-pressed={isSelected}
-                            // `self-start` guards against the grid default
-                            // (`stretch`) if a row ever contains cards of
-                            // differing content height, so shorter cards hug
-                            // their own content rather than stretching to match
-                            // the row's tallest item. `min-w-0` overrides the
-                            // grid item's default `min-width: auto`, which
-                            // would otherwise size the column to fit the
-                            // truncated (nowrap) text's full unwrapped width
-                            // and cause horizontal overflow/scrolling.
-                            // Selection is indicated solely by the border/
-                            // background treatment below (stories 17/18) -
-                            // no separate checkbox glyph is overlaid on the
-                            // tile.
-                            className={`flex min-w-0 flex-col items-center gap-1 self-start rounded-standard border p-2 text-center hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50 ${
-                              isSelected
-                                ? 'border-primary bg-neutral-800'
-                                : 'border-neutral-700 bg-neutral-800'
-                            }`}
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element -- an
-                            arbitrary provider-hosted image, not eligible for
-                            next/image's fixed-domain optimization. */}
-                            <img
-                              src={resolveCardImageUrl(card.imageUrl)}
-                              alt={card.name}
-                              loading="lazy"
-                              className="h-32 w-24 object-contain"
-                            />
-                            {/* `min-w-0` on the name lets it truncate instead of
-                            forcing the row wider, while the local-number
-                            span uses `shrink-0` so it's never itself
-                            truncated away. */}
-                            <span className="flex w-full min-w-0 items-baseline justify-center gap-1">
-                              <span className="min-w-0 truncate text-caption">{card.name}</span>
-                              {card.localNumber && (
-                                <span className="shrink-0 text-caption text-neutral-500">
-                                  #{card.localNumber}
-                                </span>
-                              )}
-                            </span>
-                            {card.setName && (
-                              <span className="w-full truncate text-caption text-neutral-500">
-                                {card.setName}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
+          <SearchResultsView
+            cardSearchLanguage={cardSearchLanguage}
+            onCardSearchLanguageChange={setCardSearchLanguage}
+            includeTcgPocket={includeTcgPocket}
+            onIncludeTcgPocketChange={setIncludeTcgPocket}
+            query={query}
+            onQueryChange={setQuery}
+            searchInputRef={searchInputRef}
+            translationWarning={translationWarning}
+            debouncedQuery={debouncedQuery}
+            allResultsSelected={allResultsSelected}
+            onToggleSelectAll={handleToggleSelectAll}
+            selectedCount={selectedIds.size}
+            isSelectAllDisabled={results.length === 0 || isBulkAddPending || isAddMoreSubmitting}
+            scrollContainerRef={scrollContainerRef}
+            onScroll={handleScroll}
+            showLoading={showLoading}
+            hasCompletedSearch={hasCompletedSearch}
+            results={results}
+            rowVirtualizer={rowVirtualizer}
+            rows={rows}
+            selectedIds={selectedIds}
+            onToggleSelected={toggleSelected}
+            onEnterSelectedTile={() => {
+              if (!isSearchAddCardDisabled) handleAddCards();
+            }}
+            isTileDisabled={isBulkAddPending || isAddMoreSubmitting}
+          />
         ) : (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <ManualCardForm
