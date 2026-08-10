@@ -16,7 +16,8 @@
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "pnpm build && pnpm --filter @binder-project-planner/backend test && pnpm --filter @binder-project-planner/frontend test",
-    "typecheck": "pnpm --filter @binder-project-planner/shared typecheck && pnpm --filter @binder-project-planner/api-contract typecheck && pnpm --filter @binder-project-planner/backend typecheck && pnpm --filter @binder-project-planner/frontend typecheck"
+    "typecheck": "pnpm --filter @binder-project-planner/shared typecheck && pnpm --filter @binder-project-planner/api-contract typecheck && pnpm --filter @binder-project-planner/backend typecheck && pnpm --filter @binder-project-planner/frontend typecheck",
+    "story:done": "node scripts/move-story-to-done.mjs"
   },
   "devDependencies": {
     "@eslint/js": "9.39.5",

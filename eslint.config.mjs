@@ -30,4 +30,18 @@ export default tseslint.config(
   },
   ...frontendOnly(nextCoreWebVitals),
   ...frontendOnly(nextTypescript),
+  {
+    // Plain-JS repo automation scripts (e.g. scripts/move-story-to-done.mjs)
+    // aren't covered by the TS-aware blocks above (which quiet `no-undef`
+    // because the TypeScript compiler already flags undefined names), so
+    // declare the Node.js globals they use directly here instead of adding a
+    // `globals` package dependency for one rule.
+    files: ['scripts/**/*.mjs'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+      },
+    },
+  },
 );

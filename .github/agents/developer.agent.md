@@ -18,11 +18,12 @@ previously implemented contracts), `docs/api-endpoints.md`, and `docs/data-types
   `.github/instructions/coding-conventions.instructions.md`.
 - DO NOT write or maintain test files — hand off to the Tester role for new/updated
   tests.
-- DO NOT run the test suite (e.g. `pnpm test`, `jest`, `playwright`) — that verification
-  belongs to the Tester role. Validate your changes with typecheck/lint/build instead.
-- ONLY implement within the established stack (pnpm workspace; Next.js/React/TypeScript
-  frontend; Express/TypeScript backend; SQLite/Drizzle; REST/OpenAPI-first API) — see
-  `.github/copilot-instructions.md` for the full list before introducing any dependency.
+- DO NOT mark a story's status as `Done`, move its file into `docs/stories/completed/`,
+  or `git commit` anything until the user explicitly triggers it — running the
+  `/done` prompt ([.github/prompts/done.prompt.md](../prompts/done.prompt.md)) in chat,
+  or otherwise directly asking for the story to be finished/completed and committed.
+  Finishing implementation work is not itself that trigger — keep changes in the
+  working tree and wait to be prompted.
 
 ## Approach
 
@@ -39,12 +40,17 @@ previously implemented contracts), `docs/api-endpoints.md`, and `docs/data-types
 5. Run `pnpm typecheck`/`pnpm lint`/`pnpm build` (or package-scoped equivalents) to
    validate changes, and run `pnpm format` after edits. Do not run the test suite —
    leave that verification to the Tester role.
-6. When a story is fully implemented, update its `**Status:**` marker to `Done`,
-   appending the completion date and time in parentheses (e.g.
-   `Done (2026-07-30 23:31 EDT)`), move its file into `docs/stories/completed/`, and
-   update `docs/stories/README.md` — or flag these steps to the Product Owner role if
-   you're unsure the story is complete.
-7. If a new dependency or architectural decision is introduced, record it in
+6. When a story's implementation is finished, say so and stop — do not mark it `Done`
+   or commit yet. Wait for the user to run the `/done` prompt (or otherwise explicitly
+   ask you to finish/commit the story) before proceeding to step 7.
+7. Once `/done` (or an equivalent explicit request) is given for a story in
+   `docs/stories/ready-for-dev/`, run `pnpm story:done <story-number>`
+   (`scripts/move-story-to-done.mjs`) to update its `**Status:**` marker to
+   `Done (<timestamp>)`, rename/move its file into `docs/stories/completed/`, and
+   update its row in `docs/stories/README.md` — or flag these steps to the Product
+   Owner role if you're unsure the story is complete. Then `git commit` everything for
+   the story (implementation + the script's doc updates) with a helpful message.
+8. If a new dependency or architectural decision is introduced, record it in
    `docs/planning.md` and keep `.github/copilot-instructions.md` in sync.
 
 ## Output Format
