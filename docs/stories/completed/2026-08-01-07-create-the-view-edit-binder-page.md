@@ -22,7 +22,7 @@
 #### Technical requirements
 
 - Binder tabs use nested Next.js routes so the selected tab is linkable and remains selected after a browser refresh.
-- The tab routes are `/binders/[binderId]/details`, `/binders/[binderId]/layout`, `/binders/[binderId]/financials`, and, when implemented, `/binders/[binderId]/checklist`.
+- The tab routes are `/binders/[binderId]/details`, `/binders/[binderId]/layout`, `/binders/[binderId]/financials`, and, when implemented, `/binders/[binderId]/cardlist`.
 - The binder UUID is the `binderId` route parameter.
 - A client-side React context scoped to the binder route loads and shares the binder details, cards, multi-slot art, loading state, and local updates across nested tabs.
 - The binder context uses independent typed React state values and update functions rather than a reducer or external state library.

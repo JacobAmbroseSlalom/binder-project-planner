@@ -390,6 +390,74 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}/exports/cards-pdf:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    post:
+      operationId: exportCardsListPdf
+      summary: Export a Card List as a print-ready PDF
+      description: >-
+        Generates a print-ready Card List PDF (story 37) containing only
+        the submitted card ids, in the exact order submitted, from one
+        transactionally consistent snapshot of the persisted card data. The
+        client supplies its currently filtered and sorted card ids - the
+        backend never recomputes search, sort, or filter state itself,
+        mirroring the art-pdf export's `selectedArtIds` contract. Pages use
+        US Letter portrait dimensions with a fixed 4-column by 6-row grid (24
+        cards per page); each entry renders only the card's image and
+        variation label, no other card details. The backend finishes
+        generation in a request-scoped temporary file before sending
+        response headers, then streams the completed file; a missing,
+        unreadable, or unsupported local image fails the complete export
+        with Problem Details rather than omitting the item or generating a
+        partial file. Binder lock state never restricts this read-only
+        endpoint.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExportCardsPdfRequest'
+      responses:
+        '200':
+          description: The generated Card List PDF.
+          headers:
+            Content-Disposition:
+              description: >-
+                `attachment` with the sanitized binder name followed by
+                `-cards.pdf` as the suggested download filename.
+              schema:
+                type: string
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, the
+            request body did not match the documented schema, `cardIds` was
+            empty, or an id in `cardIds` does not currently identify a card
+            in this binder.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: >-
+            PDF generation failed - for example, a selected card's local
+            image file is missing, unreadable, or not a supported format.
+            No temporary file is left behind.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /binders/{binderId}/cards:
     parameters:
       - $ref: '#/components/parameters/binderId'
@@ -1987,6 +2055,26 @@ components:
             The ids of the binder's currently placed multi-slot art to
             include in the generated PDF. Every id must currently identify
             placed art in this binder; the array must not be empty.
+          items:
+            type: string
+            format: uuid
+    ExportCardsPdfRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - cardIds
+      description: >-
+        `POST /binders/{binderId}/exports/cards-pdf`'s request body (story
+        37) - the Card List's currently filtered and sorted card ids,
+        in that exact order.
+      properties:
+        cardIds:
+          type: array
+          description: >-
+            The ids of this binder's cards to include in the generated Card
+            List PDF, in the order they should be rendered. Every id
+            must currently identify a card in this binder; the array must
+            not be empty.
           items:
             type: string
             format: uuid

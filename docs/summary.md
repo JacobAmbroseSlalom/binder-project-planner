@@ -27,13 +27,3 @@ ai struggled with the ui aspect, thats where a lot of back and forth happened. U
 agressive use of comments
 
 Story #26 was wayyyyy tooo big
-
-# Title
-
-32 Lock a binder
-34 Add custom art finances
-35 Add art production time statistics
-36 Track card acquisition
-37 Add a card checklist
-38 Add card finances
-39 Add Binder Search and Sort functions

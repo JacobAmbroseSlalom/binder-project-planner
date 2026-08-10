@@ -199,6 +199,37 @@ export async function exportArtPrintPdf(
   return { blob: data, filename };
 }
 
+// Generates and downloads a PDF of the request's card ids (in the exact
+// order supplied - the caller already resolved the list's own
+// search/sort/filter state into this order) through
+// `POST /binders/{binderId}/exports/cards-pdf` (story 37) - see
+// `exportBinderLayoutPdf`'s comment above for why `parseAs: 'blob'` doesn't
+// affect Problem Details error handling. Throws the Problem Details body
+// on failure, matching every other mutation here.
+export async function exportCardsListPdf(
+  binderId: string,
+  cardIds: string[],
+): Promise<ExportedBinderPdf> {
+  const { data, error, response } = await apiClient.POST('/binders/{binderId}/exports/cards-pdf', {
+    params: { path: { binderId } },
+    body: { cardIds },
+    parseAs: 'blob',
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  // Extracts the suggested filename from `Content-Disposition:
+  // attachment; filename="<name>-cards.pdf"`; falls back to a generic
+  // name in the (unexpected) case the header is missing or doesn't match.
+  const contentDisposition = response.headers.get('Content-Disposition') ?? '';
+  const filenameMatch = /filename="([^"]+)"/.exec(contentDisposition);
+  const filename = filenameMatch?.[1] ?? 'binder-cards.pdf';
+
+  return { blob: data, filename };
+}
+
 // Story 34: fetches the computed page count for this binder's currently
 // placed multi-slot art through `GET /binders/{binderId}/art-print-page-count`,
 // reusing the same packing/tiling logic as the art-print PDF export instead

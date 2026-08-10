@@ -44,6 +44,7 @@ import {
 import { lockedBinderConflictProblem } from '../lockedBinderProblem.js';
 import { computeArtPrintPacking, generateArtPrintPdf } from '../pdf/artPrintPdf.js';
 import { generateBinderLayoutPdf } from '../pdf/binderLayoutPdf.js';
+import { generateCardsListPdf } from '../pdf/cardsListPdf.js';
 import { countOccupiedSlots } from '../placement/occupancy.js';
 import { listArtForBinder, listPlacedArtForPreview } from './art.js';
 import { countCardAcquisition, listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
@@ -1521,6 +1522,119 @@ export function createBindersRouter(
         request.log.error(
           { err: cleanupError, path: tempFilePath },
           'Failed to remove a completed art PDF export temporary file.',
+        );
+      }
+    });
+  });
+
+  // Story 37: exports the request's submitted card ids as a printable Card
+  // List PDF, in the exact order submitted - the client (not this
+  // route) already resolved the list's current search/sort/filter
+  // state into that id order, mirroring `exports/art-pdf`'s
+  // `selectedArtIds` contract above. Read-only, so (like the other export
+  // routes) it's never restricted by binder lock state.
+  router.post('/binders/:binderId/exports/cards-pdf', async (request, response, next) => {
+    const { binderId } = request.params;
+    const { cardIds } = request.body as { cardIds: string[] };
+
+    // One transactionally consistent snapshot read, matching
+    // `exports/art-pdf` above - `cardRows` is every one of this binder's
+    // cards (placed and unplaced alike; the list includes both), so
+    // the handler below can tell apart "id doesn't exist at all" from "id
+    // exists but isn't in this binder" when validating `cardIds`.
+    const snapshot = database.transaction((tx) => {
+      const binderRow = tx.select().from(binders).where(eq(binders.id, binderId)).get() as
+        BinderRow | undefined;
+      if (!binderRow) return null;
+
+      const cardRows = tx
+        .select({
+          id: cards.id,
+          variation: cards.variation,
+          storageFilename: cardImageAssets.storageFilename,
+        })
+        .from(cards)
+        .innerJoin(cardImageAssets, eq(cards.imageAssetId, cardImageAssets.id))
+        .where(eq(cards.binderId, binderId))
+        .all();
+
+      return { binderRow, cardRows };
+    });
+
+    if (!snapshot) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    // Every submitted id must currently identify a card in this binder, and
+    // the array must be non-empty, matching `exports/art-pdf`'s identical
+    // validation above.
+    const cardById = new Map(snapshot.cardRows.map((row) => [row.id, row]));
+    if (cardIds.length === 0) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(badRequestProblem('cardIds must include at least one card id.'));
+      return;
+    }
+    const unknownCardId = cardIds.find((id) => !cardById.has(id));
+    if (unknownCardId !== undefined) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          badRequestProblem(`Card id "${unknownCardId}" does not identify a card in this binder.`),
+        );
+      return;
+    }
+
+    const selectedCardRows = cardIds.map((id) => cardById.get(id)!);
+
+    const sanitizedName =
+      snapshot.binderRow.name.replace(/[^A-Za-z0-9 _-]/g, '_').trim() || 'binder';
+    const tempFilePath = join(tmpdir(), `cards-pdf-export-${randomUUID()}.pdf`);
+
+    try {
+      await generateCardsListPdf({
+        outputPath: tempFilePath,
+        cards: selectedCardRows.map((row) => ({
+          variation: row.variation,
+          imagePath: join(imagesDirectory, row.storageFilename),
+        })),
+      });
+    } catch (error) {
+      if (existsSync(tempFilePath)) {
+        try {
+          unlinkSync(tempFilePath);
+        } catch (cleanupError) {
+          request.log.error(
+            { err: cleanupError, path: tempFilePath },
+            'Failed to remove a failed cards PDF export temporary file.',
+          );
+        }
+      }
+      next(error);
+      return;
+    }
+
+    response
+      .status(200)
+      .type('application/pdf')
+      .set('Content-Disposition', `attachment; filename="${sanitizedName}-cards.pdf"`);
+
+    const readStream = createReadStream(tempFilePath);
+    readStream.pipe(response);
+
+    // Cleans up the temporary file once the response is done, matching
+    // `exports/art-pdf`'s identical cleanup above.
+    response.once('close', () => {
+      if (!existsSync(tempFilePath)) return;
+      try {
+        unlinkSync(tempFilePath);
+      } catch (cleanupError) {
+        request.log.error(
+          { err: cleanupError, path: tempFilePath },
+          'Failed to remove a completed cards PDF export temporary file.',
         );
       }
     });

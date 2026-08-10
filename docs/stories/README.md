@@ -54,8 +54,7 @@ This index maps every story file to its current bucket.
 
 | Story | Title | File |
 | ----- | ----- | ---- |
-
-| 37 | Add a card checklist | [docs/stories/needs-refinement/37-add-a-card-checklist.md](needs-refinement/37-add-a-card-checklist.md) |
+| 37 | Add a card list | [docs/stories/needs-refinement/37-add-a-card-list.md](needs-refinement/37-add-a-card-clist.md) |
 | 38 | Add card finances | [docs/stories/needs-refinement/38-add-card-finances.md](needs-refinement/38-add-card-finances.md) |
 | 39 | Add Binder Search and Sort functions | [docs/stories/needs-refinement/39-add-binder-search-and-sort-functions.md](needs-refinement/39-add-binder-search-and-sort-functions.md) |
 | 43 | Add a card from other API sources | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md) |

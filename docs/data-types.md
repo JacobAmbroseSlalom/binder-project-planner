@@ -87,10 +87,10 @@ the remaining covered slots are derived from the art's slot width and height.
 | `acquired`       | boolean                                     | Yes          | Defaults to `false`. Updated via `PATCH /cards/{cardId}` with `{ "acquired": boolean }`; optionally set at creation time through `POST /binders/{binderId}/cards` or the shared checkbox in `POST /binders/{binderId}/cards/bulk` (Story 36).                                        |
 | `price`          | positive currency (integer cents) or `null` | Yes          | Saved card price; `null` until first fetched or manually entered. Updated only through `PATCH /binders/{binderId}/cards/prices` (Story 38).                                                                                                                                          |
 | `isManualPrice`  | boolean                                     | Yes          | Defaults to `false`. `true` when `price`'s value was hand-edited rather than auto-filled from an unedited market/lowest price; a re-confirmed manual price (auto-filled from the currently saved price and left unedited) keeps its existing value rather than resetting (Story 38). |
-| `priceUpdatedAt` | UTC timestamp or `null`                     | Yes          | Set whenever `price` changes; displayed alongside `price` on the Card Checklist (Story 38).                                                                                                                                                                                          |
+| `priceUpdatedAt` | UTC timestamp or `null`                     | Yes          | Set whenever `price` changes; displayed alongside `price` on the Card List (Story 38).                                                                                                                                                                                               |
 
 **Constraints:** At most one card may occupy a binder and placement-coordinate triple.
-Card deletion cascades dependent variation, acquisition, checklist, and pricing data.
+Card deletion cascades dependent variation, acquisition, and pricing data.
 
 ### MultiSlotArt
 
@@ -356,7 +356,7 @@ Both requests use multipart form data.
 | ------------------- | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `includeVariations` | boolean | Optional for binder-layout PDF export; defaults to `false`. It is set from the current layout variation toggle. |
 
-### CardChecklistState (Story 37)
+### CardListState (Story 37)
 
 Client-only, derived entirely from the already-loaded `cards` array in
 `BinderRouteContext`; none of this state is sent to or stored by the backend except as

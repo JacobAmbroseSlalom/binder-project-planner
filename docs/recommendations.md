@@ -57,5 +57,5 @@ Cross-binder collection behavior: Decide whether the same physical card used in 
 I also found three existing backlog details worth clarifying before implementation:
 
 Create a new binder says successful creation returns home, while Create the view/edit binder page says it opens the new binder’s Edit Layout tab.
-Locked-binder behavior does not explicitly cover acquisition changes from Card Checklist or manual/API price changes.
+Locked-binder behavior does not explicitly cover acquisition changes from Card List or manual/API price changes.
 Add card finances should explicitly retain manual-only pricing if the API spike finds no suitable pricing service.

@@ -1113,7 +1113,7 @@ export function createCardsRouter(
 
       // Story 32: toggling a card's acquisition state is a restricted
       // mutation too, mirroring the variation-update branch below - though
-      // planning.md still allows it from the Card Checklist tab (story 37)
+      // planning.md still allows it from the Card List tab (story 37)
       // while locked, which is a separate endpoint/flow from this one.
       const binderForAcquiredEdit = database
         .select({ locked: binders.locked })

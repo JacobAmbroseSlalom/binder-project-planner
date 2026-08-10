@@ -3,13 +3,12 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-// The binder tabs in display order. "Card List" is intentionally disabled
-// until its story is implemented, so it renders as a non-interactive label
-// rather than a link. "View Financials" was enabled by story 34.
+// The binder tabs in display order. "View Financials" was enabled by story
+// 34; "Card List" was enabled by story 37.
 const TABS = [
   { segment: 'details', label: 'Edit Details', disabled: false },
   { segment: 'layout', label: 'Edit Layout', disabled: false },
-  { segment: 'card-list', label: 'Card List', disabled: true },
+  { segment: 'cardlist', label: 'Card List', disabled: false },
   { segment: 'financials', label: 'View Financials', disabled: false },
 ] as const;
 

@@ -160,6 +160,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/binders/{binderId}/exports/cards-pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export a Card List as a print-ready PDF
+         * @description Generates a print-ready Card List PDF (story 37) containing only the submitted card ids, in the exact order submitted, from one transactionally consistent snapshot of the persisted card data. The client supplies its currently filtered and sorted card ids - the backend never recomputes search, sort, or filter state itself, mirroring the art-pdf export's `selectedArtIds` contract. Pages use US Letter portrait dimensions with a fixed 4-column by 6-row grid (24 cards per page); each entry renders only the card's image and variation label, no other card details. The backend finishes generation in a request-scoped temporary file before sending response headers, then streams the completed file; a missing, unreadable, or unsupported local image fails the complete export with Problem Details rather than omitting the item or generating a partial file. Binder lock state never restricts this read-only endpoint.
+         */
+        post: operations["exportCardsListPdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/binders/{binderId}/cards": {
         parameters: {
             query?: never;
@@ -816,6 +838,11 @@ export interface components {
         ExportArtPdfRequest: {
             /** @description The ids of the binder's currently placed multi-slot art to include in the generated PDF. Every id must currently identify placed art in this binder; the array must not be empty. */
             selectedArtIds: string[];
+        };
+        /** @description `POST /binders/{binderId}/exports/cards-pdf`'s request body (story 37) - the Card List's currently filtered and sorted card ids, in that exact order. */
+        ExportCardsPdfRequest: {
+            /** @description The ids of this binder's cards to include in the generated Card List PDF, in the order they should be rendered. Every id must currently identify a card in this binder; the array must not be empty. */
+            cardIds: string[];
         };
         Binder: {
             /** Format: uuid */
@@ -1719,6 +1746,61 @@ export interface operations {
                 };
             };
             /** @description PDF generation failed - for example, a selected art item's local image file is missing, unreadable, or not a supported format. No temporary file is left behind. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    exportCardsListPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportCardsPdfRequest"];
+            };
+        };
+        responses: {
+            /** @description The generated Card List PDF. */
+            200: {
+                headers: {
+                    /** @description `attachment` with the sanitized binder name followed by `-cards.pdf` as the suggested download filename. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, the request body did not match the documented schema, `cardIds` was empty, or an id in `cardIds` does not currently identify a card in this binder. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PDF generation failed - for example, a selected card's local image file is missing, unreadable, or not a supported format. No temporary file is left behind. */
             500: {
                 headers: {
                     [name: string]: unknown;

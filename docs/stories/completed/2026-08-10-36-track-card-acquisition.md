@@ -15,7 +15,7 @@
 - The card's acquisition state is saved to the database through the backend.
 - The acquisition hover action is unavailable while the binder is locked, consistent
   with the other layout card actions (Story 32); acquisition can still be changed from
-  the Card Checklist tab (Story 37) in that case.
+  the Card List tab (Story 37) in that case.
 - The "Edit Layout" tab has a toggle for showing or hiding card acquisition status.
 - Turning the toggle on displays a badge only on each acquired card; unacquired cards
   show no badge.
