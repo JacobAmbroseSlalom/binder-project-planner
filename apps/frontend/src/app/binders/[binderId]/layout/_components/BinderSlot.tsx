@@ -25,6 +25,9 @@ export function BinderSlot({
   isVariationEditPending,
   onDuplicateCard,
   isDuplicatePending,
+  onToggleAcquired,
+  isAcquiredTogglePending,
+  acquisitionVisible = false,
   variationsVisible = false,
   slotAspectRatio,
   isLocked = false,
@@ -62,6 +65,11 @@ export function BinderSlot({
   // Duplicates this slot's card into the unplaced-cards section (story 19).
   onDuplicateCard: (cardId: string) => void;
   isDuplicatePending: boolean;
+  // Toggles this slot's card between acquired/unacquired (story 36).
+  onToggleAcquired: (cardId: string) => void;
+  isAcquiredTogglePending: boolean;
+  // Story 36's layout-wide toggle, threaded down from `BinderSide`.
+  acquisitionVisible?: boolean;
   // Story 16's layout-wide toggle, threaded down from `BinderSide`.
   variationsVisible?: boolean;
   // Story 24: the binder's configured single-slot width-to-height ratio,
@@ -122,6 +130,14 @@ export function BinderSlot({
         onDuplicateCard={onDuplicateCard}
         duplicateAriaLabel={`Duplicate ${card.name} at row ${row}, column ${column}`}
         isDuplicatePending={isDuplicatePending}
+        onToggleAcquired={onToggleAcquired}
+        toggleAcquiredAriaLabel={
+          card.acquired
+            ? `Mark ${card.name} at row ${row}, column ${column} as unacquired`
+            : `Mark ${card.name} at row ${row}, column ${column} as acquired`
+        }
+        isAcquiredTogglePending={isAcquiredTogglePending}
+        acquisitionVisible={acquisitionVisible}
         variationsVisible={variationsVisible}
         highlightClassName={highlightClassName}
         tileRef={(node) => {

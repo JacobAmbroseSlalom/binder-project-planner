@@ -24,6 +24,9 @@ export function UnplacedCard({
   isVariationEditPending,
   onDuplicateCard,
   isDuplicatePending,
+  onToggleAcquired,
+  isAcquiredTogglePending,
+  acquisitionVisible = false,
   variationsVisible = false,
   slotAspectRatio,
 }: {
@@ -45,6 +48,11 @@ export function UnplacedCard({
   // Duplicates this card into the unplaced-cards section (story 19).
   onDuplicateCard: (cardId: string) => void;
   isDuplicatePending: boolean;
+  // Toggles this card between acquired/unacquired (story 36).
+  onToggleAcquired: (cardId: string) => void;
+  isAcquiredTogglePending: boolean;
+  // Story 36's layout-wide toggle, threaded down from `UnplacedCardsPanel`.
+  acquisitionVisible?: boolean;
   // Story 16's layout-wide toggle, threaded down from `UnplacedCardsPanel`.
   variationsVisible?: boolean;
   // Story 24: the binder's configured single-slot width-to-height ratio,
@@ -81,6 +89,12 @@ export function UnplacedCard({
       onDuplicateCard={onDuplicateCard}
       duplicateAriaLabel={`Duplicate ${card.name}`}
       isDuplicatePending={isDuplicatePending}
+      onToggleAcquired={onToggleAcquired}
+      toggleAcquiredAriaLabel={
+        card.acquired ? `Mark ${card.name} as unacquired` : `Mark ${card.name} as acquired`
+      }
+      isAcquiredTogglePending={isAcquiredTogglePending}
+      acquisitionVisible={acquisitionVisible}
       variationsVisible={variationsVisible}
       tileRef={setDraggableRef}
       dragAttributes={attributes}

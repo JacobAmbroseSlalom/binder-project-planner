@@ -5,6 +5,7 @@ import {
   DEFAULT_BINDER_MICHI_INDICATORS_VISIBLE,
   DEFAULT_BINDER_NOTES_VISIBLE,
   DEFAULT_BINDER_VARIATIONS_VISIBLE,
+  DEFAULT_CARD_ACQUISITION_VISIBLE,
 } from '@binder-project-planner/shared';
 import { useState } from 'react';
 
@@ -71,6 +72,8 @@ export function BinderLayoutView() {
     pendingCardVariationEditIds,
     duplicateCard,
     pendingCardDuplicateIds,
+    toggleCardAcquired,
+    pendingCardAcquiredToggleIds,
     moveCard,
     isMovePending,
     canUndoLayoutMovement = false,
@@ -219,6 +222,14 @@ export function BinderLayoutView() {
     DEFAULT_BINDER_VARIATIONS_VISIBLE,
   );
 
+  // Story 36's acquisition-badge overlay toggle is a persisted
+  // presentation preference (hidden by default), mirroring the
+  // variations toggle above.
+  const [acquisitionVisible, setAcquisitionVisible] = useLocalStorageBoolean(
+    'binder-card-acquisition-visible',
+    DEFAULT_CARD_ACQUISITION_VISIBLE,
+  );
+
   // Story 28 post-undo/redo unplaced navigation: when the resulting focal
   // placement is unplaced, keep the current spread and ask the matching
   // unplaced panel to reveal that specific item.
@@ -352,6 +363,9 @@ export function BinderLayoutView() {
             pendingCardVariationEditIds={pendingCardVariationEditIds}
             onDuplicateCard={duplicateCard}
             pendingCardDuplicateIds={pendingCardDuplicateIds}
+            onToggleAcquired={toggleCardAcquired}
+            pendingCardAcquiredToggleIds={pendingCardAcquiredToggleIds}
+            acquisitionVisible={acquisitionVisible}
             variationsVisible={variationsVisible}
             onAddCard={() => setSelectedSlot(UNPLACED_SLOT_TARGET)}
             slotAspectRatio={slotAspectRatio}
@@ -369,6 +383,8 @@ export function BinderLayoutView() {
             onToggleMichiIndicators={() => setMichiIndicatorsVisible(!michiIndicatorsVisible)}
             variationsVisible={variationsVisible}
             onToggleVariationsVisible={() => setVariationsVisible(!variationsVisible)}
+            acquisitionVisible={acquisitionVisible}
+            onToggleAcquisitionVisible={() => setAcquisitionVisible(!acquisitionVisible)}
             notesVisible={notesVisible}
             onToggleNotesVisible={() => setNotesVisible(!notesVisible)}
             isLocked={isLocked}
@@ -421,6 +437,9 @@ export function BinderLayoutView() {
             pendingCardVariationEditIds={pendingCardVariationEditIds}
             onDuplicateCard={duplicateCard}
             pendingCardDuplicateIds={pendingCardDuplicateIds}
+            onToggleAcquired={toggleCardAcquired}
+            pendingCardAcquiredToggleIds={pendingCardAcquiredToggleIds}
+            acquisitionVisible={acquisitionVisible}
             variationsVisible={variationsVisible}
             pendingArtEditIds={pendingArtEditIds}
             pendingArtDeletionIds={pendingArtDeletionIds}

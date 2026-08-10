@@ -20,6 +20,8 @@ export function LayoutToolbar({
   onToggleMichiIndicators,
   variationsVisible,
   onToggleVariationsVisible,
+  acquisitionVisible,
+  onToggleAcquisitionVisible,
   notesVisible,
   onToggleNotesVisible,
   isLocked,
@@ -41,6 +43,8 @@ export function LayoutToolbar({
   onToggleMichiIndicators: () => void;
   variationsVisible: boolean;
   onToggleVariationsVisible: () => void;
+  acquisitionVisible: boolean;
+  onToggleAcquisitionVisible: () => void;
   notesVisible: boolean;
   onToggleNotesVisible: () => void;
   isLocked: boolean;
@@ -66,7 +70,11 @@ export function LayoutToolbar({
           storage) preference defaulting to off, not a URL query param.
           The label is forced onto 2 short lines (rather than one long
           line) so this control stays narrow next to the page input. */}
-      <label htmlFor="michi-indicators-toggle" className="flex items-center gap-2">
+      <label htmlFor="michi-indicators-toggle" className="flex flex-col items-center gap-1">
+        <span className="flex flex-col text-center text-caption leading-tight text-neutral-500">
+          <span>Show Michi</span>
+          <span>slot indicators</span>
+        </span>
         <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
           <input
             id="michi-indicators-toggle"
@@ -77,17 +85,17 @@ export function LayoutToolbar({
           />
           <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
         </span>
-        <span className="flex flex-col text-caption leading-tight text-neutral-500">
-          <span>Show Michi</span>
-          <span>slot indicators</span>
-        </span>
       </label>
 
       {/* Story 16's toggle: same custom-styled checkbox as the Michi
           toggle above. `variationsVisible` is a persisted (local
           storage) preference defaulting to off (hidden), per the
           acceptance criteria - not a URL query param. */}
-      <label htmlFor="variations-visible-toggle" className="flex items-center gap-2">
+      <label htmlFor="variations-visible-toggle" className="flex flex-col items-center gap-1">
+        <span className="flex flex-col text-center text-caption leading-tight text-neutral-500">
+          <span>Show card</span>
+          <span>variations</span>
+        </span>
         <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
           <input
             id="variations-visible-toggle"
@@ -98,9 +106,30 @@ export function LayoutToolbar({
           />
           <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
         </span>
-        <span className="flex flex-col text-caption leading-tight text-neutral-500">
+      </label>
+
+      {/* Story 36's toggle: same custom-styled checkbox as the toggles
+          above. `acquisitionVisible` is a persisted (local storage)
+          preference defaulting to off (hidden), joining the same
+          local-storage preference group as the Michi/variation toggles
+          rather than a URL query param. Not gated by `isLocked` (mirroring
+          the Michi/variations toggles above), since acquisition status is
+          still readable while locked even though the hover action to
+          change it is unavailable. */}
+      <label htmlFor="acquisition-visible-toggle" className="flex flex-col items-center gap-1">
+        <span className="flex flex-col text-center text-caption leading-tight text-neutral-500">
           <span>Show card</span>
-          <span>variations</span>
+          <span>acquisition</span>
+        </span>
+        <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+          <input
+            id="acquisition-visible-toggle"
+            type="checkbox"
+            checked={acquisitionVisible}
+            onChange={onToggleAcquisitionVisible}
+            className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+          />
+          <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
         </span>
       </label>
 
@@ -113,7 +142,11 @@ export function LayoutToolbar({
           toggle visible would let the user "show" a section that can
           never actually appear. */}
       {!isLocked && (
-        <label htmlFor="notes-visible-toggle" className="flex items-center gap-2">
+        <label htmlFor="notes-visible-toggle" className="flex flex-col items-center gap-1">
+          <span className="flex flex-col text-center text-caption leading-tight text-neutral-500">
+            <span>Show</span>
+            <span>notes</span>
+          </span>
           <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
             <input
               id="notes-visible-toggle"
@@ -123,10 +156,6 @@ export function LayoutToolbar({
               className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
             />
             <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-          </span>
-          <span className="flex flex-col text-caption leading-tight text-neutral-500">
-            <span>Show</span>
-            <span>notes</span>
           </span>
         </label>
       )}

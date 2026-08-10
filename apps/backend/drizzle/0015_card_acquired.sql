@@ -1,0 +1,1 @@
+ALTER TABLE `cards` ADD `acquired` integer DEFAULT false NOT NULL;

@@ -38,6 +38,9 @@ export function LayoutSpreadView({
   pendingCardVariationEditIds,
   onDuplicateCard,
   pendingCardDuplicateIds,
+  onToggleAcquired,
+  pendingCardAcquiredToggleIds,
+  acquisitionVisible,
   variationsVisible,
   pendingArtEditIds,
   pendingArtDeletionIds,
@@ -68,6 +71,9 @@ export function LayoutSpreadView({
   pendingCardVariationEditIds: Set<string>;
   onDuplicateCard: (cardId: string) => void;
   pendingCardDuplicateIds: Set<string>;
+  onToggleAcquired: (cardId: string) => void;
+  pendingCardAcquiredToggleIds: Set<string>;
+  acquisitionVisible: boolean;
   variationsVisible: boolean;
   pendingArtEditIds: Set<string>;
   pendingArtDeletionIds: Set<string>;
@@ -140,6 +146,9 @@ export function LayoutSpreadView({
               pendingCardVariationEditIds={pendingCardVariationEditIds}
               onDuplicateCard={onDuplicateCard}
               pendingCardDuplicateIds={pendingCardDuplicateIds}
+              onToggleAcquired={onToggleAcquired}
+              pendingCardAcquiredToggleIds={pendingCardAcquiredToggleIds}
+              acquisitionVisible={acquisitionVisible}
               variationsVisible={variationsVisible}
               pendingArtEditIds={pendingArtEditIds}
               pendingArtDeletionIds={pendingArtDeletionIds}
@@ -172,6 +181,9 @@ export function LayoutSpreadView({
               pendingCardVariationEditIds={pendingCardVariationEditIds}
               onDuplicateCard={onDuplicateCard}
               pendingCardDuplicateIds={pendingCardDuplicateIds}
+              onToggleAcquired={onToggleAcquired}
+              pendingCardAcquiredToggleIds={pendingCardAcquiredToggleIds}
+              acquisitionVisible={acquisitionVisible}
               variationsVisible={variationsVisible}
               pendingArtEditIds={pendingArtEditIds}
               pendingArtDeletionIds={pendingArtDeletionIds}

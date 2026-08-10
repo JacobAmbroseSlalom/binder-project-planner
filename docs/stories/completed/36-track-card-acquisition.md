@@ -1,6 +1,6 @@
 # 36. Track card acquisition
 
-**Status:** Not started
+**Status:** Done (2026-08-10 02:11 EDT)
 
 #### Acceptance criteria
 

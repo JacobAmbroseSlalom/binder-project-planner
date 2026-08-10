@@ -67,6 +67,9 @@ export async function createCardsBulk(
   request: {
     cards: TcgDexCatalogCard[];
     variation?: string | null;
+    // Story 36: applied to every card in this batch, mirroring `variation`
+    // above; omitted defaults to unacquired on the backend.
+    acquired?: boolean;
     targetPlacement?: BulkTargetPlacement;
   },
   idempotencyKey: string,
@@ -92,6 +95,9 @@ export interface CreateCustomCardRequest {
   setName: string | null;
   localNumber: string | null;
   variation?: string | null;
+  // Story 36: the modal's "Acquired" checkbox value; unchecked (`false`)
+  // by default.
+  acquired?: boolean;
   placement: { physicalPage: number; row: number; column: number } | null;
   image: File;
 }
@@ -111,6 +117,11 @@ export async function createCustomCard(
   if (request.setName) formData.append('setName', request.setName);
   if (request.localNumber) formData.append('localNumber', request.localNumber);
   if (request.variation) formData.append('variation', request.variation);
+  // Story 36: always sent explicitly (unlike the blank-omits-the-field text
+  // fields above) since `false` is a meaningful value here, not "absent" -
+  // the multipart field is a string either way, coerced to boolean by the
+  // backend's `coerceTypes: true` body validation.
+  formData.append('acquired', String(request.acquired ?? false));
   if (request.placement) {
     formData.append('physicalPage', String(request.placement.physicalPage));
     formData.append('row', String(request.placement.row));
@@ -186,6 +197,25 @@ export async function updateCardVariation(cardId: string, variation: string | nu
   const { data, error } = await apiClient.PATCH('/cards/{cardId}', {
     params: { path: { cardId } },
     body: { variation },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data as Card;
+}
+
+// Updates a card's acquisition state through `PATCH /cards/{cardId}` (story
+// 36), sharing the same path/method as `moveCards`/`updateCardVariation`
+// above but with an `acquired`-only request body - the backend branches on
+// which shape the body is. Returns the complete persisted card, using
+// last-write-wins semantics. Throws the Problem Details body on failure so
+// the caller can roll back its optimistic acquisition toggle.
+export async function updateCardAcquired(cardId: string, acquired: boolean): Promise<Card> {
+  const { data, error } = await apiClient.PATCH('/cards/{cardId}', {
+    params: { path: { cardId } },
+    body: { acquired },
   });
 
   if (error) {

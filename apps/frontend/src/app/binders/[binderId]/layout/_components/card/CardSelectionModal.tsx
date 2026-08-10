@@ -1,7 +1,8 @@
 'use client';
 
+import { DEFAULT_CARD_ACQUIRED } from '@binder-project-planner/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, Check, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
@@ -63,20 +64,24 @@ export function CardSelectionModal({
   // `targetPlacement` is this session's resolved target (see
   // `initialTarget` above), already `null` if this is a later submission
   // in the session. `variation` (story 16) is the trimmed value of this
-  // modal's shared variation field, or `null` if left blank.
+  // modal's shared variation field, or `null` if left blank. `acquired`
+  // (story 36) is this modal's shared "Acquired" checkbox value, applied
+  // to every card in the selection.
   onAddCards: (
     cards: TcgDexCatalogCard[],
     variation: string | null,
+    acquired: boolean,
     targetPlacement: { physicalPage: number; row: number; column: number } | null,
   ) => void;
   // Called with the full checkbox selection on "Add More" (story 18) -
   // unlike `onAddCards`, this modal awaits the returned promise so it can
-  // decide whether to clear its own query/results/selection/variation
-  // (only on complete success) or retain them for correction (on any
-  // failure), and keeps this session open rather than closing it.
+  // decide whether to clear its own query/results/selection/variation/
+  // acquired (only on complete success) or retain them for correction (on
+  // any failure), and keeps this session open rather than closing it.
   onAddMoreCards: (
     cards: TcgDexCatalogCard[],
     variation: string | null,
+    acquired: boolean,
     targetPlacement: { physicalPage: number; row: number; column: number } | null,
   ) => Promise<boolean>;
   // Called with the manual-entry form's values, selected file, and this
@@ -115,7 +120,11 @@ export function CardSelectionModal({
   // `results` directly - the existing remembered-query search effect below
   // re-fetches the same results these selections came from, and this
   // restore's ids simply arrive pre-checked among them.
-  initialSelectionRestore?: { cards: TcgDexCatalogCard[]; variation: string | null };
+  initialSelectionRestore?: {
+    cards: TcgDexCatalogCard[];
+    variation: string | null;
+    acquired: boolean;
+  };
 }) {
   // Story 41's language toggle lives in the route context (rather than as
   // local state) so it survives this modal's own mount/unmount cycle within
@@ -159,6 +168,13 @@ export function CardSelectionModal({
   // showing.
   const [variation, setVariation] = useState(
     initialManualEntry?.values.variation ?? initialSelectionRestore?.variation ?? '',
+  );
+  // Story 36: mirrors `variation` above - a single shared "Acquired"
+  // checkbox value used by both views, unchecked by default.
+  const [acquired, setAcquired] = useState(
+    initialManualEntry?.values.acquired ??
+      initialSelectionRestore?.acquired ??
+      DEFAULT_CARD_ACQUIRED,
   );
   // Story 18's Add-More flow: tracked locally (rather than through the
   // shared `isBulkAddPending` context flag) so an Add-More submission
@@ -285,13 +301,13 @@ export function CardSelectionModal({
     if (selectedResults.length === 0) return;
     const targetPlacement = resolveTargetPlacement();
     hasSubmittedRef.current = true;
-    onAddCards(selectedResults, variation.trim() || null, targetPlacement);
+    onAddCards(selectedResults, variation.trim() || null, acquired, targetPlacement);
   }
 
   // "Add More" (story 18): keeps this modal open, awaiting settlement so
-  // the query/results/selection/variation only clear on complete success -
-  // any failure (partial or complete) leaves them in place for correction,
-  // matching planning.md's Add-More acceptance criteria.
+  // the query/results/selection/variation/acquired only clear on complete
+  // success - any failure (partial or complete) leaves them in place for
+  // correction, matching planning.md's Add-More acceptance criteria.
   async function handleAddMoreCards() {
     if (selectedResults.length === 0 || isAddMoreSubmitting) return;
     const targetPlacement = resolveTargetPlacement();
@@ -301,12 +317,14 @@ export function CardSelectionModal({
       const allSucceeded = await onAddMoreCards(
         selectedResults,
         variation.trim() || null,
+        acquired,
         targetPlacement,
       );
       if (allSucceeded) {
         resetSearch();
         setSelectedIds(new Set());
         setVariation('');
+        setAcquired(DEFAULT_CARD_ACQUIRED);
         searchInputRef.current?.focus();
       }
     } finally {
@@ -379,6 +397,7 @@ export function CardSelectionModal({
         setName: values.setName.trim() || null,
         localNumber: values.localNumber.trim() || null,
         variation: variation.trim() || null,
+        acquired,
       },
       customCardFile,
       targetPlacement,
@@ -407,6 +426,7 @@ export function CardSelectionModal({
           setName: values.setName.trim() || null,
           localNumber: values.localNumber.trim() || null,
           variation: variation.trim() || null,
+          acquired,
         },
         customCardFile,
         targetPlacement,
@@ -415,6 +435,7 @@ export function CardSelectionModal({
         manualForm.reset(defaultManualCardFormValues);
         setCustomCardFile(null);
         setVariation('');
+        setAcquired(DEFAULT_CARD_ACQUIRED);
         setFileError(undefined);
       }
     } finally {
@@ -499,6 +520,8 @@ export function CardSelectionModal({
               fileError={fileError}
               variation={variation}
               onVariationChange={setVariation}
+              acquired={acquired}
+              onAcquiredChange={setAcquired}
             />
           </div>
         )}
@@ -508,13 +531,33 @@ export function CardSelectionModal({
             instead, so this standalone block only renders for the search
             view (see the `variation` state comment above). Label stacked
             above the input, styled like every other form field's label in
-            this codebase (e.g. `ManualCardForm`'s `Field` wrapper). */}
+            this codebase (e.g. `ManualCardForm`'s `Field` wrapper). Story
+            36's shared "Acquired" checkbox joins it here, mirroring
+            `ManualCardForm`'s own checkbox+label pair. */}
         {viewMode === 'search' && (
-          <div className="flex max-w-56 flex-col gap-1">
-            <label htmlFor="card-variation" className="text-caption text-neutral-500">
-              Variation
+          <div className="flex items-end gap-6">
+            <div className="flex max-w-56 flex-col gap-1">
+              <label htmlFor="card-variation" className="text-caption text-neutral-500">
+                Variation
+              </label>
+              <VariationCombobox id="card-variation" value={variation} onChange={setVariation} />
+            </div>
+            <label
+              htmlFor="card-acquired"
+              className="flex h-[42px] cursor-pointer items-center gap-2"
+            >
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                <input
+                  id="card-acquired"
+                  type="checkbox"
+                  checked={acquired}
+                  onChange={(event) => setAcquired(event.target.checked)}
+                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                />
+                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+              </span>
+              <span>Acquired</span>
             </label>
-            <VariationCombobox id="card-variation" value={variation} onChange={setVariation} />
           </div>
         )}
 

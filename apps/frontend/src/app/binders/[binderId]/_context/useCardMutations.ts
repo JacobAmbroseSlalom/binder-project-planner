@@ -7,6 +7,7 @@ import {
   deleteCard,
   duplicateCard as duplicateCardRequest,
   moveCards,
+  updateCardAcquired as updateCardAcquiredRequest,
   updateCardVariation as updateCardVariationRequest,
   type Card,
   type CardPositionUpdate,
@@ -39,6 +40,9 @@ export interface CustomCardFormValues {
   setName: string | null;
   localNumber: string | null;
   variation: string | null;
+  // Story 36: the modal's "Acquired" checkbox value, entered through the
+  // same shared add-card modal field the TCGdex search view uses.
+  acquired: boolean;
 }
 
 // A one-shot signal set by `assignCustomCard` when a custom-card submission
@@ -130,6 +134,11 @@ export function useCardMutations({
   // Story 19's in-flight-card-duplication ids (optimistic ids only),
   // mirroring `pendingArtDuplicateIds`.
   const [pendingCardDuplicateIds, setPendingCardDuplicateIds] = useState<Set<string>>(new Set());
+  // Story 36's in-flight-card-acquisition-toggle ids, mirroring
+  // `pendingCardVariationEditIds`.
+  const [pendingCardAcquiredToggleIds, setPendingCardAcquiredToggleIds] = useState<Set<string>>(
+    new Set(),
+  );
 
   // Assigns a manually-entered custom card to a binder slot (story 12).
   // Mirrors `assignCards`'s optimistic lifecycle, but creates its own
@@ -168,6 +177,7 @@ export function useCardMutations({
         variation: values.variation,
         placement: placement ?? { physicalPage: null, row: null, column: null },
         imageUrl: previewUrl,
+        acquired: values.acquired,
         createdAt: now,
         updatedAt: now,
       };
@@ -317,6 +327,57 @@ export function useCardMutations({
         });
     },
     [cards, setCards, pruneHistoryEntriesForItem, start, retry],
+  );
+
+  // Toggles an existing card's acquired state (story 36), mirroring
+  // `editCardVariation`'s optimistic-apply/restore-on-failure lifecycle
+  // exactly: optimistically flips the value immediately, then either
+  // confirms it with the backend's authoritative representation or
+  // restores the card's prior value on failure. Not gated by binder lock
+  // state on the caller's side (matching this codebase's existing
+  // unplaced-card action precedent) - the backend's own 409 response
+  // still enforces the restriction and triggers the same retry-on-conflict
+  // handling as every other restricted mutation.
+  const toggleCardAcquired = useCallback(
+    (cardId: string) => {
+      const existing = cards.find((card) => card.id === cardId);
+      if (!existing) return;
+
+      const previousAcquired = existing.acquired;
+      const nextAcquired = !previousAcquired;
+
+      setCards((previous) =>
+        previous.map((card) => (card.id === cardId ? { ...card, acquired: nextAcquired } : card)),
+      );
+      setPendingCardAcquiredToggleIds((previous) => new Set(previous).add(cardId));
+
+      const toast = start(`toggle-card-acquired-${cardId}`);
+
+      updateCardAcquiredRequest(cardId, nextAcquired)
+        .then((updated) => {
+          setCards((previous) => previous.map((card) => (card.id === cardId ? updated : card)));
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setCards((previous) =>
+            previous.map((card) =>
+              card.id === cardId ? { ...card, acquired: previousAcquired } : card,
+            ),
+          );
+          toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this toggle was
+          // rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
+        })
+        .finally(() => {
+          setPendingCardAcquiredToggleIds((previous) => {
+            const next = new Set(previous);
+            next.delete(cardId);
+            return next;
+          });
+        });
+    },
+    [cards, setCards, start, retry],
   );
 
   // Duplicates a card into the unplaced-cards section (story 19),
@@ -506,6 +567,8 @@ export function useCardMutations({
     pendingCardDeletionIds,
     editCardVariation,
     pendingCardVariationEditIds,
+    toggleCardAcquired,
+    pendingCardAcquiredToggleIds,
     duplicateCard,
     pendingCardDuplicateIds,
     moveCard,

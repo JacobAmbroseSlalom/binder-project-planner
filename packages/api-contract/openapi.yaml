@@ -636,24 +636,27 @@ paths:
       - $ref: '#/components/parameters/cardId'
     patch:
       operationId: updateCard
-      summary: Move/swap one or two cards' binder positions, or update a card's variation
+      summary: >-
+        Move/swap one or two cards' binder positions, or update a card's
+        variation or acquisition state
       description: >-
         Either applies a simple move (one update) or a swap (two updates) of
         card placement coordinates in one database transaction (story 14),
-        or updates the path card's `variation` field (story 16) - the
-        request body's shape determines which. For a move/swap, the path
-        `cardId` must identify the dragged card included among `updates`.
-        Each update supplies the affected card's currently expected
-        placement plus its final placement; the backend compares every
-        expected placement against the persisted row before applying any
-        change, so a stale client never silently overwrites a position
-        another request already changed. A destination occupied by a card
-        not included in `updates` is rejected as a conflict rather than
-        applied. Nullable placement triples are accepted (story 15's
-        unplaced-cards section) alongside populated ones. For a variation
-        update, the trimmed value replaces the card's existing variation
-        using last-write-wins semantics (no expected prior value or
-        timestamp is compared).
+        updates the path card's `variation` field (story 16), or updates its
+        `acquired` field (story 36) - the request body's shape determines
+        which. For a move/swap, the path `cardId` must identify the dragged
+        card included among `updates`. Each update supplies the affected
+        card's currently expected placement plus its final placement; the
+        backend compares every expected placement against the persisted row
+        before applying any change, so a stale client never silently
+        overwrites a position another request already changed. A
+        destination occupied by a card not included in `updates` is
+        rejected as a conflict rather than applied. Nullable placement
+        triples are accepted (story 15's unplaced-cards section) alongside
+        populated ones. For a variation update, the trimmed value replaces
+        the card's existing variation using last-write-wins semantics (no
+        expected prior value or timestamp is compared). For an acquisition
+        update, `acquired` replaces the card's existing value the same way.
       requestBody:
         required: true
         content:
@@ -662,12 +665,14 @@ paths:
               oneOf:
                 - $ref: '#/components/schemas/MoveCardsRequest'
                 - $ref: '#/components/schemas/UpdateCardVariationRequest'
+                - $ref: '#/components/schemas/UpdateCardAcquiredRequest'
       responses:
         '200':
           description: >-
             For a move/swap, the complete persisted representation of every
-            card updated by the move or swap. For a variation update, the
-            complete persisted representation of the path card.
+            card updated by the move or swap. For a variation or
+            acquisition update, the complete persisted representation of the
+            path card.
           content:
             application/json:
               schema:
@@ -2096,6 +2101,8 @@ components:
         - totalSlots
         - occupiedSlots
         - emptySlots
+        - acquiredCards
+        - totalCards
         - preview
         - createdAt
         - updatedAt
@@ -2167,6 +2174,21 @@ components:
           minimum: 0
           description: >-
             Story 22: totalSlots minus occupiedSlots.
+        acquiredCards:
+          type: integer
+          minimum: 0
+          description: >-
+            Story 36: how many of the binder's card records (placed and
+            unplaced; multi-slot art excluded) have `acquired: true`. The
+            client derives the card-acquisition percentage as
+            acquiredCards / totalCards * 100, displaying `N/A` when
+            totalCards is zero.
+        totalCards:
+          type: integer
+          minimum: 0
+          description: >-
+            Story 36: the binder's total card-record count (placed and
+            unplaced; multi-slot art excluded).
         preview:
           $ref: '#/components/schemas/BinderPreview'
         createdAt:
@@ -2378,6 +2400,19 @@ components:
           type: string
           maxLength: 50
           nullable: true
+    UpdateCardAcquiredRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `PATCH /cards/{cardId}`'s acquisition-update request body (story
+        36): replaces the path card's `acquired` field using last-write-wins
+        semantics - the same endpoint used for placement and variation
+        edits, rather than a dedicated acquire/unacquire endpoint.
+      required:
+        - acquired
+      properties:
+        acquired:
+          type: boolean
     TcgDexCatalogCard:
       type: object
       additionalProperties: false
@@ -2483,6 +2518,12 @@ components:
           type: string
           maxLength: 50
           nullable: true
+        acquired:
+          type: boolean
+          description: >-
+            Story 36: applied to every card created by this request,
+            mirroring the shared `variation` field above. Omitted defaults
+            to unacquired.
         targetPlacement:
           $ref: '#/components/schemas/BulkTargetPlacement'
     BulkCardOutcome:
@@ -2542,6 +2583,11 @@ components:
           type: string
           maxLength: 50
           description: Trimmed on the backend; a blank value is stored as null.
+        acquired:
+          type: boolean
+          description: >-
+            Story 36: unchecked by default on the modal's form; omitted
+            defaults to unacquired.
         physicalPage:
           type: integer
           minimum: 1
@@ -2574,6 +2620,7 @@ components:
         - variation
         - placement
         - imageUrl
+        - acquired
         - createdAt
         - updatedAt
       properties:
@@ -2611,6 +2658,12 @@ components:
           type: string
           format: uri-reference
           description: The backend's own `/cards/{cardId}/image` endpoint URL.
+        acquired:
+          type: boolean
+          description: >-
+            Story 36: whether this card has been acquired. Defaults to
+            `false` for a newly created card and is updated through
+            `PATCH /cards/{cardId}`'s acquisition-update request body.
         createdAt:
           type: string
           format: date-time

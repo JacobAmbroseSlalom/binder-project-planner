@@ -63,6 +63,7 @@ export interface BinderRouteContextValue {
   assignCards: (
     cards: TcgDexCatalogCard[],
     variation: string | null,
+    acquired: boolean,
     targetPlacement: { physicalPage: number; row: number; column: number } | null,
     reopenOnFailure: boolean,
   ) => Promise<boolean>;
@@ -136,6 +137,16 @@ export interface BinderRouteContextValue {
   // edit-variation modal/card tile can disable that one card's own actions
   // until the request settles.
   pendingCardVariationEditIds: Set<string>;
+  // Toggles an existing card's acquired state (story 36): optimistically
+  // flips the value immediately, then replaces it with the backend's
+  // authoritative representation on success, or restores the prior value
+  // on failure. Uses last-write-wins semantics, matching
+  // `PATCH /cards/{cardId}`'s acquisition-update contract.
+  toggleCardAcquired: (cardId: string) => void;
+  // The set of card ids with an acquisition toggle currently in flight, so
+  // the card tile can disable that one card's toggle action until the
+  // request settles.
+  pendingCardAcquiredToggleIds: Set<string>;
   // Duplicates a card into the unplaced-cards section (story 19): inserts
   // an optimistic copy immediately, then replaces it with the backend's
   // authoritative representation on success, or removes it on failure.

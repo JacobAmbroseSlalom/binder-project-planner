@@ -1,5 +1,5 @@
 import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/core';
-import { Copy, Pencil, Trash2 } from 'lucide-react';
+import { Circle, CircleCheck, Copy, Pencil, Trash2 } from 'lucide-react';
 
 import { resolveCardImageUrl, type Card } from '@/lib/api';
 
@@ -26,6 +26,10 @@ export function CardTile({
   onDuplicateCard,
   duplicateAriaLabel,
   isDuplicatePending,
+  onToggleAcquired,
+  toggleAcquiredAriaLabel,
+  isAcquiredTogglePending,
+  acquisitionVisible = false,
   variationsVisible = false,
   highlightClassName = '',
   tileRef,
@@ -60,6 +64,20 @@ export function CardTile({
   onDuplicateCard: (cardId: string) => void;
   duplicateAriaLabel: string;
   isDuplicatePending: boolean;
+  // Story 36: toggles this card between acquired/unacquired, rendered as a
+  // fourth hover action alongside edit-variation/duplicate/remove -
+  // available on both placed (`BinderSlot`) and unplaced (`UnplacedCard`)
+  // cards.
+  onToggleAcquired: (cardId: string) => void;
+  toggleAcquiredAriaLabel: string;
+  isAcquiredTogglePending: boolean;
+  // Story 36's layout-wide toggle: when true, shows a small filled
+  // `CircleCheck` badge overlaid on a corner of this tile's image for an
+  // acquired card (nothing rendered for an unacquired one) - purely
+  // decorative/noninteractive (`aria-hidden`), matching the Michi-
+  // indicator precedent; the hover action above remains the accessible
+  // control for changing or announcing acquisition state.
+  acquisitionVisible?: boolean;
   // Story 16's layout-wide toggle: when true, shows a semi-transparent
   // label overlaid on the bottom edge of this tile's image with its
   // `variation` (only rendered when this card actually has one) - an
@@ -121,19 +139,36 @@ export function CardTile({
         />
       </div>
       {/* Hover-revealed card actions (styling.instructions.md): hidden and
-          nudged up/right until hovered, then settles into place over the
-          card's top-right corner. `pointer-events-none` while hidden keeps
-          it from intercepting clicks meant for the card underneath. Story
-          32: omitted entirely while the binder is locked. */}
+          nudged up until hovered, then settles into place as a single grey
+          bar spanning the card's full top edge (rather than floating
+          individual buttons in one corner), matching the variation
+          label's own full-width bar convention below. `pointer-events-none`
+          while hidden keeps it from intercepting clicks meant for the card
+          underneath. Story 32: omitted entirely while the binder is
+          locked. */}
       {!isLocked && (
-        <div className="pointer-events-none absolute top-0 right-0 z-10 flex -translate-y-1 translate-x-1 gap-1 opacity-0 transition-all duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-x-0 group-hover:translate-y-0 group-hover:opacity-100">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex -translate-y-1 items-center justify-evenly rounded-t-standard bg-black/60 px-1 py-1 opacity-0 transition-all duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100">
+          <button
+            type="button"
+            disabled={isAcquiredTogglePending}
+            onClick={() => onToggleAcquired(card.id)}
+            aria-label={toggleAcquiredAriaLabel}
+            title={card.acquired ? 'Mark as unacquired' : 'Mark as acquired'}
+            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {card.acquired ? (
+              <CircleCheck className="size-3.5" aria-hidden="true" />
+            ) : (
+              <Circle className="size-3.5" aria-hidden="true" />
+            )}
+          </button>
           <button
             type="button"
             disabled={isVariationEditPending}
             onClick={() => onEditVariation(card)}
             aria-label={editVariationAriaLabel}
             title="Edit variation"
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Pencil className="size-3.5" aria-hidden="true" />
           </button>
@@ -143,7 +178,7 @@ export function CardTile({
             onClick={() => onDuplicateCard(card.id)}
             aria-label={duplicateAriaLabel}
             title="Duplicate card"
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Copy className="size-3.5" aria-hidden="true" />
           </button>
@@ -153,7 +188,7 @@ export function CardTile({
             onClick={() => onRemoveCard(card.id)}
             aria-label={removeAriaLabel}
             title="Remove card"
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard bg-neutral-700 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Trash2 className="size-3.5" aria-hidden="true" />
           </button>
@@ -179,6 +214,22 @@ export function CardTile({
           title={card.variation}
         >
           <span className="block truncate">{card.variation}</span>
+        </div>
+      )}
+      {/* Story 36's acquired badge - a small filled `CircleCheck` overlaid
+          on the image's top-left corner (rather than the bottom edge,
+          which the variation label above already occupies), so both
+          overlays can show at once without colliding. Purely decorative:
+          `aria-hidden` and never part of the tab order, since the hover
+          action above is the accessible control for this state; rendered
+          only for an acquired card, matching the variation label's own
+          "nothing to show" convention when unset. */}
+      {acquisitionVisible && card.acquired && (
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute top-0 left-0 flex items-center justify-center rounded-br-standard rounded-tl-standard bg-black/60 p-0.5"
+        >
+          <CircleCheck className="size-3.5 fill-secondary text-background" />
         </div>
       )}
     </div>

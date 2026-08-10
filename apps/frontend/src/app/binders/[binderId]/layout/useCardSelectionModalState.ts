@@ -46,6 +46,7 @@ export function useCardSelectionModalState({
   assignCards: (
     cards: TcgDexCatalogCard[],
     variation: string | null,
+    acquired: boolean,
     targetPlacement: TargetPlacement,
     reopenOnFailure: boolean,
   ) => Promise<boolean>;
@@ -65,6 +66,7 @@ export function useCardSelectionModalState({
     placement: TargetPlacement;
     cards: TcgDexCatalogCard[];
     variation: string | null;
+    acquired: boolean;
   } | null;
   clearBulkSelectionRestore: () => void;
 }) {
@@ -86,6 +88,7 @@ export function useCardSelectionModalState({
   const [bulkSelectionDraft, setBulkSelectionDraft] = useState<{
     cards: TcgDexCatalogCard[];
     variation: string | null;
+    acquired: boolean;
   } | null>(null);
 
   // Auto-reopens the card-selection modal, pre-filled, once a custom-card
@@ -127,6 +130,7 @@ export function useCardSelectionModalState({
       setBulkSelectionDraft({
         cards: bulkSelectionRestore.cards,
         variation: bulkSelectionRestore.variation,
+        acquired: bulkSelectionRestore.acquired,
       });
     }
   }
@@ -144,9 +148,10 @@ export function useCardSelectionModalState({
   function handleAddCards(
     selection: TcgDexCatalogCard[],
     variation: string | null,
+    acquired: boolean,
     targetPlacement: TargetPlacement,
   ) {
-    void assignCards(selection, variation, targetPlacement, true);
+    void assignCards(selection, variation, acquired, targetPlacement, true);
     setSelectedSlot(null);
     setBulkSelectionDraft(null);
   }
@@ -158,9 +163,10 @@ export function useCardSelectionModalState({
   function handleAddMoreCards(
     selection: TcgDexCatalogCard[],
     variation: string | null,
+    acquired: boolean,
     targetPlacement: TargetPlacement,
   ): Promise<boolean> {
-    return assignCards(selection, variation, targetPlacement, false);
+    return assignCards(selection, variation, acquired, targetPlacement, false);
   }
 
   // Submits the manual-entry form's custom card via "Add Card" (story 12)

@@ -248,8 +248,8 @@ export interface paths {
         options?: never;
         head?: never;
         /**
-         * Move/swap one or two cards' binder positions, or update a card's variation
-         * @description Either applies a simple move (one update) or a swap (two updates) of card placement coordinates in one database transaction (story 14), or updates the path card's `variation` field (story 16) - the request body's shape determines which. For a move/swap, the path `cardId` must identify the dragged card included among `updates`. Each update supplies the affected card's currently expected placement plus its final placement; the backend compares every expected placement against the persisted row before applying any change, so a stale client never silently overwrites a position another request already changed. A destination occupied by a card not included in `updates` is rejected as a conflict rather than applied. Nullable placement triples are accepted (story 15's unplaced-cards section) alongside populated ones. For a variation update, the trimmed value replaces the card's existing variation using last-write-wins semantics (no expected prior value or timestamp is compared).
+         * Move/swap one or two cards' binder positions, or update a card's variation or acquisition state
+         * @description Either applies a simple move (one update) or a swap (two updates) of card placement coordinates in one database transaction (story 14), updates the path card's `variation` field (story 16), or updates its `acquired` field (story 36) - the request body's shape determines which. For a move/swap, the path `cardId` must identify the dragged card included among `updates`. Each update supplies the affected card's currently expected placement plus its final placement; the backend compares every expected placement against the persisted row before applying any change, so a stale client never silently overwrites a position another request already changed. A destination occupied by a card not included in `updates` is rejected as a conflict rather than applied. Nullable placement triples are accepted (story 15's unplaced-cards section) alongside populated ones. For a variation update, the trimmed value replaces the card's existing variation using last-write-wins semantics (no expected prior value or timestamp is compared). For an acquisition update, `acquired` replaces the card's existing value the same way.
          */
         patch: operations["updateCard"];
         trace?: never;
@@ -871,6 +871,10 @@ export interface components {
             occupiedSlots: number;
             /** @description Story 22: totalSlots minus occupiedSlots. */
             emptySlots: number;
+            /** @description Story 36: how many of the binder's card records (placed and unplaced; multi-slot art excluded) have `acquired: true`. The client derives the card-acquisition percentage as acquiredCards / totalCards * 100, displaying `N/A` when totalCards is zero. */
+            acquiredCards: number;
+            /** @description Story 36: the binder's total card-record count (placed and unplaced; multi-slot art excluded). */
+            totalCards: number;
             preview: components["schemas"]["BinderPreview"];
             /** Format: date-time */
             createdAt: string;
@@ -933,6 +937,10 @@ export interface components {
         UpdateCardVariationRequest: {
             variation: string | null;
         };
+        /** @description `PATCH /cards/{cardId}`'s acquisition-update request body (story 36): replaces the path card's `acquired` field using last-write-wins semantics - the same endpoint used for placement and variation edits, rather than a dedicated acquire/unacquire endpoint. */
+        UpdateCardAcquiredRequest: {
+            acquired: boolean;
+        };
         /** @description A normalized TCGdex catalog card (story 11), returned by `GET /card-catalog/search` and submitted as-is (plus variation and placement) to create a TCGdex-sourced binder card. */
         TcgDexCatalogCard: {
             name: string;
@@ -967,6 +975,8 @@ export interface components {
         BulkCreateCardsRequest: {
             cards: components["schemas"]["TcgDexCatalogCard"][];
             variation?: string | null;
+            /** @description Story 36: applied to every card created by this request, mirroring the shared `variation` field above. Omitted defaults to unacquired. */
+            acquired?: boolean;
             targetPlacement?: components["schemas"]["BulkTargetPlacement"];
         };
         /** @description One submitted card's independent creation outcome (stories 17 and 18), preserving the submitted array's order regardless of processing completion order. */
@@ -988,6 +998,8 @@ export interface components {
             localNumber?: string;
             /** @description Trimmed on the backend; a blank value is stored as null. */
             variation?: string;
+            /** @description Story 36: unchecked by default on the modal's form; omitted defaults to unacquired. */
+            acquired?: boolean;
             physicalPage?: number;
             row?: number;
             column?: number;
@@ -1017,6 +1029,8 @@ export interface components {
              * @description The backend's own `/cards/{cardId}/image` endpoint URL.
              */
             imageUrl: string;
+            /** @description Story 36: whether this card has been acquired. Defaults to `false` for a newly created card and is updated through `PATCH /cards/{cardId}`'s acquisition-update request body. */
+            acquired: boolean;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1976,11 +1990,11 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["MoveCardsRequest"] | components["schemas"]["UpdateCardVariationRequest"];
+                "application/json": components["schemas"]["MoveCardsRequest"] | components["schemas"]["UpdateCardVariationRequest"] | components["schemas"]["UpdateCardAcquiredRequest"];
             };
         };
         responses: {
-            /** @description For a move/swap, the complete persisted representation of every card updated by the move or swap. For a variation update, the complete persisted representation of the path card. */
+            /** @description For a move/swap, the complete persisted representation of every card updated by the move or swap. For a variation or acquisition update, the complete persisted representation of the path card. */
             200: {
                 headers: {
                     [name: string]: unknown;

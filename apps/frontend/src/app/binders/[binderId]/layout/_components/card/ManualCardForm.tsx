@@ -1,7 +1,7 @@
 'use client';
 
 import { CUSTOM_CARD_IMAGE_ACCEPT } from '@binder-project-planner/shared';
-import { ImageIcon, Trash2, UploadCloud } from 'lucide-react';
+import { Check, ImageIcon, Trash2, UploadCloud } from 'lucide-react';
 import { useRef } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
@@ -75,6 +75,12 @@ interface ManualCardFormProps {
   // form.
   variation: string;
   onVariationChange: (value: string) => void;
+  // Story 36's shared "Acquired" checkbox value/setter - owned by the
+  // parent (CardSelectionModal) for the same reason as `variation` above:
+  // it's shared with the search view's own checkbox rather than being an
+  // RHF-managed field of this form.
+  acquired: boolean;
+  onAcquiredChange: (value: boolean) => void;
 }
 
 // The card-selection modal's manual-entry form fields (story 12: "Add a
@@ -90,6 +96,8 @@ export function ManualCardForm({
   fileError,
   variation,
   onVariationChange,
+  acquired,
+  onAcquiredChange,
 }: ManualCardFormProps) {
   const {
     register,
@@ -157,6 +165,38 @@ export function ManualCardForm({
             disabled={disabled}
           />
         </Field>
+        {/* Story 36's shared "Acquired" checkbox. A checkbox reads
+            naturally with its label beside it (matching every other
+            checkbox in this app, e.g. `LayoutToolbar`'s visibility
+            toggles) rather than above it like the text fields, so this
+            isn't a `Field` - just a plain checkbox+label pair. The hidden
+            spacer line matches `Field`'s caption row's height so the
+            checkbox still lines up with its row-mates' input boxes below
+            their own labels. */}
+        <div className="flex w-28 shrink-0 flex-col gap-1">
+          <span aria-hidden="true" className="text-caption select-none text-transparent">
+            &nbsp;
+          </span>
+          <label
+            htmlFor="custom-card-acquired"
+            className={`flex h-[42px] items-center gap-2 ${
+              disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+            }`}
+          >
+            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+              <input
+                id="custom-card-acquired"
+                type="checkbox"
+                checked={acquired}
+                disabled={disabled}
+                onChange={(event) => onAcquiredChange(event.target.checked)}
+                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+              />
+              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+            </span>
+            <span>Acquired</span>
+          </label>
+        </div>
       </div>
 
       <Field label="Image" htmlFor="custom-card-image" error={fileError}>

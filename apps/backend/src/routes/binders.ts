@@ -46,7 +46,7 @@ import { computeArtPrintPacking, generateArtPrintPdf } from '../pdf/artPrintPdf.
 import { generateBinderLayoutPdf } from '../pdf/binderLayoutPdf.js';
 import { countOccupiedSlots } from '../placement/occupancy.js';
 import { listArtForBinder, listPlacedArtForPreview } from './art.js';
-import { listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
+import { countCardAcquisition, listCardsForBinder, listPlacedCardsForPreview } from './cards.js';
 
 // The validated, OpenAPI-typed shape of a create-binder request body. The
 // OpenAPI validation middleware (mounted in app.ts) already rejects requests
@@ -334,15 +334,23 @@ function buildBinderSummary(database: DatabaseConnection['database'], row: Binde
   // purely from the binder's dimensions/page count; `occupiedSlots` counts
   // every slot holding a card or covered by placed art (unplaced items
   // excluded), and the client derives the slot-completion percentage from
-  // the two. The card-acquisition metric is deferred to story 36.
+  // the two.
   const totalSlots = getTotalSlots(row.width, row.height, row.pages);
   const occupiedSlots = countOccupiedSlots(database, row.id);
+
+  // Story 36: whole-binder card-acquisition counts, covering both placed
+  // and unplaced cards (multi-slot art excluded, since it isn't a `Card`
+  // record at all). The client derives the rounded acquisition percentage
+  // from the two, and displays `N/A` when `totalCards` is zero.
+  const { acquiredCards, totalCards } = countCardAcquisition(database, row.id);
 
   return {
     ...serializeBinder(row),
     totalSlots,
     occupiedSlots,
     emptySlots: totalSlots - occupiedSlots,
+    acquiredCards,
+    totalCards,
     preview: {
       spread,
       cards: listPlacedCardsForPreview(database, row.id, physicalPages),

@@ -367,6 +367,11 @@ export const cards = sqliteTable(
     imageAssetId: text()
       .notNull()
       .references(() => cardImageAssets.id),
+    // Story 36: "Track card acquisition". Defaults to `false` (unacquired)
+    // for every new card, regardless of creation path (manual or TCGdex,
+    // single or bulk) - mirrors `locked`'s SQLite-boolean-as-integer
+    // storage convention above.
+    acquired: integer({ mode: 'boolean' }).notNull().default(false),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
   },

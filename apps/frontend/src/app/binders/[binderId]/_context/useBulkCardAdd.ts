@@ -33,6 +33,9 @@ export interface BulkAddFailedCard {
 export interface BulkAddFailure {
   items: BulkAddFailedCard[];
   variation: string | null;
+  // Story 36: shared across the whole failed batch, mirroring `variation`
+  // above.
+  acquired: boolean;
 }
 
 // A one-shot signal set by `assignCards` when an Add-Card (closes-
@@ -46,6 +49,8 @@ export interface BulkSelectionRestore {
   placement: { physicalPage: number; row: number; column: number } | null;
   cards: TcgDexCatalogCard[];
   variation: string | null;
+  // Story 36: mirrors `variation` above.
+  acquired: boolean;
 }
 
 // Owns story 17/18's bulk TCGdex card-add flow (`assignCards`, its
@@ -93,6 +98,7 @@ export function useBulkCardAdd({
     (
       selection: TcgDexCatalogCard[],
       variation: string | null,
+      acquired: boolean,
       targetPlacement: { physicalPage: number; row: number; column: number } | null,
       reopenOnFailure: boolean,
     ): Promise<boolean> => {
@@ -122,6 +128,7 @@ export function useBulkCardAdd({
           // representation (pointing at its own `/cards/{cardId}/image`
           // endpoint) replaces this optimistic entry.
           imageUrl: catalogCard.imageUrl,
+          acquired,
           createdAt: now,
           updatedAt: now,
         };
@@ -177,6 +184,7 @@ export function useBulkCardAdd({
             }),
           ),
           variation,
+          acquired,
           targetPlacement: targetPlacement ?? undefined,
         },
         idempotencyKey,
@@ -222,15 +230,16 @@ export function useBulkCardAdd({
             detail: `Added ${successCount} card${successCount === 1 ? '' : 's'}; ${failed.length} card${failed.length === 1 ? '' : 's'} failed to save.`,
             action: {
               label: 'View details',
-              onClick: () => setBulkAddFailure({ items: failed, variation }),
+              onClick: () => setBulkAddFailure({ items: failed, variation, acquired }),
             },
           });
-          setBulkAddFailure({ items: failed, variation });
+          setBulkAddFailure({ items: failed, variation, acquired });
           if (reopenOnFailure) {
             setBulkSelectionRestore({
               placement: targetPlacement,
               cards: failed.map((item) => item.card),
               variation,
+              acquired,
             });
           }
           return false;
@@ -252,7 +261,12 @@ export function useBulkCardAdd({
           // locked state and read-only interface.
           if (isLockedBinderConflict(error)) retry();
           if (reopenOnFailure) {
-            setBulkSelectionRestore({ placement: targetPlacement, cards: selection, variation });
+            setBulkSelectionRestore({
+              placement: targetPlacement,
+              cards: selection,
+              variation,
+              acquired,
+            });
           }
           return false;
         });
@@ -305,6 +319,7 @@ export function useBulkCardAdd({
       void assignCards(
         orderedItems.map((item) => item.card),
         current.variation,
+        current.acquired,
         targetPlacement,
         false,
       );

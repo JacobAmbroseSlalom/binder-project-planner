@@ -28,6 +28,9 @@ export function BinderSide({
   pendingCardVariationEditIds,
   onDuplicateCard,
   pendingCardDuplicateIds,
+  onToggleAcquired,
+  pendingCardAcquiredToggleIds,
+  acquisitionVisible = false,
   variationsVisible = false,
   pendingCardDeletionIds,
   pendingArtEditIds,
@@ -86,6 +89,17 @@ export function BinderSide({
   // card ids here, since the optimistic copy itself always renders in the
   // unplaced section, never in a `BinderSlot`.
   pendingCardDuplicateIds: Set<string>;
+  // Toggles an occupied slot's card between acquired/unacquired (story
+  // 36), revealed as a fourth hover action alongside
+  // `onRemoveCard`/`onEditVariation`/`onDuplicateCard`.
+  onToggleAcquired: (cardId: string) => void;
+  // Card ids with an acquisition toggle currently in flight (story 36),
+  // mirroring `pendingCardVariationEditIds`.
+  pendingCardAcquiredToggleIds: Set<string>;
+  // Story 36's toggle: when true, every occupied slot with an acquired
+  // card shows a small badge over its top-left corner (see `CardTile`).
+  // Defaults to off, matching the toggle's default state.
+  acquisitionVisible?: boolean;
   // Story 16's toggle: when true, every occupied slot with a saved
   // variation overlays it on the bottom edge of its card image (see
   // `CardTile`). An overlay rather than reserved space, so toggling this
@@ -287,6 +301,9 @@ export function BinderSide({
                 isVariationEditPending={card ? pendingCardVariationEditIds.has(card.id) : false}
                 onDuplicateCard={onDuplicateCard}
                 isDuplicatePending={card ? pendingCardDuplicateIds.has(card.id) : false}
+                onToggleAcquired={onToggleAcquired}
+                isAcquiredTogglePending={card ? pendingCardAcquiredToggleIds.has(card.id) : false}
+                acquisitionVisible={acquisitionVisible}
                 variationsVisible={variationsVisible}
                 slotAspectRatio={slotAspectRatio}
                 isLocked={isLocked}

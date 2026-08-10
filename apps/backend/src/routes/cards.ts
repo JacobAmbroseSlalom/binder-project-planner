@@ -18,6 +18,7 @@ import {
   CUSTOM_CARD_NAME_MAX_LENGTH,
   CUSTOM_CARD_NUMBER_MAX_LENGTH,
   CUSTOM_CARD_SET_MAX_LENGTH,
+  DEFAULT_CARD_ACQUIRED,
 } from '@binder-project-planner/shared';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { Router, type Response } from 'express';
@@ -60,6 +61,10 @@ interface BulkCardItem {
 interface BulkCreateCardsRequestBody {
   cards: BulkCardItem[];
   variation?: string | null;
+  // Story 36: applied to every card in this bulk request, mirroring the
+  // shared `variation` field above; omitted stores as
+  // `DEFAULT_CARD_ACQUIRED` (unacquired).
+  acquired?: boolean;
   targetPlacement?: { physicalPage: number; row: number; column: number };
 }
 
@@ -73,6 +78,12 @@ interface CreateCustomCardRequestBody {
   setName?: string;
   localNumber?: string;
   variation?: string;
+  // Story 36: unchecked by default on the modal's form (the multipart
+  // field arrives as a string and is coerced to boolean by app.ts's
+  // `coerceTypes: true` body validation); omitted entirely stores as
+  // `DEFAULT_CARD_ACQUIRED` (unacquired), matching every other card-
+  // creation path.
+  acquired?: boolean;
   physicalPage?: number;
   row?: number;
   column?: number;
@@ -110,6 +121,15 @@ interface UpdateCardVariationRequestBody {
   variation: string | null;
 }
 
+// The validated, OpenAPI-typed shape of `PATCH /cards/{cardId}`'s
+// acquisition-update request body (story 36): replaces the path card's
+// `acquired` field instead of moving/swapping placement or updating its
+// variation. The route handler below distinguishes all three body shapes
+// by which of `updates`/`variation`/`acquired` is present.
+interface UpdateCardAcquiredRequestBody {
+  acquired: boolean;
+}
+
 interface CardRow {
   id: string;
   binderId: string;
@@ -124,6 +144,7 @@ interface CardRow {
   row: number | null;
   column: number | null;
   imageAssetId: string;
+  acquired: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -148,6 +169,7 @@ function serializeCard(row: CardRow) {
     variation: row.variation,
     placement: { physicalPage: row.physicalPage, row: row.row, column: row.column },
     imageUrl: `/cards/${row.id}/image`,
+    acquired: row.acquired,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -581,6 +603,7 @@ export function createCardsRouter(
       row: number | null;
       column: number | null;
       imageAssetId: string;
+      acquired: boolean;
       createdAt: string;
       updatedAt: string;
     },
@@ -722,6 +745,9 @@ export function createCardsRouter(
     const setName = body.setName?.trim() || null;
     const localNumber = body.localNumber?.trim() || null;
     const variation = body.variation?.trim() || null;
+    // Story 36: unchecked (omitted) defaults to unacquired, matching every
+    // other card-creation path.
+    const acquired = body.acquired ?? DEFAULT_CARD_ACQUIRED;
 
     if (setName && setName.length > CUSTOM_CARD_SET_MAX_LENGTH) {
       removeTemporaryUploads(uploadedFiles);
@@ -797,6 +823,7 @@ export function createCardsRouter(
         row: placementResult.placement.row,
         column: placementResult.placement.column,
         imageAssetId: asset.assetId,
+        acquired,
         createdAt: now,
         updatedAt: now,
       },
@@ -907,6 +934,9 @@ export function createCardsRouter(
     // trimmed (planning.md), matching every other card-creation endpoint's
     // own variation handling.
     const variation = body.variation?.trim() || null;
+    // Story 36: applied to every card in this batch; omitted defaults to
+    // unacquired.
+    const acquired = body.acquired ?? DEFAULT_CARD_ACQUIRED;
     if (variation && variation.length > CARD_VARIATION_MAX_LENGTH) {
       response
         .status(400)
@@ -997,6 +1027,7 @@ export function createCardsRouter(
             row: placement.row,
             column: placement.column,
             imageAssetId: asset.assetId,
+            acquired,
             createdAt: now,
             updatedAt: now,
           };
@@ -1061,6 +1092,49 @@ export function createCardsRouter(
   // constraint, which is likewise caught and mapped to `409 Conflict`.
   router.patch('/cards/:cardId', (request, response) => {
     const { cardId } = request.params;
+
+    // Story 36: an acquisition-update request body has `acquired` (and no
+    // `updates`) instead of a move/swap's `updates` array - the OpenAPI
+    // `oneOf` request schema's third branch. Checked before the
+    // variation-update branch below since neither shape has an `updates`
+    // key; handled as its own simple last-write-wins branch for the same
+    // reasons as the variation-update branch (no expected-position
+    // comparison, no transaction needed).
+    if (!('updates' in request.body) && 'acquired' in request.body) {
+      const body = request.body as UpdateCardAcquiredRequestBody;
+      const existing = database.select().from(cards).where(eq(cards.id, cardId)).get();
+      if (!existing) {
+        response
+          .status(404)
+          .type('application/problem+json')
+          .json(problem(404, 'Not Found', `No card exists with id "${cardId}".`));
+        return;
+      }
+
+      // Story 32: toggling a card's acquisition state is a restricted
+      // mutation too, mirroring the variation-update branch below - though
+      // planning.md still allows it from the Card Checklist tab (story 37)
+      // while locked, which is a separate endpoint/flow from this one.
+      const binderForAcquiredEdit = database
+        .select({ locked: binders.locked })
+        .from(binders)
+        .where(eq(binders.id, existing.binderId))
+        .get();
+      if (binderForAcquiredEdit?.locked) {
+        response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
+        return;
+      }
+
+      const updatedAt = new Date().toISOString();
+      database
+        .update(cards)
+        .set({ acquired: body.acquired, updatedAt })
+        .where(eq(cards.id, cardId))
+        .run();
+
+      response.status(200).json(serializeCard({ ...existing, acquired: body.acquired, updatedAt }));
+      return;
+    }
 
     // Story 16: a variation-update request body has `variation` (and no
     // `updates`) instead of a move/swap's `updates` array - the OpenAPI
@@ -1477,6 +1551,30 @@ export function listCardsForBinder(database: DatabaseConnection['database'], bin
     .orderBy(desc(cards.createdAt), asc(cards.id))
     .all()
     .map(serializeCard);
+}
+
+// Story 36: "Track card acquisition". Counts every card record (placed and
+// unplaced) associated with the binder plus how many of them are acquired,
+// for the home page's card-acquisition percentage metric. Multi-slot art
+// lives in a separate `art` table entirely, so it's naturally excluded
+// without any extra filtering here. Returns raw counts (rather than a
+// pre-rounded percentage) so the client derives the rounded percentage and
+// decides how to display a zero-card binder (`N/A`), matching story 22's
+// existing slot-completion counts' own division of responsibility.
+export function countCardAcquisition(
+  database: DatabaseConnection['database'],
+  binderId: string,
+): { acquiredCards: number; totalCards: number } {
+  const rows = database
+    .select({ acquired: cards.acquired })
+    .from(cards)
+    .where(eq(cards.binderId, binderId))
+    .all();
+
+  return {
+    acquiredCards: rows.filter((row) => row.acquired).length,
+    totalCards: rows.length,
+  };
 }
 
 // Story 20 ("Add a binder preview"): the cards placed within the binder

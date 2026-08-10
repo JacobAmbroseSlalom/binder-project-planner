@@ -215,6 +215,20 @@ export const DEFAULT_BINDER_NOTES_VISIBLE = true;
 export const DEFAULT_BINDER_MICHI_INDICATORS_VISIBLE = false;
 export const DEFAULT_BINDER_VARIATIONS_VISIBLE = false;
 
+// Story 36: "Track card acquisition". A newly created card defaults to
+// unacquired regardless of creation path (manual or TCGdex, single or
+// bulk) - the custom-card and TCGdex add-card modals' "Acquired" checkbox
+// is unchecked by default.
+export const DEFAULT_CARD_ACQUIRED = false;
+
+// Story 36: the Edit Layout tab's card-acquisition-visibility toggle
+// (which corner-badges each acquired card) defaults to hidden, before the
+// user's own preference has been saved to browser local storage.
+// Presentation-only; never persisted by the backend, joining the same
+// local-storage preference group as the Michi/variation/notes toggles
+// above.
+export const DEFAULT_CARD_ACQUISITION_VISIBLE = false;
+
 // Story 33: "Export and import all application data". The version of the
 // export archive format, written into its manifest and required to match
 // on import so an incompatible archive is rejected rather than

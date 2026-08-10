@@ -39,6 +39,7 @@ This index maps every story file to its current bucket.
 | 31    | Search and filter unplaced items                                       | [docs/stories/completed/31-search-and-filter-unplaced-items.md](completed/31-search-and-filter-unplaced-items.md)                                                                             |
 | 33    | Export and import all application data                                 | [docs/stories/completed/33-export-and-import-all-application-data.md](completed/33-export-and-import-all-application-data.md)                                                                 |
 | 34    | Add custom art finances                                                | [docs/stories/completed/34-add-custom-art-finances.md](completed/34-add-custom-art-finances.md)                                                                                               |
+| 36    | Track card acquisition                                                 | [docs/stories/completed/36-track-card-acquisition.md](completed/36-track-card-acquisition.md)                                                                                                 |
 | 40    | Add summary stats on Binder Layout Page                                | [docs/stories/completed/40-add-summary-stats-on-binder-layout-page.md](completed/40-add-summary-stats-on-binder-layout-page.md)                                                               |
 | 41    | Filter card search by TCG Pocket inclusion and language                | [docs/stories/completed/41-filter-card-search-by-tcg-pocket-inclusion-and-language.md](completed/41-filter-card-search-by-tcg-pocket-inclusion-and-language.md)                               |
 | 42    | Preview binder layout and multi-slot art while editing binder settings | [docs/stories/completed/42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md](completed/42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md) |
@@ -51,11 +52,11 @@ This index maps every story file to its current bucket.
 
 ## Needs Refinement
 
-| Story | Title                                  | File                                                                                                                                        |
-| ----- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 36    | Track card acquisition                 | [docs/stories/needs-refinement/36-track-card-acquisition.md](needs-refinement/36-track-card-acquisition.md)                                 |
-| 37    | Add a card checklist                   | [docs/stories/needs-refinement/37-add-a-card-checklist.md](needs-refinement/37-add-a-card-checklist.md)                                     |
-| 38    | Add card finances                      | [docs/stories/needs-refinement/38-add-card-finances.md](needs-refinement/38-add-card-finances.md)                                           |
-| 39    | Add Binder Search and Sort functions   | [docs/stories/needs-refinement/39-add-binder-search-and-sort-functions.md](needs-refinement/39-add-binder-search-and-sort-functions.md)     |
-| 43    | Add a card from other API sources      | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md)           |
-| 44    | Delete custom art finance cost entries | [docs/stories/needs-refinement/44-delete-custom-art-finance-cost-entries.md](needs-refinement/44-delete-custom-art-finance-cost-entries.md) |
+| Story | Title | File |
+| ----- | ----- | ---- |
+
+| 37 | Add a card checklist | [docs/stories/needs-refinement/37-add-a-card-checklist.md](needs-refinement/37-add-a-card-checklist.md) |
+| 38 | Add card finances | [docs/stories/needs-refinement/38-add-card-finances.md](needs-refinement/38-add-card-finances.md) |
+| 39 | Add Binder Search and Sort functions | [docs/stories/needs-refinement/39-add-binder-search-and-sort-functions.md](needs-refinement/39-add-binder-search-and-sort-functions.md) |
+| 43 | Add a card from other API sources | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md) |
+| 44 | Delete custom art finance cost entries | [docs/stories/needs-refinement/44-delete-custom-art-finance-cost-entries.md](needs-refinement/44-delete-custom-art-finance-cost-entries.md) |

@@ -84,6 +84,9 @@ export function UnplacedCardsPanel({
   pendingCardVariationEditIds,
   onDuplicateCard,
   pendingCardDuplicateIds,
+  onToggleAcquired,
+  pendingCardAcquiredToggleIds,
+  acquisitionVisible = false,
   variationsVisible = false,
   onAddCard,
   slotAspectRatio,
@@ -110,6 +113,13 @@ export function UnplacedCardsPanel({
   // mirroring `pendingCardVariationEditIds` - only ever matches the
   // optimistic copy itself, never its (still-enabled) source.
   pendingCardDuplicateIds: Set<string>;
+  // Toggles an unplaced card between acquired/unacquired (story 36).
+  onToggleAcquired: (cardId: string) => void;
+  // Card ids with an acquisition toggle currently in flight (story 36),
+  // mirroring `pendingCardVariationEditIds`.
+  pendingCardAcquiredToggleIds: Set<string>;
+  // Story 36's layout-wide toggle, threaded down from `BinderLayoutView`.
+  acquisitionVisible?: boolean;
   // Story 16's layout-wide toggle, threaded down from `BinderLayoutView`.
   variationsVisible?: boolean;
   onAddCard: () => void;
@@ -329,6 +339,9 @@ export function UnplacedCardsPanel({
                       isVariationEditPending={pendingCardVariationEditIds.has(card.id)}
                       onDuplicateCard={onDuplicateCard}
                       isDuplicatePending={pendingCardDuplicateIds.has(card.id)}
+                      onToggleAcquired={onToggleAcquired}
+                      isAcquiredTogglePending={pendingCardAcquiredToggleIds.has(card.id)}
+                      acquisitionVisible={acquisitionVisible}
                       variationsVisible={variationsVisible}
                       slotAspectRatio={slotAspectRatio}
                     />
