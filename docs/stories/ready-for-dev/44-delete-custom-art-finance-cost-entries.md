@@ -8,7 +8,7 @@
   cost entries" modal.
 - The modal lists all three shared catalogs' entries in one flat list, each row
   labeled with its catalog (Binder, Printing, or Holographic Paper) and a delete
-  action. Entries are grouped by catalog in the same order the Physical costs section
+  action. Entries are grouped by catalog in the same order the Material costs section
   presents them (Binder, then Printing, then Holographic Paper), and alphabetically by
   name (case-insensitive) within each catalog.
 - Each entry displays a count of how many binders currently have it selected, so the
@@ -39,7 +39,7 @@
   totals area, alongside the running-totals stats.
 - The modal fetches all three catalogs and combines their entries client-side into one
   flat list, sorted by catalog (Binder, then Printing, then Holographic Paper, matching
-  the Physical costs section's display order) and alphabetically by name within each
+  the Material costs section's display order) and alphabetically by name within each
   catalog; this reuses the same alphabetical `GET` ordering already returned by each
   catalog endpoint (story 34) rather than requiring a new combined-and-sorted endpoint.
 - Confirming delete optimistically removes the entry from the modal's list immediately,

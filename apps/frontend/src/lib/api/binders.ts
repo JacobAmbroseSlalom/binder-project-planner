@@ -1,5 +1,6 @@
 import { apiClient, type ExportedBinderPdf } from './client';
 import type {
+  ArtPrintPageCountResult,
   Binder,
   BinderSummary,
   CreateBinderRequest,
@@ -196,4 +197,25 @@ export async function exportArtPrintPdf(
   const filename = filenameMatch?.[1] ?? 'binder-art.pdf';
 
   return { blob: data, filename };
+}
+
+// Story 34: fetches the computed page count for this binder's currently
+// placed multi-slot art through `GET /binders/{binderId}/art-print-page-count`,
+// reusing the same packing/tiling logic as the art-print PDF export instead
+// of generating one - the Finances tab uses this to derive its Printing,
+// Holographic Paper, and time-based cost totals client-side.
+export async function getArtPrintPageCount(
+  binderId: string,
+  signal?: AbortSignal,
+): Promise<ArtPrintPageCountResult> {
+  const { data, error } = await apiClient.GET('/binders/{binderId}/art-print-page-count', {
+    params: { path: { binderId } },
+    signal,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
 }

@@ -239,3 +239,9 @@ export const ART_PRINT_ITEM_GAP_INCHES = 0.25;
 // orientation, so the printed tiles can be trimmed and aligned during
 // physical assembly without losing any of the reconstructed image.
 export const ART_PRINT_TILE_OVERLAP_INCHES = 0.25;
+
+// Story 34: "Add custom art finances". Maximum trimmed length for a cost
+// entry's `name` field, shared by all 3 catalogs (Binder, Printing,
+// Holographic Paper) - the frontend Zod schema, the OpenAPI request/
+// response contracts, and backend validation all import this same value.
+export const COST_ENTRY_NAME_MAX_LENGTH = 100;

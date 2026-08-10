@@ -4,7 +4,12 @@ import { computeArtDisplayGeometry } from '@binder-project-planner/shared';
 import PDFDocument from 'pdfkit';
 
 import { loadImageForEmbedding, traceRoundedRectPath } from './binderLayoutPdf.js';
-import { packArtForPrint, type ArtPrintItem, type PlacedRect } from './artPrintPacking.js';
+import {
+  packArtForPrint,
+  type ArtPrintItem,
+  type PackResult,
+  type PlacedRect,
+} from './artPrintPacking.js';
 
 // Story 30's print-art PDF generator. Like Story 29's
 // `generateBinderLayoutPdf`, draws from an already-resolved, transactionally
@@ -58,6 +63,32 @@ export interface GenerateArtPrintPdfOptions {
   marginIn: number;
   gapIn: number;
   tileOverlapIn: number;
+}
+
+// Story 34's `GET /binders/{binderId}/art-print-page-count` needs the same
+// page count this module's own PDF generation produces, without rendering
+// a PDF - extracted here so both call sites share one source of truth for
+// the usable-page-area math and packing call, rather than the page count
+// ever drifting out of sync with what an actual export would produce.
+export function computeArtPrintPacking(
+  art: readonly Pick<ArtPrintInput, 'id' | 'physicalWidthCm' | 'physicalHeightCm'>[],
+  config: { marginIn: number; gapIn: number; tileOverlapIn: number },
+): PackResult {
+  const usableWidthIn = PAGE_WIDTH_IN - 2 * config.marginIn;
+  const usableHeightIn = PAGE_HEIGHT_IN - 2 * config.marginIn;
+
+  const items: ArtPrintItem[] = art.map((item) => ({
+    id: item.id,
+    widthIn: item.physicalWidthCm / CM_PER_INCH,
+    heightIn: item.physicalHeightCm / CM_PER_INCH,
+  }));
+
+  return packArtForPrint(items, {
+    usableWidthIn,
+    usableHeightIn,
+    gapIn: config.gapIn,
+    tileOverlapIn: config.tileOverlapIn,
+  });
 }
 
 // Draws one art frame (border fill, then the clipped/transformed image)
@@ -224,18 +255,7 @@ export async function generateArtPrintPdf({
   const usableHeightIn = PAGE_HEIGHT_IN - 2 * marginIn;
   const marginPt = marginIn * POINTS_PER_INCH;
 
-  const items: ArtPrintItem[] = art.map((item) => ({
-    id: item.id,
-    widthIn: item.physicalWidthCm / CM_PER_INCH,
-    heightIn: item.physicalHeightCm / CM_PER_INCH,
-  }));
-
-  const { pageCount, placements } = packArtForPrint(items, {
-    usableWidthIn,
-    usableHeightIn,
-    gapIn,
-    tileOverlapIn,
-  });
+  const { pageCount, placements } = computeArtPrintPacking(art, { marginIn, gapIn, tileOverlapIn });
 
   const artById = new Map(art.map((item) => [item.id, item]));
   const placementsByPage = new Map<number, PlacedRect[]>();

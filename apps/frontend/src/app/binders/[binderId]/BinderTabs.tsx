@@ -3,14 +3,14 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-// The binder tabs in display order. "Card List" and "View Financials" are
-// intentionally disabled placeholders until their stories are implemented,
-// so they render as non-interactive labels rather than links.
+// The binder tabs in display order. "Card List" is intentionally disabled
+// until its story is implemented, so it renders as a non-interactive label
+// rather than a link. "View Financials" was enabled by story 34.
 const TABS = [
   { segment: 'details', label: 'Edit Details', disabled: false },
   { segment: 'layout', label: 'Edit Layout', disabled: false },
   { segment: 'card-list', label: 'Card List', disabled: true },
-  { segment: 'financials', label: 'View Financials', disabled: true },
+  { segment: 'financials', label: 'View Financials', disabled: false },
 ] as const;
 
 // One `justify-self` value per tab position, keyed by index rather than

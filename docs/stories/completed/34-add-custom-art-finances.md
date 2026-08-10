@@ -1,6 +1,19 @@
 # 34. Add custom art finances
 
-**Status:** Ready for dev
+**Status:** Done (2026-08-10 01:20 EDT)
+
+> **Amended (see below):** Printing's time-based cost category was changed to a flat,
+> one-time cost that doesn't scale with page count - its `referencePages` is `null` and
+> `referenceMinutes` is used directly as this binder's total minutes for that category.
+> The other 4 categories (Binder Designing, Applying Holographic Paper, Cutting, Placing)
+> are unaffected and still scale by page count as originally specified below.
+>
+> **Amended:** the "Physical costs" section (and its sticky-totals stat) was renamed to
+> "Material costs" - a display-label-only change; no field or endpoint names changed.
+>
+> **Amended:** a new "With Tax" sticky-totals stat was added, applying a fixed
+> `salesTaxPercent` (Georgia's flat state sales tax rate, 4%, with no user-facing way to
+> change it) to the "Total (excl. Cards)" figure - see the sticky-totals note below.
 
 #### Acceptance criteria
 
@@ -12,7 +25,8 @@
 - Creating or editing a shared cost entry, editing finance settings, and selecting a
   catalog entry for this binder each use the shared save-status toast and restore the
   previous value if saving fails.
-- The tab has a Physical costs section covering Binder, Printing, and Holographic Paper.
+- The tab has a Physical costs section (renamed "Material costs" - see amendment note
+  above) covering Binder, Printing, and Holographic Paper.
 - For each physical cost item, the user selects a previously saved entry from a dropdown
   of shared entries, or creates a new entry that is saved for reuse across all binders.
 - Editing the details of a selected physical cost entry updates that same shared entry,
@@ -40,25 +54,36 @@
   value used for every binder's time-based cost calculations.
 - Each time-based cost category has a shared rate basis of reference hours and
   reference pages (e.g. "25 minutes to do 8 pages"), stored once and shared across all
-  binders.
+  binders. **Amended:** Printing's rate basis has no reference pages (it's always
+  `null`) since Printing's time-based cost is a flat, one-time cost for the whole binder
+  that doesn't scale with page count; the other 4 categories are unaffected.
 - Editing a category's reference hours or reference pages updates that shared entry, and
   the change is reflected the next time any binder's "View Financials" tab is viewed.
 - For each time-based cost category, the page count used in this binder's calculation is
   the same multi-slot-art print PDF page count used for the Printing and Holographic
-  Paper physical costs.
+  Paper physical costs. **Amended:** this doesn't apply to Printing, whose time-based
+  cost is a flat, one-time value that ignores this binder's page count entirely.
 - Each time-based cost item's total hours for this binder is its category's reference
   hours divided by its reference pages, multiplied by this binder's page count; its price
-  is that total multiplied by the shared wage-per-hour value.
+  is that total multiplied by the shared wage-per-hour value. **Amended:** Printing is
+  the exception - its reference pages is `null`, so its total hours for this binder is
+  simply its reference hours (not divided or multiplied by anything).
 - Each time-based cost item displays both its total hours and its price.
 - The tab has a Cards section that is a placeholder until story 38 ("Add card
   finances") is implemented, showing a total for all cards and a separate total for
   unacquired cards only.
 - A stickied area at the top of the tab shows running totals as costs change.
-- The stickied area shows a currency total for each of the Physical costs, Time-based
-  costs, and Cards sections, a currency total excluding the Cards section, and an
-  overall currency total including Cards.
+- The stickied area shows a currency total for each of the Physical costs (renamed
+  "Material costs" - see amendment note above), Time-based costs, and Cards sections, a
+  currency total excluding the Cards section, and an overall currency total including
+  Cards.
 - The stickied area also shows the total calculated hours across all time-based cost
   items for the binder, as its own stat alongside the currency totals.
+- **Amended:** the stickied area also shows a "With Tax" currency total, applying a
+  fixed sales-tax percentage (shared across all binders, Georgia's flat state sales tax
+  rate of 4%, with no editable field - the rate is shown directly in the stat's label,
+  e.g. "With Tax (4%)") to the
+  "Total (excl. Cards)" figure.
 - The stickied and section-level currency totals use the error-margin-applied figures
   for Printing and Holographic Paper; the without-error-margin figures remain visible
   only at those individual line items for comparison.
@@ -144,7 +169,9 @@
   `defaults.ts` centralization convention in
   `.github/instructions/coding-conventions.instructions.md`, made because these are
   one-time seed values for a singleton row rather than fallback values referenced by
-  application code at runtime.
+  application code at runtime. **Amended:** a later migration made
+  `printingReferencePages` nullable and set the singleton row's value to `null`, since
+  Printing's cost no longer scales by page count.
 - The error margin applies as literal extra whole pages, rounded up:
   `extraPages = ceil(pageCount * errorMarginPercent / 100)`. The with-error-margin
   Printing and Holographic Paper costs are computed using `pageCount + extraPages` in
@@ -166,7 +193,10 @@
   - `wagePerHour`: required, `0` or greater.
   - `errorMarginPercent`: required, `0` to `100` inclusive.
   - Each time-cost category's `referenceMinutes`: `0` or greater; `referencePages`:
-    required positive integer, greater than `0`.
+    required positive integer, greater than `0`. **Amended:** Printing's
+    `referencePages` is instead always `null` (nullable database column), since
+    Printing's cost is a flat, one-time cost that doesn't scale with page count; the
+    other 4 categories are unaffected.
 - Locking a binder (story 32) does not restrict any mutation introduced by this story.
   Selecting a cost entry for a locked binder (`selectedBinderCostEntryId`,
   `selectedPrintingCostEntryId`, `selectedHolographicPaperCostEntryId` via

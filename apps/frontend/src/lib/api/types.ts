@@ -27,3 +27,21 @@ export type BinderPreview = components['schemas']['BinderPreview'];
 export type ImportSummary = components['schemas']['ImportSummary'];
 export type ImportValidateResponse = components['schemas']['ImportValidateResponse'];
 export type ImportCommitResponse = components['schemas']['ImportCommitResponse'];
+export type ArtPrintPageCountResult = components['schemas']['ArtPrintPageCountResult'];
+export type FinanceSettings = components['schemas']['FinanceSettings'];
+export type UpdateFinanceSettingsRequest = components['schemas']['UpdateFinanceSettingsRequest'];
+export type TimeCostRateBasis = components['schemas']['TimeCostRateBasis'];
+export type TimeCosts = components['schemas']['TimeCosts'];
+export type BinderCostEntry = components['schemas']['BinderCostEntry'];
+export type CreateBinderCostEntryRequest = components['schemas']['CreateBinderCostEntryRequest'];
+export type UpdateBinderCostEntryRequest = components['schemas']['UpdateBinderCostEntryRequest'];
+export type PrintingCostEntry = components['schemas']['PrintingCostEntry'];
+export type CreatePrintingCostEntryRequest =
+  components['schemas']['CreatePrintingCostEntryRequest'];
+export type UpdatePrintingCostEntryRequest =
+  components['schemas']['UpdatePrintingCostEntryRequest'];
+export type HolographicPaperCostEntry = components['schemas']['HolographicPaperCostEntry'];
+export type CreateHolographicPaperCostEntryRequest =
+  components['schemas']['CreateHolographicPaperCostEntryRequest'];
+export type UpdateHolographicPaperCostEntryRequest =
+  components['schemas']['UpdateHolographicPaperCostEntryRequest'];

@@ -394,6 +394,181 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/binders/{binderId}/art-print-page-count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Get the computed page count for this binder's placed multi-slot art
+         * @description Story 34: returns only the page count the binder's currently placed multi-slot art would print across, reusing the same packing/tiling logic as `POST /binders/{binderId}/exports/art-pdf` (story 30) without generating a PDF - the Finances tab calls this instead to learn the page count that drives its Printing, Holographic Paper, and time-based cost calculations. Read-only, so binder lock state never restricts it. The backend caches the result on the binder row and only recomputes it when a lightweight signature (placed-art count, placed-art max updatedAt, and the binder's own updatedAt) no longer matches what's cached.
+         */
+        get: operations["getArtPrintPageCount"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finance-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the global finance-settings singleton
+         * @description Story 34: the wage-per-hour rate, shared error-margin percentage, and each of the 5 fixed time-cost categories' own reference-minutes/ reference-pages rate basis - one global resource, never scoped to a binder, seeded by the schema migration.
+         */
+        get: operations["getFinanceSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update the global finance-settings singleton
+         * @description Applies a partial update; only supplied fields (including nested `timeCosts` category fields) are changed. Never restricted by any binder's lock state, since this resource isn't scoped to a binder.
+         */
+        patch: operations["updateFinanceSettings"];
+        trace?: never;
+    };
+    "/binder-cost-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the shared Binder physical-cost catalog
+         * @description Story 34: returns every saved Binder cost entry, ordered alphabetically by name (case-insensitive). The frontend's dropdown further filters this list to entries whose stored width, height, and pages match the current binder.
+         */
+        get: operations["listBinderCostEntries"];
+        put?: never;
+        /** Create a new Binder cost entry */
+        post: operations["createBinderCostEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/binder-cost-entries/{binderCostEntryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderCostEntryId: components["parameters"]["binderCostEntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a Binder cost entry
+         * @description Applies a partial update to the shared entry - the change is visible to every binder that currently has it selected.
+         */
+        patch: operations["updateBinderCostEntry"];
+        trace?: never;
+    };
+    "/printing-cost-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the shared Printing physical-cost catalog
+         * @description Story 34: returns every saved Printing cost entry, ordered alphabetically by name (case-insensitive).
+         */
+        get: operations["listPrintingCostEntries"];
+        put?: never;
+        /** Create a new Printing cost entry */
+        post: operations["createPrintingCostEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/printing-cost-entries/{printingCostEntryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                printingCostEntryId: components["parameters"]["printingCostEntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a Printing cost entry
+         * @description Applies a partial update to the shared entry - the change is visible to every binder that currently has it selected.
+         */
+        patch: operations["updatePrintingCostEntry"];
+        trace?: never;
+    };
+    "/holographic-paper-cost-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the shared Holographic Paper physical-cost catalog
+         * @description Story 34: returns every saved Holographic Paper cost entry, ordered alphabetically by name (case-insensitive).
+         */
+        get: operations["listHolographicPaperCostEntries"];
+        put?: never;
+        /** Create a new Holographic Paper cost entry */
+        post: operations["createHolographicPaperCostEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/holographic-paper-cost-entries/{holographicPaperCostEntryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                holographicPaperCostEntryId: components["parameters"]["holographicPaperCostEntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update a Holographic Paper cost entry
+         * @description Applies a partial update to the shared entry - the change is visible to every binder that currently has it selected.
+         */
+        patch: operations["updateHolographicPaperCostEntry"];
+        trace?: never;
+    };
     "/maintenance/orphaned-images": {
         parameters: {
             query?: never;
@@ -601,6 +776,9 @@ export interface components {
             locked?: boolean;
             /** @description Story 27: include only after the user confirms relocation for an affecting resize. When true, the backend atomically updates binder details and clears placement coordinates for every item affected at transaction time. */
             moveAffectedItemsToUnplaced?: boolean;
+            selectedBinderCostEntryId?: components["schemas"]["SelectedBinderCostEntryId"];
+            selectedPrintingCostEntryId?: components["schemas"]["SelectedPrintingCostEntryId"];
+            selectedHolographicPaperCostEntryId?: components["schemas"]["SelectedHolographicPaperCostEntryId"];
         };
         /** @description Story 27's dry-run request body for `POST /binders/{binderId}/resize-preview`. */
         ResizePreviewRequest: {
@@ -657,6 +835,9 @@ export interface components {
             notes: components["schemas"]["BinderNotes"];
             /** @description Story 32: whether restricted details/layout/card/art mutations are currently rejected for this binder with a `409 Conflict`. */
             locked: boolean;
+            selectedBinderCostEntryId: components["schemas"]["SelectedBinderCostEntryId"];
+            selectedPrintingCostEntryId: components["schemas"]["SelectedPrintingCostEntryId"];
+            selectedHolographicPaperCostEntryId: components["schemas"]["SelectedHolographicPaperCostEntryId"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -681,6 +862,9 @@ export interface components {
             notes: components["schemas"]["BinderNotes"];
             /** @description Story 32: whether restricted details/layout/card/art mutations are currently rejected for this binder with a `409 Conflict`. */
             locked: boolean;
+            selectedBinderCostEntryId: components["schemas"]["SelectedBinderCostEntryId"];
+            selectedPrintingCostEntryId: components["schemas"]["SelectedPrintingCostEntryId"];
+            selectedHolographicPaperCostEntryId: components["schemas"]["SelectedHolographicPaperCostEntryId"];
             /** @description Story 22: the total number of card slots in the binder (width * height * 2 * pages). The client derives the slot-completion percentage as occupiedSlots / totalSlots * 100. */
             totalSlots: number;
             /** @description Story 22: how many slots hold a card or are covered by placed multi-slot art, deduplicated across overlaps. Unplaced cards and art are excluded. */
@@ -955,12 +1139,162 @@ export interface components {
              */
             image?: string;
         };
+        /**
+         * Format: uuid
+         * @description Story 34: the id of this binder's currently selected shared Binder cost entry, or null when none is selected. Setting one requires the entry's own stored width, height, and pages to match this binder's effective values; changing the binder's width, height, or pages clears a selection that no longer matches. Never restricted by `locked`.
+         */
+        SelectedBinderCostEntryId: string | null;
+        /**
+         * Format: uuid
+         * @description Story 34: the id of this binder's currently selected shared Printing cost entry, or null when none is selected. Never restricted by `locked`.
+         */
+        SelectedPrintingCostEntryId: string | null;
+        /**
+         * Format: uuid
+         * @description Story 34: the id of this binder's currently selected shared Holographic Paper cost entry, or null when none is selected. Never restricted by `locked`.
+         */
+        SelectedHolographicPaperCostEntryId: string | null;
+        /** @description `GET /binders/{binderId}/art-print-page-count`'s response (story 34). */
+        ArtPrintPageCountResult: {
+            /** @description The number of pages this binder's currently placed multi-slot art would print across, per story 30's packing/tiling heuristic. Zero when no art is currently placed. */
+            pageCount: number;
+        };
+        /** @description Trimmed on the backend; required and at most 100 characters after trimming (the shared COST_ENTRY_NAME_MAX_LENGTH value). Duplicate names across entries in the same catalog are allowed. */
+        CostEntryName: string;
+        /** @description US dollars, to two decimal places. Must be greater than zero. */
+        CostEntryPrice: number;
+        /** @description Story 34: one time-cost category's rate basis - "it takes referenceMinutes minutes to do referencePages pages" (e.g. "25 minutes to do 8 pages") - stored and shared across every binder, never scoped to one. `referencePages` is null for a category whose cost is a flat, one-time cost that doesn't scale with page count (currently only Printing); in that case referenceMinutes is used directly as the binder's total minutes for that category, without multiplying by page count. */
+        TimeCostRateBasis: {
+            /** @description Minutes it takes to complete referencePages pages, or (when referencePages is null) the flat number of minutes this one-time cost always takes. */
+            referenceMinutes: number;
+            /** @description The number of pages referenceMinutes corresponds to, or null when this category's cost is a flat, one-time cost that doesn't scale with page count (currently only Printing). */
+            referencePages: number | null;
+        };
+        /** @description A partial update to one time-cost category's rate basis. */
+        UpdateTimeCostRateBasis: {
+            referenceMinutes?: number;
+            referencePages?: number;
+        };
+        /** @description Story 34's 5 fixed time-cost categories, each with its own independent rate basis. */
+        TimeCosts: {
+            designing: components["schemas"]["TimeCostRateBasis"];
+            printing: components["schemas"]["TimeCostRateBasis"];
+            applyingHolographicPaper: components["schemas"]["TimeCostRateBasis"];
+            cutting: components["schemas"]["TimeCostRateBasis"];
+            placing: components["schemas"]["TimeCostRateBasis"];
+        };
+        /** @description A partial update to any subset of the 5 time-cost categories. */
+        UpdateTimeCosts: {
+            designing?: components["schemas"]["UpdateTimeCostRateBasis"];
+            printing?: components["schemas"]["UpdateTimeCostRateBasis"];
+            applyingHolographicPaper?: components["schemas"]["UpdateTimeCostRateBasis"];
+            cutting?: components["schemas"]["UpdateTimeCostRateBasis"];
+            placing?: components["schemas"]["UpdateTimeCostRateBasis"];
+        };
+        /** @description Story 34's global finance-settings singleton - never scoped to a binder, seeded once by the schema migration. */
+        FinanceSettings: {
+            /** @description US dollars per hour, to two decimal places. */
+            wagePerHour: number;
+            /** @description Percentage of the page count added as "extra pages" to account for pages that must be redone due to human error. */
+            errorMarginPercent: number;
+            /** @description Sales tax percentage applied to the "Total (excl. Cards)" figure to produce the "With Tax" total. Defaults to Georgia's flat state sales tax rate (4%). */
+            salesTaxPercent: number;
+            timeCosts: components["schemas"]["TimeCosts"];
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description `PATCH /finance-settings`'s request body (story 34); a partial update, including independently-partial nested timeCosts categories. */
+        UpdateFinanceSettingsRequest: {
+            wagePerHour?: number;
+            errorMarginPercent?: number;
+            salesTaxPercent?: number;
+            timeCosts?: components["schemas"]["UpdateTimeCosts"];
+        };
+        /** @description Story 34's shared Binder physical-cost catalog entry - a saved one-time acquisition price for a binder of the given width, height, and page count. */
+        BinderCostEntry: {
+            /** Format: uuid */
+            id: string;
+            name: components["schemas"]["CostEntryName"];
+            price: components["schemas"]["CostEntryPrice"];
+            /** @description Number of slot columns per binder side this entry applies to. */
+            width: number;
+            /** @description Number of slot rows per binder side this entry applies to. */
+            height: number;
+            /** @description Stored binder-page count this entry applies to. */
+            pages: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateBinderCostEntryRequest: {
+            name: components["schemas"]["CostEntryName"];
+            price: components["schemas"]["CostEntryPrice"];
+            width: number;
+            height: number;
+            pages: number;
+        };
+        /** @description A partial update; only supplied fields are changed. */
+        UpdateBinderCostEntryRequest: {
+            name?: components["schemas"]["CostEntryName"];
+            price?: components["schemas"]["CostEntryPrice"];
+            width?: number;
+            height?: number;
+            pages?: number;
+        };
+        /** @description Story 34's shared Printing physical-cost catalog entry - a saved per-printed-page price. */
+        PrintingCostEntry: {
+            /** Format: uuid */
+            id: string;
+            name: components["schemas"]["CostEntryName"];
+            pricePerPage: components["schemas"]["CostEntryPrice"];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreatePrintingCostEntryRequest: {
+            name: components["schemas"]["CostEntryName"];
+            pricePerPage: components["schemas"]["CostEntryPrice"];
+        };
+        /** @description A partial update; only supplied fields are changed. */
+        UpdatePrintingCostEntryRequest: {
+            name?: components["schemas"]["CostEntryName"];
+            pricePerPage?: components["schemas"]["CostEntryPrice"];
+        };
+        /** @description Story 34's shared Holographic Paper physical-cost catalog entry - a saved price for a pack covering a fixed number of pages. */
+        HolographicPaperCostEntry: {
+            /** Format: uuid */
+            id: string;
+            name: components["schemas"]["CostEntryName"];
+            price: components["schemas"]["CostEntryPrice"];
+            /** @description Number of pages one pack at this price covers. */
+            pagesIncluded: number;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreateHolographicPaperCostEntryRequest: {
+            name: components["schemas"]["CostEntryName"];
+            price: components["schemas"]["CostEntryPrice"];
+            pagesIncluded: number;
+        };
+        /** @description A partial update; only supplied fields are changed. */
+        UpdateHolographicPaperCostEntryRequest: {
+            name?: components["schemas"]["CostEntryName"];
+            price?: components["schemas"]["CostEntryPrice"];
+            pagesIncluded?: number;
+        };
     };
     responses: never;
     parameters: {
         binderId: string;
         cardId: string;
         artId: string;
+        binderCostEntryId: string;
+        printingCostEntryId: string;
+        holographicPaperCostEntryId: string;
     };
     requestBodies: never;
     headers: never;
@@ -2033,6 +2367,396 @@ export interface operations {
                 };
             };
             /** @description No art, image-asset record, or local file exists. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    getArtPrintPageCount: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The computed page count. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArtPrintPageCountResult"];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    getFinanceSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current finance settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceSettings"];
+                };
+            };
+        };
+    };
+    updateFinanceSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateFinanceSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated finance settings. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinanceSettings"];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listBinderCostEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Binder cost entry collection, alphabetically ordered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinderCostEntry"][];
+                };
+            };
+        };
+    };
+    createBinderCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBinderCostEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The Binder cost entry was created. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created Binder cost entry resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinderCostEntry"];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateBinderCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderCostEntryId: components["parameters"]["binderCostEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBinderCostEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated Binder cost entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BinderCostEntry"];
+                };
+            };
+            /** @description The binderCostEntryId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No Binder cost entry exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listPrintingCostEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Printing cost entry collection, alphabetically ordered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrintingCostEntry"][];
+                };
+            };
+        };
+    };
+    createPrintingCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePrintingCostEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The Printing cost entry was created. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created Printing cost entry resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrintingCostEntry"];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updatePrintingCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                printingCostEntryId: components["parameters"]["printingCostEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePrintingCostEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated Printing cost entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrintingCostEntry"];
+                };
+            };
+            /** @description The printingCostEntryId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No Printing cost entry exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listHolographicPaperCostEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The Holographic Paper cost entry collection, alphabetically ordered. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HolographicPaperCostEntry"][];
+                };
+            };
+        };
+    };
+    createHolographicPaperCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateHolographicPaperCostEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The Holographic Paper cost entry was created. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created Holographic Paper cost entry resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HolographicPaperCostEntry"];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateHolographicPaperCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                holographicPaperCostEntryId: components["parameters"]["holographicPaperCostEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateHolographicPaperCostEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The updated Holographic Paper cost entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HolographicPaperCostEntry"];
+                };
+            };
+            /** @description The holographicPaperCostEntryId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No Holographic Paper cost entry exists with the given id. */
             404: {
                 headers: {
                     [name: string]: unknown;

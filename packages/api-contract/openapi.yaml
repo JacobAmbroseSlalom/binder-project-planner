@@ -1043,6 +1043,331 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}/art-print-page-count:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    get:
+      operationId: getArtPrintPageCount
+      summary: Get the computed page count for this binder's placed multi-slot art
+      description: >-
+        Story 34: returns only the page count the binder's currently
+        placed multi-slot art would print across, reusing the same
+        packing/tiling logic as `POST /binders/{binderId}/exports/art-pdf`
+        (story 30) without generating a PDF - the Finances tab calls this
+        instead to learn the page count that drives its Printing,
+        Holographic Paper, and time-based cost calculations. Read-only, so
+        binder lock state never restricts it. The backend caches the
+        result on the binder row and only recomputes it when a lightweight
+        signature (placed-art count, placed-art max updatedAt, and the
+        binder's own updatedAt) no longer matches what's cached.
+      responses:
+        '200':
+          description: The computed page count.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ArtPrintPageCountResult'
+        '400':
+          description: The binderId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No binder exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /finance-settings:
+    get:
+      operationId: getFinanceSettings
+      summary: Get the global finance-settings singleton
+      description: >-
+        Story 34: the wage-per-hour rate, shared error-margin percentage,
+        and each of the 5 fixed time-cost categories' own reference-minutes/
+        reference-pages rate basis - one global resource, never scoped to a
+        binder, seeded by the schema migration.
+      responses:
+        '200':
+          description: The current finance settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinanceSettings'
+    patch:
+      operationId: updateFinanceSettings
+      summary: Update the global finance-settings singleton
+      description: >-
+        Applies a partial update; only supplied fields (including nested
+        `timeCosts` category fields) are changed. Never restricted by any
+        binder's lock state, since this resource isn't scoped to a binder.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateFinanceSettingsRequest'
+      responses:
+        '200':
+          description: The updated finance settings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FinanceSettings'
+        '400':
+          description: The request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /binder-cost-entries:
+    get:
+      operationId: listBinderCostEntries
+      summary: List the shared Binder physical-cost catalog
+      description: >-
+        Story 34: returns every saved Binder cost entry, ordered
+        alphabetically by name (case-insensitive). The frontend's dropdown
+        further filters this list to entries whose stored width, height,
+        and pages match the current binder.
+      responses:
+        '200':
+          description: The Binder cost entry collection, alphabetically ordered.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BinderCostEntry'
+    post:
+      operationId: createBinderCostEntry
+      summary: Create a new Binder cost entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBinderCostEntryRequest'
+      responses:
+        '201':
+          description: The Binder cost entry was created.
+          headers:
+            Location:
+              description: The path of the newly created Binder cost entry resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinderCostEntry'
+        '400':
+          description: The request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /binder-cost-entries/{binderCostEntryId}:
+    parameters:
+      - $ref: '#/components/parameters/binderCostEntryId'
+    patch:
+      operationId: updateBinderCostEntry
+      summary: Update a Binder cost entry
+      description: >-
+        Applies a partial update to the shared entry - the change is
+        visible to every binder that currently has it selected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBinderCostEntryRequest'
+      responses:
+        '200':
+          description: The updated Binder cost entry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BinderCostEntry'
+        '400':
+          description: >-
+            The binderCostEntryId path parameter is not a well-formed
+            UUID, or the request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No Binder cost entry exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /printing-cost-entries:
+    get:
+      operationId: listPrintingCostEntries
+      summary: List the shared Printing physical-cost catalog
+      description: >-
+        Story 34: returns every saved Printing cost entry, ordered
+        alphabetically by name (case-insensitive).
+      responses:
+        '200':
+          description: The Printing cost entry collection, alphabetically ordered.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrintingCostEntry'
+    post:
+      operationId: createPrintingCostEntry
+      summary: Create a new Printing cost entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrintingCostEntryRequest'
+      responses:
+        '201':
+          description: The Printing cost entry was created.
+          headers:
+            Location:
+              description: The path of the newly created Printing cost entry resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintingCostEntry'
+        '400':
+          description: The request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /printing-cost-entries/{printingCostEntryId}:
+    parameters:
+      - $ref: '#/components/parameters/printingCostEntryId'
+    patch:
+      operationId: updatePrintingCostEntry
+      summary: Update a Printing cost entry
+      description: >-
+        Applies a partial update to the shared entry - the change is
+        visible to every binder that currently has it selected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrintingCostEntryRequest'
+      responses:
+        '200':
+          description: The updated Printing cost entry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrintingCostEntry'
+        '400':
+          description: >-
+            The printingCostEntryId path parameter is not a well-formed
+            UUID, or the request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No Printing cost entry exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /holographic-paper-cost-entries:
+    get:
+      operationId: listHolographicPaperCostEntries
+      summary: List the shared Holographic Paper physical-cost catalog
+      description: >-
+        Story 34: returns every saved Holographic Paper cost entry, ordered
+        alphabetically by name (case-insensitive).
+      responses:
+        '200':
+          description: >-
+            The Holographic Paper cost entry collection, alphabetically
+            ordered.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/HolographicPaperCostEntry'
+    post:
+      operationId: createHolographicPaperCostEntry
+      summary: Create a new Holographic Paper cost entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateHolographicPaperCostEntryRequest'
+      responses:
+        '201':
+          description: The Holographic Paper cost entry was created.
+          headers:
+            Location:
+              description: >-
+                The path of the newly created Holographic Paper cost entry
+                resource.
+              schema:
+                type: string
+                format: uri-reference
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HolographicPaperCostEntry'
+        '400':
+          description: The request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /holographic-paper-cost-entries/{holographicPaperCostEntryId}:
+    parameters:
+      - $ref: '#/components/parameters/holographicPaperCostEntryId'
+    patch:
+      operationId: updateHolographicPaperCostEntry
+      summary: Update a Holographic Paper cost entry
+      description: >-
+        Applies a partial update to the shared entry - the change is
+        visible to every binder that currently has it selected.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateHolographicPaperCostEntryRequest'
+      responses:
+        '200':
+          description: The updated Holographic Paper cost entry.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HolographicPaperCostEntry'
+        '400':
+          description: >-
+            The holographicPaperCostEntryId path parameter is not a
+            well-formed UUID, or the request body did not match the
+            documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No Holographic Paper cost entry exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /maintenance/orphaned-images:
     delete:
       operationId: deleteOrphanedImages
@@ -1185,6 +1510,30 @@ components:
         pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
     artId:
       name: artId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    binderCostEntryId:
+      name: binderCostEntryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    printingCostEntryId:
+      name: printingCostEntryId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+        pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+    holographicPaperCostEntryId:
+      name: holographicPaperCostEntryId
       in: path
       required: true
       schema:
@@ -1512,6 +1861,12 @@ components:
             affecting resize. When true, the backend atomically updates binder
             details and clears placement coordinates for every item affected at
             transaction time.
+        selectedBinderCostEntryId:
+          $ref: '#/components/schemas/SelectedBinderCostEntryId'
+        selectedPrintingCostEntryId:
+          $ref: '#/components/schemas/SelectedPrintingCostEntryId'
+        selectedHolographicPaperCostEntryId:
+          $ref: '#/components/schemas/SelectedHolographicPaperCostEntryId'
     ResizePreviewRequest:
       type: object
       additionalProperties: false
@@ -1649,6 +2004,9 @@ components:
         - previewPhysicalPage
         - notes
         - locked
+        - selectedBinderCostEntryId
+        - selectedPrintingCostEntryId
+        - selectedHolographicPaperCostEntryId
         - createdAt
         - updatedAt
       properties:
@@ -1694,6 +2052,12 @@ components:
             Story 32: whether restricted details/layout/card/art
             mutations are currently rejected for this binder with a `409
             Conflict`.
+        selectedBinderCostEntryId:
+          $ref: '#/components/schemas/SelectedBinderCostEntryId'
+        selectedPrintingCostEntryId:
+          $ref: '#/components/schemas/SelectedPrintingCostEntryId'
+        selectedHolographicPaperCostEntryId:
+          $ref: '#/components/schemas/SelectedHolographicPaperCostEntryId'
         createdAt:
           type: string
           format: date-time
@@ -1726,6 +2090,9 @@ components:
         - previewPhysicalPage
         - notes
         - locked
+        - selectedBinderCostEntryId
+        - selectedPrintingCostEntryId
+        - selectedHolographicPaperCostEntryId
         - totalSlots
         - occupiedSlots
         - emptySlots
@@ -1775,6 +2142,12 @@ components:
             Story 32: whether restricted details/layout/card/art
             mutations are currently rejected for this binder with a `409
             Conflict`.
+        selectedBinderCostEntryId:
+          $ref: '#/components/schemas/SelectedBinderCostEntryId'
+        selectedPrintingCostEntryId:
+          $ref: '#/components/schemas/SelectedPrintingCostEntryId'
+        selectedHolographicPaperCostEntryId:
+          $ref: '#/components/schemas/SelectedHolographicPaperCostEntryId'
         totalSlots:
           type: integer
           minimum: 0
@@ -2503,3 +2876,395 @@ components:
             backend validates the file's signature rather than trusting
             its name or multipart MIME type. Omitting it keeps the art's
             current image.
+    SelectedBinderCostEntryId:
+      type: string
+      format: uuid
+      nullable: true
+      description: >-
+        Story 34: the id of this binder's currently selected shared Binder
+        cost entry, or null when none is selected. Setting one requires
+        the entry's own stored width, height, and pages to match this
+        binder's effective values; changing the binder's width, height, or
+        pages clears a selection that no longer matches. Never restricted
+        by `locked`.
+    SelectedPrintingCostEntryId:
+      type: string
+      format: uuid
+      nullable: true
+      description: >-
+        Story 34: the id of this binder's currently selected shared
+        Printing cost entry, or null when none is selected. Never
+        restricted by `locked`.
+    SelectedHolographicPaperCostEntryId:
+      type: string
+      format: uuid
+      nullable: true
+      description: >-
+        Story 34: the id of this binder's currently selected shared
+        Holographic Paper cost entry, or null when none is selected. Never
+        restricted by `locked`.
+    ArtPrintPageCountResult:
+      type: object
+      additionalProperties: false
+      description: >-
+        `GET /binders/{binderId}/art-print-page-count`'s response (story
+        34).
+      required:
+        - pageCount
+      properties:
+        pageCount:
+          type: integer
+          minimum: 0
+          description: >-
+            The number of pages this binder's currently placed multi-slot
+            art would print across, per story 30's packing/tiling
+            heuristic. Zero when no art is currently placed.
+    CostEntryName:
+      type: string
+      minLength: 1
+      maxLength: 100
+      description: >-
+        Trimmed on the backend; required and at most 100 characters after
+        trimming (the shared COST_ENTRY_NAME_MAX_LENGTH value). Duplicate
+        names across entries in the same catalog are allowed.
+    CostEntryPrice:
+      type: number
+      exclusiveMinimum: 0
+      description: US dollars, to two decimal places. Must be greater than zero.
+    TimeCostRateBasis:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 34: one time-cost category's rate basis - "it takes
+        referenceMinutes minutes to do referencePages pages" (e.g. "25
+        minutes to do 8 pages") - stored and shared across every binder,
+        never scoped to one. `referencePages` is null for a category
+        whose cost is a flat, one-time cost that doesn't scale with page
+        count (currently only Printing); in that case referenceMinutes is
+        used directly as the binder's total minutes for that category,
+        without multiplying by page count.
+      required:
+        - referenceMinutes
+        - referencePages
+      properties:
+        referenceMinutes:
+          type: number
+          minimum: 0
+          description: >-
+            Minutes it takes to complete referencePages pages, or (when
+            referencePages is null) the flat number of minutes this
+            one-time cost always takes.
+        referencePages:
+          type: integer
+          exclusiveMinimum: 0
+          nullable: true
+          description: >-
+            The number of pages referenceMinutes corresponds to, or null
+            when this category's cost is a flat, one-time cost that
+            doesn't scale with page count (currently only Printing).
+    UpdateTimeCostRateBasis:
+      type: object
+      additionalProperties: false
+      description: A partial update to one time-cost category's rate basis.
+      minProperties: 1
+      properties:
+        referenceMinutes:
+          type: number
+          minimum: 0
+        referencePages:
+          type: integer
+          exclusiveMinimum: 0
+    TimeCosts:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 34's 5 fixed time-cost categories, each with its own
+        independent rate basis.
+      required:
+        - designing
+        - printing
+        - applyingHolographicPaper
+        - cutting
+        - placing
+      properties:
+        designing:
+          $ref: '#/components/schemas/TimeCostRateBasis'
+        printing:
+          $ref: '#/components/schemas/TimeCostRateBasis'
+        applyingHolographicPaper:
+          $ref: '#/components/schemas/TimeCostRateBasis'
+        cutting:
+          $ref: '#/components/schemas/TimeCostRateBasis'
+        placing:
+          $ref: '#/components/schemas/TimeCostRateBasis'
+    UpdateTimeCosts:
+      type: object
+      additionalProperties: false
+      description: A partial update to any subset of the 5 time-cost categories.
+      minProperties: 1
+      properties:
+        designing:
+          $ref: '#/components/schemas/UpdateTimeCostRateBasis'
+        printing:
+          $ref: '#/components/schemas/UpdateTimeCostRateBasis'
+        applyingHolographicPaper:
+          $ref: '#/components/schemas/UpdateTimeCostRateBasis'
+        cutting:
+          $ref: '#/components/schemas/UpdateTimeCostRateBasis'
+        placing:
+          $ref: '#/components/schemas/UpdateTimeCostRateBasis'
+    FinanceSettings:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 34's global finance-settings singleton - never scoped to a
+        binder, seeded once by the schema migration.
+      required:
+        - wagePerHour
+        - errorMarginPercent
+        - salesTaxPercent
+        - timeCosts
+        - updatedAt
+      properties:
+        wagePerHour:
+          type: number
+          minimum: 0
+          description: US dollars per hour, to two decimal places.
+        errorMarginPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: >-
+            Percentage of the page count added as "extra pages" to account
+            for pages that must be redone due to human error.
+        salesTaxPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: >-
+            Sales tax percentage applied to the "Total (excl. Cards)"
+            figure to produce the "With Tax" total. Defaults to Georgia's
+            flat state sales tax rate (4%).
+        timeCosts:
+          $ref: '#/components/schemas/TimeCosts'
+        updatedAt:
+          type: string
+          format: date-time
+    UpdateFinanceSettingsRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `PATCH /finance-settings`'s request body (story 34); a partial
+        update, including independently-partial nested timeCosts
+        categories.
+      minProperties: 1
+      properties:
+        wagePerHour:
+          type: number
+          minimum: 0
+        errorMarginPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        salesTaxPercent:
+          type: integer
+          minimum: 0
+          maximum: 100
+        timeCosts:
+          $ref: '#/components/schemas/UpdateTimeCosts'
+    BinderCostEntry:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 34's shared Binder physical-cost catalog entry - a saved
+        one-time acquisition price for a binder of the given width,
+        height, and page count.
+      required:
+        - id
+        - name
+        - price
+        - width
+        - height
+        - pages
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        price:
+          $ref: '#/components/schemas/CostEntryPrice'
+        width:
+          type: integer
+          minimum: 1
+          maximum: 8
+          description: Number of slot columns per binder side this entry applies to.
+        height:
+          type: integer
+          minimum: 1
+          maximum: 8
+          description: Number of slot rows per binder side this entry applies to.
+        pages:
+          type: integer
+          exclusiveMinimum: 0
+          description: Stored binder-page count this entry applies to.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateBinderCostEntryRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - price
+        - width
+        - height
+        - pages
+      properties:
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        price:
+          $ref: '#/components/schemas/CostEntryPrice'
+        width:
+          type: integer
+          minimum: 1
+          maximum: 8
+        height:
+          type: integer
+          minimum: 1
+          maximum: 8
+        pages:
+          type: integer
+          exclusiveMinimum: 0
+    UpdateBinderCostEntryRequest:
+      type: object
+      additionalProperties: false
+      description: A partial update; only supplied fields are changed.
+      minProperties: 1
+      properties:
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        price:
+          $ref: '#/components/schemas/CostEntryPrice'
+        width:
+          type: integer
+          minimum: 1
+          maximum: 8
+        height:
+          type: integer
+          minimum: 1
+          maximum: 8
+        pages:
+          type: integer
+          exclusiveMinimum: 0
+    PrintingCostEntry:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 34's shared Printing physical-cost catalog entry - a saved
+        per-printed-page price.
+      required:
+        - id
+        - name
+        - pricePerPage
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        pricePerPage:
+          $ref: '#/components/schemas/CostEntryPrice'
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreatePrintingCostEntryRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - pricePerPage
+      properties:
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        pricePerPage:
+          $ref: '#/components/schemas/CostEntryPrice'
+    UpdatePrintingCostEntryRequest:
+      type: object
+      additionalProperties: false
+      description: A partial update; only supplied fields are changed.
+      minProperties: 1
+      properties:
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        pricePerPage:
+          $ref: '#/components/schemas/CostEntryPrice'
+    HolographicPaperCostEntry:
+      type: object
+      additionalProperties: false
+      description: >-
+        Story 34's shared Holographic Paper physical-cost catalog entry - a
+        saved price for a pack covering a fixed number of pages.
+      required:
+        - id
+        - name
+        - price
+        - pagesIncluded
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        price:
+          $ref: '#/components/schemas/CostEntryPrice'
+        pagesIncluded:
+          type: integer
+          exclusiveMinimum: 0
+          description: Number of pages one pack at this price covers.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    CreateHolographicPaperCostEntryRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - name
+        - price
+        - pagesIncluded
+      properties:
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        price:
+          $ref: '#/components/schemas/CostEntryPrice'
+        pagesIncluded:
+          type: integer
+          exclusiveMinimum: 0
+    UpdateHolographicPaperCostEntryRequest:
+      type: object
+      additionalProperties: false
+      description: A partial update; only supplied fields are changed.
+      minProperties: 1
+      properties:
+        name:
+          $ref: '#/components/schemas/CostEntryName'
+        price:
+          $ref: '#/components/schemas/CostEntryPrice'
+        pagesIncluded:
+          type: integer
+          exclusiveMinimum: 0

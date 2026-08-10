@@ -6,6 +6,152 @@ export const appMetadata = sqliteTable('app_metadata', {
   value: text().notNull(),
 });
 
+// Story 34: "Add custom art finances". Shared, reusable "Binder" physical-
+// cost entries - one of the binder's three cost-entry catalogs, each
+// modeled as its own table (rather than one generic discriminated table)
+// since their shapes differ. `width`/`height`/`pages` are stored but never
+// shown to the user; they exist only so the Binder dropdown can filter to
+// entries matching the current binder's own dimensions/page count.
+// Supports create and edit only in this story - no delete (story 44 adds
+// that later), so entries only ever accumulate.
+export const binderCostEntries = sqliteTable(
+  'binder_cost_entries',
+  {
+    id: text().primaryKey(),
+    name: text().notNull(),
+    priceCents: integer().notNull(),
+    width: integer().notNull(),
+    height: integer().notNull(),
+    pages: integer().notNull(),
+    createdAt: text().notNull(),
+    updatedAt: text().notNull(),
+  },
+  (table) => [
+    check('binder_cost_entry_name_length', sql`length(${table.name}) <= 100`),
+    check('binder_cost_entry_price_positive', sql`${table.priceCents} > 0`),
+    check(
+      'binder_cost_entry_dimension_range',
+      sql`${table.width} >= 1 AND ${table.width} <= 8 AND ${table.height} >= 1 AND ${table.height} <= 8`,
+    ),
+    check('binder_cost_entry_pages_positive', sql`${table.pages} > 0`),
+  ],
+);
+
+// Story 34's "Printing" physical-cost catalog. Its cost is
+// `pricePerPage * artPrintPageCount` (plus the shared error margin).
+export const printingCostEntries = sqliteTable(
+  'printing_cost_entries',
+  {
+    id: text().primaryKey(),
+    name: text().notNull(),
+    pricePerPageCents: integer().notNull(),
+    createdAt: text().notNull(),
+    updatedAt: text().notNull(),
+  },
+  (table) => [
+    check('printing_cost_entry_name_length', sql`length(${table.name}) <= 100`),
+    check('printing_cost_entry_price_per_page_positive', sql`${table.pricePerPageCents} > 0`),
+  ],
+);
+
+// Story 34's "Holographic Paper" physical-cost catalog. Its cost is
+// `(price / pagesIncluded) * artPrintPageCount` (plus the shared error
+// margin).
+export const holographicPaperCostEntries = sqliteTable(
+  'holographic_paper_cost_entries',
+  {
+    id: text().primaryKey(),
+    name: text().notNull(),
+    priceCents: integer().notNull(),
+    pagesIncluded: integer().notNull(),
+    createdAt: text().notNull(),
+    updatedAt: text().notNull(),
+  },
+  (table) => [
+    check('holographic_paper_cost_entry_name_length', sql`length(${table.name}) <= 100`),
+    check('holographic_paper_cost_entry_price_positive', sql`${table.priceCents} > 0`),
+    check('holographic_paper_cost_entry_pages_included_positive', sql`${table.pagesIncluded} > 0`),
+  ],
+);
+
+// Story 34's global, single-row `financeSettings` singleton: wage-per-hour,
+// the shared error-margin percentage, and each of the 5 fixed time-cost
+// categories' own rate basis (`referenceMinutes`/`referencePages`, e.g.
+// "25 minutes to do 8 pages"). The 5 categories are a fixed enum baked
+// into these columns (not a user-manageable list) - adding, renaming, or
+// removing one requires a future code change and migration. `id` is
+// always the fixed literal `'singleton'`; the seed row inserting it lives
+// in this table's own migration rather than the shared `defaults.ts`,
+// since these are one-time seed values for a singleton row rather than
+// fallback values referenced by application code at runtime (an
+// intentional, story-scoped exception to `defaults.ts` centralization -
+// see coding-conventions.instructions.md).
+//
+// `printingReferencePages` is nullable (amended after story 34 shipped):
+// Printing is a one-time cost for the whole binder that doesn't scale
+// with page count, so its rate basis is just a flat `referenceMinutes`
+// value with `referencePages` always null - unlike the other 4
+// categories, which still divide `referenceMinutes` by `referencePages`
+// and multiply by the binder's page count.
+//
+// `salesTaxPercent` (added after story 34 shipped): a single shared sales
+// tax percentage applied to the "Total (excl. Cards)" sticky-totals
+// figure to produce the "With Tax" stat. Seeded to Georgia's flat state
+// sales tax rate (4%) as this app's default, editable the same way as
+// `errorMarginPercent`.
+export const financeSettings = sqliteTable(
+  'finance_settings',
+  {
+    id: text().primaryKey(),
+    wagePerHourCents: integer().notNull(),
+    errorMarginPercent: integer().notNull(),
+    salesTaxPercent: integer().notNull(),
+    designingReferenceMinutes: integer().notNull(),
+    designingReferencePages: integer().notNull(),
+    printingReferenceMinutes: integer().notNull(),
+    printingReferencePages: integer(),
+    applyingHolographicPaperReferenceMinutes: integer().notNull(),
+    applyingHolographicPaperReferencePages: integer().notNull(),
+    cuttingReferenceMinutes: integer().notNull(),
+    cuttingReferencePages: integer().notNull(),
+    placingReferenceMinutes: integer().notNull(),
+    placingReferencePages: integer().notNull(),
+    updatedAt: text().notNull(),
+  },
+  (table) => [
+    check('finance_settings_singleton_id', sql`${table.id} = 'singleton'`),
+    check('finance_settings_wage_per_hour_non_negative', sql`${table.wagePerHourCents} >= 0`),
+    check(
+      'finance_settings_error_margin_range',
+      sql`${table.errorMarginPercent} >= 0 AND ${table.errorMarginPercent} <= 100`,
+    ),
+    check(
+      'finance_settings_sales_tax_range',
+      sql`${table.salesTaxPercent} >= 0 AND ${table.salesTaxPercent} <= 100`,
+    ),
+    check(
+      'finance_settings_designing_rate_basis',
+      sql`${table.designingReferenceMinutes} >= 0 AND ${table.designingReferencePages} > 0`,
+    ),
+    check(
+      'finance_settings_printing_rate_basis',
+      sql`${table.printingReferenceMinutes} >= 0 AND (${table.printingReferencePages} IS NULL OR ${table.printingReferencePages} > 0)`,
+    ),
+    check(
+      'finance_settings_applying_holographic_paper_rate_basis',
+      sql`${table.applyingHolographicPaperReferenceMinutes} >= 0 AND ${table.applyingHolographicPaperReferencePages} > 0`,
+    ),
+    check(
+      'finance_settings_cutting_rate_basis',
+      sql`${table.cuttingReferenceMinutes} >= 0 AND ${table.cuttingReferencePages} > 0`,
+    ),
+    check(
+      'finance_settings_placing_rate_basis',
+      sql`${table.placingReferenceMinutes} >= 0 AND ${table.placingReferencePages} > 0`,
+    ),
+  ],
+);
+
 // A binder record (story 4: "Create a new binder"). Only the columns that
 // story requires exist so far; later stories (e.g. 20-24) add preview page,
 // lock state, notes, and dimension/style columns without needing to change
@@ -59,6 +205,35 @@ export const binders = sqliteTable(
     // columns (e.g. `art.description`) and keeping this a simple in-place
     // ALTER migration rather than a table-recreate.
     notes: text(),
+    // Story 34: "Add custom art finances". Nullable foreign keys to this
+    // binder's currently selected shared physical-cost entries - null means
+    // "none selected yet". Selecting one of these is never restricted by
+    // `locked` (see routes/binders.ts's `isRestrictedFieldsOnlyUpdate`),
+    // mirroring the acquisition/price carve-out story 32 documents for a
+    // future story. No `onDelete` action is declared yet since this story's
+    // catalogs support create/edit only (no delete) - story 44 will revisit
+    // this when delete support is added.
+    selectedBinderCostEntryId: text().references(() => binderCostEntries.id),
+    selectedPrintingCostEntryId: text().references(() => printingCostEntries.id),
+    selectedHolographicPaperCostEntryId: text().references(() => holographicPaperCostEntries.id),
+    // Story 34's art-print page-count cache: `cachedArtPrintPageCount` is
+    // the last-computed page count for this binder's currently placed
+    // multi-slot art (same packing logic as story 30's print export).
+    // The remaining 3 columns are the lightweight cache signature
+    // `GET /binders/{binderId}/art-print-page-count` recomputes and
+    // compares against on every call - a mismatch (placed-art count,
+    // placed-art max `updatedAt`, or this binder's own `updatedAt` no
+    // longer matching what was cached) means the count is stale and gets
+    // recomputed/re-cached, rather than invalidating the cache at every
+    // mutation site that could change placed-art footprints or binder
+    // dimensions. All 4 columns start null (never yet computed); a null
+    // `cachedArtPrintMaxArtUpdatedAt` still participates in the signature
+    // comparison (it's what "no placed art" or "only art with no
+    // updatedAt recorded" looks like, though every art row always has one).
+    cachedArtPrintPageCount: integer(),
+    cachedArtPrintPlacedArtCount: integer(),
+    cachedArtPrintMaxArtUpdatedAt: text(),
+    cachedArtPrintBinderUpdatedAt: text(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
   },

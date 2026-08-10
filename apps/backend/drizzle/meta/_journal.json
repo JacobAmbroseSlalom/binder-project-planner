@@ -13,42 +13,42 @@
       "idx": 1,
       "version": "6",
       "when": 1785528938999,
-      "tag": "0001_wakeful_pandemic",
+      "tag": "0001_binders",
       "breakpoints": true
     },
     {
       "idx": 2,
       "version": "6",
       "when": 1785596490589,
-      "tag": "0002_glorious_quicksilver",
+      "tag": "0002_card_image_assets_and_cards",
       "breakpoints": true
     },
     {
       "idx": 3,
       "version": "6",
       "when": 1785627412914,
-      "tag": "0003_bumpy_black_knight",
+      "tag": "0003_binder_dimension_max",
       "breakpoints": true
     },
     {
       "idx": 4,
       "version": "6",
       "when": 1785637219257,
-      "tag": "0004_melted_warbound",
+      "tag": "0004_card_image_asset_dedupe_fields",
       "breakpoints": true
     },
     {
       "idx": 5,
       "version": "6",
       "when": 1785698055507,
-      "tag": "0005_naive_shotgun",
+      "tag": "0005_binder_dimension_and_style_fields",
       "breakpoints": true
     },
     {
       "idx": 6,
       "version": "6",
       "when": 1785704108696,
-      "tag": "0006_overconfident_doctor_strange",
+      "tag": "0006_art_and_art_image_assets",
       "breakpoints": true
     },
     {
@@ -62,28 +62,49 @@
       "idx": 8,
       "version": "6",
       "when": 1785720608590,
-      "tag": "0008_demonic_magik",
+      "tag": "0008_mutation_idempotency",
       "breakpoints": true
     },
     {
       "idx": 9,
       "version": "6",
       "when": 1785724178765,
-      "tag": "0009_busy_mandroid",
+      "tag": "0009_binder_preview_physical_page",
       "breakpoints": true
     },
     {
       "idx": 10,
       "version": "6",
       "when": 1785815171787,
-      "tag": "0010_lumpy_deathstrike",
+      "tag": "0010_binder_notes",
       "breakpoints": true
     },
     {
       "idx": 11,
       "version": "6",
       "when": 1786119802118,
-      "tag": "0011_familiar_puck",
+      "tag": "0011_binder_locked",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1786327211262,
+      "tag": "0012_custom_art_finances",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1786334472538,
+      "tag": "0013_printing_flat_time_cost",
+      "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1786336399273,
+      "tag": "0014_add_sales_tax_percent",
       "breakpoints": true
     }
   ]

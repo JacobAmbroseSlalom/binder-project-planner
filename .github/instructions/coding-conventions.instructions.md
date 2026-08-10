@@ -23,6 +23,21 @@ applyTo: '**'
 - Tests should import production defaults when verifying default behavior. A test may use
   local fixture values when the value is test data rather than an application default.
 
+## Database migrations
+
+- `drizzle-kit generate` names new migration files with a random adjective-noun tag
+  (e.g. `0012_nervous_killer_shrike.sql`). Immediately after generating one, rename the
+  file to a short, descriptive, snake_case summary of what it does (e.g.
+  `0012_custom_art_finances.sql`), keeping the existing zero-padded numeric prefix
+  unchanged.
+- Update the matching `tag` field in `apps/backend/drizzle/meta/_journal.json` to the
+  new filename (without its `.sql` extension) in the same change. Nothing else under
+  `meta/` references the filename, so no other file needs updating.
+- Update any other place that names the old filename in prose (code comments, story
+  docs) to match, so the reference stays accurate.
+- Do this for every migration, not just ones with notable schema changes — a consistent,
+  readable migration history makes `apps/backend/drizzle/` easy to skim later.
+
 ## Comments
 
 - Always leave helpful comments, as much as possible — err on the side of adding one

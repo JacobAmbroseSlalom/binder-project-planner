@@ -38,16 +38,16 @@ This index maps every story file to its current bucket.
 | 30    | Export multi-slot art for printing                                     | [docs/stories/completed/30-export-multi-slot-art-for-printing.md](completed/30-export-multi-slot-art-for-printing.md)                                                                         |
 | 31    | Search and filter unplaced items                                       | [docs/stories/completed/31-search-and-filter-unplaced-items.md](completed/31-search-and-filter-unplaced-items.md)                                                                             |
 | 33    | Export and import all application data                                 | [docs/stories/completed/33-export-and-import-all-application-data.md](completed/33-export-and-import-all-application-data.md)                                                                 |
+| 34    | Add custom art finances                                                | [docs/stories/completed/34-add-custom-art-finances.md](completed/34-add-custom-art-finances.md)                                                                                               |
 | 40    | Add summary stats on Binder Layout Page                                | [docs/stories/completed/40-add-summary-stats-on-binder-layout-page.md](completed/40-add-summary-stats-on-binder-layout-page.md)                                                               |
 | 41    | Filter card search by TCG Pocket inclusion and language                | [docs/stories/completed/41-filter-card-search-by-tcg-pocket-inclusion-and-language.md](completed/41-filter-card-search-by-tcg-pocket-inclusion-and-language.md)                               |
 | 42    | Preview binder layout and multi-slot art while editing binder settings | [docs/stories/completed/42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md](completed/42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md) |
 
 ## Ready For Dev
 
-| Story | Title                   | File                                                                                                    |
-| ----- | ----------------------- | ------------------------------------------------------------------------------------------------------- |
-| 32    | Lock a binder           | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                     |
-| 34    | Add custom art finances | [docs/stories/ready-for-dev/34-add-custom-art-finances.md](ready-for-dev/34-add-custom-art-finances.md) |
+| Story | Title         | File                                                                                |
+| ----- | ------------- | ----------------------------------------------------------------------------------- |
+| 32    | Lock a binder | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md) |
 
 ## Needs Refinement
 

@@ -12,7 +12,9 @@ import { openApiSpecificationPath } from './paths.js';
 import { createArtRouter } from './routes/art.js';
 import { createBindersRouter } from './routes/binders.js';
 import { createCardsRouter } from './routes/cards.js';
+import { createCostEntriesRouter } from './routes/costEntries.js';
 import { createDataTransferRouter } from './routes/dataTransfer.js';
+import { createFinanceSettingsRouter } from './routes/financeSettings.js';
 import { createMaintenanceRouter } from './routes/maintenance.js';
 import { createDigestDiskStorage } from './uploads/digestDiskStorage.js';
 
@@ -90,6 +92,8 @@ export function createApp({
   app.use(createBindersRouter(database, imagesDirectory));
   app.use(createCardsRouter(database, imagesDirectory));
   app.use(createArtRouter(database, imagesDirectory));
+  app.use(createFinanceSettingsRouter(database));
+  app.use(createCostEntriesRouter(database));
   app.use(createMaintenanceRouter(database, imagesDirectory));
   app.use(createDataTransferRouter(database, imagesDirectory));
 

@@ -27,13 +27,22 @@ import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
-import { art, artImageAssets, binders, cardImageAssets, cards } from '../database/schema.js';
+import {
+  art,
+  artImageAssets,
+  binderCostEntries,
+  binders,
+  cardImageAssets,
+  cards,
+  holographicPaperCostEntries,
+  printingCostEntries,
+} from '../database/schema.js';
 import {
   findIdempotentOutcome,
   saveIdempotentOutcome,
 } from '../idempotency/mutationIdempotency.js';
 import { lockedBinderConflictProblem } from '../lockedBinderProblem.js';
-import { generateArtPrintPdf } from '../pdf/artPrintPdf.js';
+import { computeArtPrintPacking, generateArtPrintPdf } from '../pdf/artPrintPdf.js';
 import { generateBinderLayoutPdf } from '../pdf/binderLayoutPdf.js';
 import { countOccupiedSlots } from '../placement/occupancy.js';
 import { listArtForBinder, listPlacedArtForPreview } from './art.js';
@@ -81,6 +90,13 @@ interface UpdateBinderRequestBody {
   notes?: string | null;
   locked?: boolean;
   moveAffectedItemsToUnplaced?: boolean;
+  // Story 34: this binder's currently selected shared physical-cost
+  // entries. Never restricted by `locked` (see
+  // `UNRESTRICTED_BINDER_PATCH_FIELDS` below), mirroring the acquisition/
+  // price carve-out a future story documents.
+  selectedBinderCostEntryId?: string | null;
+  selectedPrintingCostEntryId?: string | null;
+  selectedHolographicPaperCostEntryId?: string | null;
 }
 
 // Story 27's dry-run resize preview request body.
@@ -97,6 +113,13 @@ interface BinderRow {
   id: string;
   name: string;
   normalizedName: string;
+  selectedBinderCostEntryId: string | null;
+  selectedPrintingCostEntryId: string | null;
+  selectedHolographicPaperCostEntryId: string | null;
+  cachedArtPrintPageCount: number | null;
+  cachedArtPrintPlacedArtCount: number | null;
+  cachedArtPrintMaxArtUpdatedAt: string | null;
+  cachedArtPrintBinderUpdatedAt: string | null;
   width: number;
   height: number;
   pages: number;
@@ -155,6 +178,9 @@ function serializeBinder(row: BinderRow) {
     previewPhysicalPage: row.previewPhysicalPage,
     notes: row.notes,
     locked: row.locked,
+    selectedBinderCostEntryId: row.selectedBinderCostEntryId,
+    selectedPrintingCostEntryId: row.selectedPrintingCostEntryId,
+    selectedHolographicPaperCostEntryId: row.selectedHolographicPaperCostEntryId,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -472,6 +498,16 @@ export function createBindersRouter(
       // client-selected initial lock state - every new binder starts
       // unlocked.
       locked: DEFAULT_BINDER_LOCKED,
+      // Story 34: a new binder never starts with any cost entry selected,
+      // and its art-print page-count cache starts empty (never yet
+      // computed).
+      selectedBinderCostEntryId: null,
+      selectedPrintingCostEntryId: null,
+      selectedHolographicPaperCostEntryId: null,
+      cachedArtPrintPageCount: null,
+      cachedArtPrintPlacedArtCount: null,
+      cachedArtPrintMaxArtUpdatedAt: null,
+      cachedArtPrintBinderUpdatedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -552,9 +588,18 @@ export function createBindersRouter(
     // unlocked through this same endpoint) - every other details/layout
     // field is rejected with a stable locked-binder `409 Conflict`
     // regardless of what this same request's `locked` value would set it
-    // to next.
-    const isRestrictedFieldsOnlyUpdate =
-      Object.keys(body).length === 1 && body.locked !== undefined;
+    // to next. Story 34 extends this carve-out to the 3 cost-entry
+    // selection fields, which - like `locked` - are never restricted by
+    // lock state.
+    const UNRESTRICTED_FIELDS = new Set([
+      'locked',
+      'selectedBinderCostEntryId',
+      'selectedPrintingCostEntryId',
+      'selectedHolographicPaperCostEntryId',
+    ]);
+    const isRestrictedFieldsOnlyUpdate = Object.keys(body).every((key) =>
+      UNRESTRICTED_FIELDS.has(key),
+    );
     if (existing.locked && !isRestrictedFieldsOnlyUpdate) {
       response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
       return;
@@ -690,6 +735,115 @@ export function createBindersRouter(
       height: body.height ?? existing.height,
       pages: body.pages ?? existing.pages,
     };
+
+    // Story 34: this binder's currently selected shared Binder cost entry.
+    // A provided id must exist and its own stored width/height/pages must
+    // match this update's *effective* dimensions (same "effective values"
+    // reasoning used throughout this handler) - the frontend's dropdown
+    // only ever lists already-matching entries, so this is defense-in-
+    // depth against a stale or hand-crafted request.
+    if (body.selectedBinderCostEntryId !== undefined) {
+      if (body.selectedBinderCostEntryId !== null) {
+        const entry = database
+          .select()
+          .from(binderCostEntries)
+          .where(eq(binderCostEntries.id, body.selectedBinderCostEntryId))
+          .get();
+        if (!entry) {
+          response
+            .status(400)
+            .type('application/problem+json')
+            .json(
+              badRequestProblem(
+                `No binder cost entry exists with id "${body.selectedBinderCostEntryId}".`,
+              ),
+            );
+          return;
+        }
+        if (
+          entry.width !== effectiveDimensions.width ||
+          entry.height !== effectiveDimensions.height ||
+          entry.pages !== effectiveDimensions.pages
+        ) {
+          response
+            .status(400)
+            .type('application/problem+json')
+            .json(
+              badRequestProblem(
+                "selectedBinderCostEntryId must match this binder's effective width, height, and pages.",
+              ),
+            );
+          return;
+        }
+      }
+      updates.selectedBinderCostEntryId = body.selectedBinderCostEntryId;
+    } else if (
+      existing.selectedBinderCostEntryId !== null &&
+      (body.width !== undefined || body.height !== undefined || body.pages !== undefined)
+    ) {
+      // Story 34: "Changing the current binder's width, height, or page
+      // count clears any Binder entry currently selected for that binder"
+      // whenever it no longer matches - checked here, not just left to
+      // the dropdown, since this update itself is what may invalidate it.
+      const currentEntry = database
+        .select()
+        .from(binderCostEntries)
+        .where(eq(binderCostEntries.id, existing.selectedBinderCostEntryId))
+        .get();
+      if (
+        !currentEntry ||
+        currentEntry.width !== effectiveDimensions.width ||
+        currentEntry.height !== effectiveDimensions.height ||
+        currentEntry.pages !== effectiveDimensions.pages
+      ) {
+        updates.selectedBinderCostEntryId = null;
+      }
+    }
+
+    // Story 34: the Printing/Holographic Paper selections have no
+    // dimension constraint - just id existence.
+    if (body.selectedPrintingCostEntryId !== undefined) {
+      if (body.selectedPrintingCostEntryId !== null) {
+        const entry = database
+          .select({ id: printingCostEntries.id })
+          .from(printingCostEntries)
+          .where(eq(printingCostEntries.id, body.selectedPrintingCostEntryId))
+          .get();
+        if (!entry) {
+          response
+            .status(400)
+            .type('application/problem+json')
+            .json(
+              badRequestProblem(
+                `No printing cost entry exists with id "${body.selectedPrintingCostEntryId}".`,
+              ),
+            );
+          return;
+        }
+      }
+      updates.selectedPrintingCostEntryId = body.selectedPrintingCostEntryId;
+    }
+    if (body.selectedHolographicPaperCostEntryId !== undefined) {
+      if (body.selectedHolographicPaperCostEntryId !== null) {
+        const entry = database
+          .select({ id: holographicPaperCostEntries.id })
+          .from(holographicPaperCostEntries)
+          .where(eq(holographicPaperCostEntries.id, body.selectedHolographicPaperCostEntryId))
+          .get();
+        if (!entry) {
+          response
+            .status(400)
+            .type('application/problem+json')
+            .json(
+              badRequestProblem(
+                `No holographic paper cost entry exists with id "${body.selectedHolographicPaperCostEntryId}".`,
+              ),
+            );
+          return;
+        }
+      }
+      updates.selectedHolographicPaperCostEntryId = body.selectedHolographicPaperCostEntryId;
+    }
 
     // Story 27: resize-preview and relocation handling apply only to
     // potentially reducing updates. Increasing dimensions/pages preserves
@@ -1362,6 +1516,90 @@ export function createBindersRouter(
         );
       }
     });
+  });
+
+  // Story 34: returns only the computed page count for this binder's
+  // currently placed multi-slot art, reusing the exact same packing/tiling
+  // logic as story 30's print-art PDF export above rather than generating
+  // one - the Finances tab's Printing/Holographic Paper/time-cost
+  // calculations all depend on this number. Read-only and never restricted
+  // by lock state, matching `exports/pdf`/`exports/art-pdf` above.
+  //
+  // The page count is cached on the binder row (`cachedArtPrintPageCount`)
+  // alongside a lightweight signature - the placed-art row count, the max
+  // `updatedAt` across those rows, and the binder's own `updatedAt` - and
+  // only recomputed when that signature no longer matches what's cached,
+  // rather than invalidating the cache at every mutation site that could
+  // change placed-art footprints or binder dimensions.
+  router.get('/binders/:binderId/art-print-page-count', (request, response) => {
+    const { binderId } = request.params;
+
+    const binderRow = database.select().from(binders).where(eq(binders.id, binderId)).get() as
+      BinderRow | undefined;
+    if (!binderRow) {
+      response.status(404).type('application/problem+json').json(notFoundProblem(binderId));
+      return;
+    }
+
+    const signature = database
+      .select({
+        placedArtCount: sql<number>`count(*)`,
+        maxUpdatedAt: sql<string | null>`max(${art.updatedAt})`,
+      })
+      .from(art)
+      .where(and(eq(art.binderId, binderId), isNotNull(art.physicalPage)))
+      .get()!;
+
+    const cacheMatches =
+      binderRow.cachedArtPrintPageCount !== null &&
+      binderRow.cachedArtPrintPlacedArtCount === signature.placedArtCount &&
+      binderRow.cachedArtPrintMaxArtUpdatedAt === signature.maxUpdatedAt &&
+      binderRow.cachedArtPrintBinderUpdatedAt === binderRow.updatedAt;
+
+    if (cacheMatches) {
+      response.status(200).json({ pageCount: binderRow.cachedArtPrintPageCount });
+      return;
+    }
+
+    const placedArtRows = database
+      .select({
+        id: art.id,
+        widthSlots: art.widthSlots,
+        heightSlots: art.heightSlots,
+      })
+      .from(art)
+      .where(and(eq(art.binderId, binderId), isNotNull(art.physicalPage)))
+      .all();
+
+    const { pageCount } = computeArtPrintPacking(
+      placedArtRows.map((row) => ({
+        id: row.id,
+        physicalWidthCm:
+          row.widthSlots * fromHundredths(binderRow.widthPerSlotHundredths) +
+          fromHundredths(binderRow.widthBaseHundredths),
+        physicalHeightCm:
+          row.heightSlots * fromHundredths(binderRow.heightPerSlotHundredths) +
+          fromHundredths(binderRow.heightBaseHundredths),
+      })),
+      {
+        marginIn: ART_PRINT_PAGE_MARGIN_INCHES,
+        gapIn: ART_PRINT_ITEM_GAP_INCHES,
+        tileOverlapIn: ART_PRINT_TILE_OVERLAP_INCHES,
+      },
+    );
+
+    database
+      .update(binders)
+      .set({
+        cachedArtPrintPageCount: pageCount,
+        cachedArtPrintPlacedArtCount: signature.placedArtCount,
+        cachedArtPrintMaxArtUpdatedAt: signature.maxUpdatedAt,
+        cachedArtPrintBinderUpdatedAt: binderRow.updatedAt,
+      })
+      .where(eq(binders.id, binderId))
+      .run();
+
+    response.status(200).json({ pageCount });
   });
 
   // Story 7 requires the shared binder context to load details, cards, and

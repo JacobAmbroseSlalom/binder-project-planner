@@ -60,8 +60,8 @@ export function createDatabase(databaseFile: string): DatabaseConnection {
   // `migrate()` below, then turned ON afterward for normal app operation.
   // Reasoning: drizzle-kit's generated "recreate table" migrations (used
   // whenever a column change can't be applied in place, e.g. adding a
-  // NOT NULL column - see drizzle/0003_bumpy_black_knight.sql and
-  // drizzle/0005_naive_shotgun.sql) bracket themselves with
+  // NOT NULL column - see drizzle/0003_binder_dimension_max.sql and
+  // drizzle/0005_binder_dimension_and_style_fields.sql) bracket themselves with
   // `PRAGMA foreign_keys=OFF` / `=ON`, but those statements are silently
   // ignored: SQLite refuses to toggle this pragma while a transaction is
   // open, and drizzle's migrator wraps every pending migration in one
