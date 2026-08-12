@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 
 import { useBinderRouteContext } from '../BinderRouteContext';
+import { AppliedFiltersRow } from './_components/AppliedFiltersRow';
 import { CardListTable } from './_components/CardListTable';
 import { ExportCardListButton } from './_components/ExportCardListButton';
 import { ProgressTracker } from './_components/ProgressTracker';
@@ -67,9 +68,13 @@ export default function BinderCardListPage() {
     }
   }
 
-  function handleResetSort() {
+  // Resets search, sort, and every column's filter back to their defaults
+  // - the "Applied filters" row's single combined reset control.
+  function handleResetAll() {
+    setSearchQuery('');
     setSortOption(DEFAULT_SORT_OPTION);
     setSortDirection(DEFAULT_SORT_DIRECTION);
+    setColumnFilters(createDefaultColumnFilters(cards));
   }
 
   function handleColumnFilterChange(column: CardListColumnKey, next: Set<string>) {
@@ -77,13 +82,8 @@ export default function BinderCardListPage() {
   }
 
   return (
-    <div className="flex flex-col gap-6 px-8 pb-8">
-      <div className="flex items-center justify-between gap-4">
-        <ProgressTracker cards={cards} />
-        <ExportCardListButton binderId={binder.id} cardIds={visibleCards.map((card) => card.id)} />
-      </div>
-
-      <div className="flex items-center gap-4">
+    <div className="flex flex-col gap-2 px-8 pb-8">
+      <div className="mt-4 flex items-center gap-4">
         <input
           type="text"
           value={searchQuery}
@@ -92,16 +92,17 @@ export default function BinderCardListPage() {
           aria-label="Search the card list"
           className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
         />
-        {!isDefaultSort && (
-          <button
-            type="button"
-            onClick={handleResetSort}
-            className="shrink-0 cursor-pointer rounded-standard px-2 py-1 font-bold text-primary hover:brightness-110"
-          >
-            Reset sort
-          </button>
-        )}
+        <ProgressTracker cards={cards} />
+        <ExportCardListButton binderId={binder.id} cardIds={visibleCards.map((card) => card.id)} />
       </div>
+
+      <AppliedFiltersRow
+        allCards={cards}
+        columnFilters={columnFilters}
+        isDefaultSort={isDefaultSort}
+        hasActiveSearch={searchQuery.trim().length > 0}
+        onResetAll={handleResetAll}
+      />
 
       <CardListTable
         allCards={cards}

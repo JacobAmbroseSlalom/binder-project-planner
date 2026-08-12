@@ -1,6 +1,6 @@
 # 37. Add a card list
 
-**Status:** In progress
+**Status:** Done (2026-08-12 17:19 EDT)
 
 #### Acceptance criteria
 
@@ -19,9 +19,11 @@
 - Selecting a sort option updates the order of the displayed card list entries.
 - The card list has a search field for narrowing the displayed cards.
 - Cards can be found by card name, set, number, or variation.
-- Each sortable column (Name, Set, Number, and Acquisition) has its own filter control for narrowing the card list to specific values in that column.
+- Each sortable column (Name, Set, Number, Variation, and Acquisition) has its own filter control for narrowing the card list to specific values in that column.
 - Each column's filter control is a dropdown containing a multi-select list of that column's distinct values, a Select All and Deselect All action, a search field for narrowing the listed values, and a reset action that restores that column's filter to showing every value.
 - Changing any column's filter immediately updates the displayed card list entries.
+- Columns with an active filter are summarized as pills in an "Applied filters" row below the search bar.
+- A single control near the applied-filter pills resets sorting and every column's filter back to their defaults.
 - Search, sorting, and column filters can be used together.
 - Clearing search and column filters restores all card list entries while retaining the selected sort order.
 - When no cards match the active search and filters, the card list displays an empty-results state.
@@ -43,41 +45,54 @@
 - Sort options are a fixed set, one per sortable column, plus one combined option: Name,
   Set, Number, Set + Number (combined, the default), and Acquisition status; a Price
   option is deferred until Story 38 defines the card-price shape.
-- Name, Set, Number, and Acquisition each have a clickable column header that toggles
-  that column's sort direction: selecting an unselected column sorts ascending;
-  clicking the currently sorted column again flips between ascending and descending
-  (a simple two-state toggle, not a third "unsorted" state).
-- A "Reset sort" button/link near the card list controls returns sorting to the default
-  Set + Number order; it is visible only when the current sort isn't already that
-  default, since Set + Number has no single clickable column header of its own.
-- Ascending order is Name A-Z, Set A-Z, Number lowest-to-highest, and Set + Number
-  (Set A-Z, then Number within each set); Acquisition is the one exception, where
-  ascending means Acquired first, then Unacquired (each column's descending direction
-  reverses its own ascending order).
-- A `null` `setName` or `localNumber` (possible for custom cards) always sorts last for
-  that column, in both ascending and descending direction, rather than participating in
-  the direction like an empty string.
+- Name, Set, Number, Variation, and Acquisition each have a clickable column header
+  that toggles that column's sort direction: selecting an unselected column sorts
+  ascending; clicking the currently sorted column again flips between ascending and
+  descending (a simple two-state toggle, not a third "unsorted" state). Clicking either
+  the column's label or its sort icon toggles the same way.
+- Every sortable column header always shows a sort-direction icon next to its label: a
+  combined up/down arrow when that column isn't the active sort, a single up arrow
+  when it's the active sort ascending, and a single down arrow when descending.
+- Ascending order is Name A-Z, Set A-Z, Number lowest-to-highest, Variation A-Z, and
+  Set + Number (Set A-Z, then Number within each set); Acquisition is the one
+  exception, where ascending means Acquired first, then Unacquired (each column's
+  descending direction reverses its own ascending order).
+- A `null` `setName`, `localNumber`, or `variation` (possible for custom cards) always
+  sorts last for that column, in both ascending and descending direction, rather than
+  participating in the direction like an empty string.
 - Ties within the active sort option fall back to `Card.createdAt` ascending as a stable
   secondary key, matching the existing deterministic unplaced-item ordering convention.
 - The card list has a single search input; a card matches when the trimmed,
   case-insensitive query is a substring of any of its `name`, `setName`, `localNumber`,
   or `variation` (OR logic across fields).
-- Each of the Name, Set, Number, and Acquisition columns has its own filter icon in its
-  column header opening a dropdown containing: a multi-select list of that column's
-  distinct values found among the binder's cards (for Acquisition, the two values are
-  Acquired and Unacquired); a Select All and Deselect All action; a search input
-  narrowing the listed values (most useful for Name/Set/Number, which can have many
-  distinct values); and a Reset action restoring that column's filter to every value
-  selected (no filtering).
+- Each of the Name, Set, Number, Variation, and Acquisition columns has its own filter
+  icon in its column header opening a dropdown containing: a multi-select list of that
+  column's distinct values found among the binder's cards (for Acquisition, the two
+  values are Acquired and Unacquired); a Select All and Deselect All action; a search
+  input narrowing the listed values (most useful for Name/Set/Number/Variation, which
+  can have many distinct values); and a Reset action restoring that column's filter to
+  every value selected (no filtering).
 - Every column's filter defaults to every value selected (no cards excluded).
   Deselecting a value hides only cards whose value in that column matches a deselected
   value; deselecting every value for a column shows the empty-results state.
-- A `null` `setName` or `localNumber` (possible for custom cards) gets its own
-  selectable filter entry labeled "(None)" alongside that column's real distinct
-  values, so cards without a set or number can be explicitly filtered in or out.
+- A `null` `setName`, `localNumber`, or `variation` (possible for custom cards) gets its
+  own selectable filter entry labeled "(None)" alongside that column's real distinct
+  values, so cards without a set, number, or variation can be explicitly filtered in or
+  out.
 - Active filters across different columns combine with AND logic (a card must match
   every column's current filter selection, in addition to the search query, to be
   displayed).
+- Below the search bar, an "Applied filters" row summarizes every column with an
+  active filter (fewer than every value selected) as its own pill, in
+  Name/Set/Number/Variation/Acquisition order: each pill reads "<Column>: <value,
+  value, ...>" listing every selected value by name when 3 or fewer are selected, or
+  "<Column>: <N> Selected" once more than 3 are selected.
+- The same row includes a single combined reset control, to the left of the applied-
+  filter pills, that returns sorting to its default (Set + Number, ascending) and every
+  column's filter to every value selected; it's visible only when the current sort
+  isn't already that default or at least one column has an active filter. The row
+  itself always renders at a fixed height, even with nothing to show, so the table
+  below it never shifts as filters/sort are applied and cleared.
 - Each card list entry's acquisition state is changed with the same icon-swap button
   used on the layout (Lucide `CircleCheck` when acquired, `Circle` when unacquired,
   Story 36), including its stable hit area, accessible label, and hover tooltip, rather
@@ -89,17 +104,18 @@
   — the client's currently filtered and sorted card IDs, in that order — rather than
   the backend recomputing search, sort, or filter state; this mirrors the existing
   art-pdf export's `selectedArtIds` contract (Story 30).
-- card list PDF pages use US Letter **portrait** dimensions (`8.5 x 11` inches), each
+- card list PDF pages use US Letter **landscape** dimensions (`11 x 8.5` inches), each
   reserving the existing `0.25` inch page-margin convention shared with the other PDF
-  exports (Stories 29/30); cards are arranged in a fixed-size grid sized to fit the
-  page within those margins.
+  exports (Stories 29/30); each card renders at its real physical size (`2.5 x 3.5`
+  inches), arranged in a grid sized to however many whole cards fit within those
+  margins.
 - A successful cards-PDF response uses `Content-Type: application/pdf` and
   `Content-Disposition: attachment` with the sanitized binder name followed by
   `-cards.pdf` as the download filename.
-- card list PDF pages arrange entries in a fixed 4-column by 6-row grid (24 cards per
-  page), sized to fit within the page's `0.25` inch margins; no scaling/packing
-  algorithm (unlike the art-print PDF) is needed since every entry uses the same fixed
-  cell size.
+- card list PDF pages arrange entries in a grid of real `2.5 x 3.5` inch cells (4
+  columns by 2 rows, 8 cards per page, at US Letter landscape with the `0.25` inch
+  margins); the column/row count is derived from the page's usable space rather than
+  a fixed count, so it recalculates if the page size or margins ever change.
 - The Card List tab is fully interactive regardless of the binder's lock state:
   search, sorting, column filters, export, and acquisition changes are all available
   whether the binder is locked or unlocked, unlike the Edit Details and Edit Layout
@@ -112,8 +128,9 @@ re-deriving what's already done.
 
 - [x] OpenAPI contract: `POST /binders/{binderId}/exports/cards-pdf` request/response
       schema, regenerate `packages/api-contract/src/schema.d.ts`.
-- [x] Backend: `apps/backend/src/pdf/cardsListPdf.ts` generator (portrait US
-      Letter, 4x6 grid, 24 cards/page, image + variation only).
+- [x] Backend: `apps/backend/src/pdf/cardsListPdf.ts` generator (landscape US
+      Letter, real `2.5 x 3.5` inch card cells, 4x2 grid derived from page space, 8
+      cards/page, image + variation only).
 - [x] Backend: `POST /binders/:binderId/exports/cards-pdf` route in
       `apps/backend/src/routes/binders.ts` (validates `cardIds`, snapshot read, temp
       file + stream + cleanup, matching the `exports/art-pdf` pattern).
@@ -125,19 +142,22 @@ re-deriving what's already done.
 - [x] Frontend: progress tracker (acquired/total/percent, computed from the full
       `cards` array, unaffected by search/sort/filters).
 - [x] Frontend: search input (name/setName/localNumber/variation substring match).
-- [x] Frontend: sort (Name, Set, Number, Set + Number default, Acquisition; column
-      header toggle; Reset sort control; null-last ordering; `createdAt` tiebreaker).
+- [x] Frontend: sort (Name, Set, Number, Variation, Set + Number default,
+      Acquisition; column header toggle; always-visible sort-direction icon;
+      null-last ordering; `createdAt` tiebreaker).
 - [x] Frontend: per-column filter dropdowns (multi-select, Select All/Deselect All,
-      in-dropdown search, Reset, "(None)" entry for null Set/Number).
+      in-dropdown search, Reset, "(None)" entry for null Set/Number/Variation).
+- [x] Frontend: "Applied filters" row (per-column pills, value list vs. "N Selected"
+      past 3, combined reset-sort-and-filters control, fixed-height blank state).
 - [x] Frontend: card list table wiring search + sort + filters together; empty-results
       state.
 - [x] Frontend: acquisition toggle button reusing Story 36's
       `BinderRouteContext`/`CardTile` icon-swap mutation.
 - [x] Frontend: export button (disabled when zero results) calling `exportCardsListPdf`
       with the currently filtered+sorted card ids.
-- [ ] Validate: Ui with user
-- [ ] Docs: reconcile `docs/api-endpoints.md`/`docs/data-types.md` (the `cards-pdf`
+- [x] Validate: Ui with user
+- [x] Docs: reconcile `docs/api-endpoints.md`/`docs/data-types.md` (the `cards-pdf`
       endpoint entry already exists there ahead of this implementation - verify it
       still matches once built) and `docs/planning.md` if any new architectural
       decision comes up.
-- [ ] Validate: `pnpm typecheck` / `pnpm lint` / `pnpm build`, then `pnpm format`.
+- [x] Validate: `pnpm typecheck` / `pnpm lint` / `pnpm build`, then `pnpm format`.

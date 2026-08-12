@@ -6,10 +6,10 @@ import type { Card } from '@/lib/api';
 // components' own rendering, per `docs/data-types.md`'s `CardListState`
 // shape.
 
-// The 4 columns that get their own clickable sort header and filter
+// The 5 columns that get their own clickable sort header and filter
 // dropdown. "Set + Number" (the default combined sort) has no column of
 // its own - see `CardListSortOption` below.
-export type CardListColumnKey = 'name' | 'set' | 'number' | 'acquisition';
+export type CardListColumnKey = 'name' | 'set' | 'number' | 'variation' | 'acquisition';
 
 // One more option than `CardListColumnKey` has entries: `setAndNumber` is
 // the default combined sort with no single clickable column header (per
@@ -35,6 +35,7 @@ export function createDefaultColumnFilters(cards: readonly Card[]): CardListColu
     name: new Set(getDistinctColumnValues(cards, 'name').map((option) => option.value)),
     set: new Set(getDistinctColumnValues(cards, 'set').map((option) => option.value)),
     number: new Set(getDistinctColumnValues(cards, 'number').map((option) => option.value)),
+    variation: new Set(getDistinctColumnValues(cards, 'variation').map((option) => option.value)),
     acquisition: new Set(
       getDistinctColumnValues(cards, 'acquisition').map((option) => option.value),
     ),
@@ -52,6 +53,8 @@ export function getColumnFilterValue(card: Card, column: CardListColumnKey): str
       return card.setName ?? NONE_FILTER_VALUE;
     case 'number':
       return card.localNumber ?? NONE_FILTER_VALUE;
+    case 'variation':
+      return card.variation ?? NONE_FILTER_VALUE;
     case 'acquisition':
       return card.acquired ? 'acquired' : 'unacquired';
   }
@@ -136,13 +139,13 @@ export function matchesCardListFilters(card: Card, filters: CardListColumnFilter
 }
 
 // Compares two cards by one column's own value, ascending or descending,
-// with a `null` `setName`/`localNumber` always sorting last regardless of
-// direction (the story's explicit exception to the usual ascending/
-// descending flip).
+// with a `null` `setName`/`localNumber`/`variation` always sorting last
+// regardless of direction (the story's explicit exception to the usual
+// ascending/descending flip).
 function compareByColumn(
   a: Card,
   b: Card,
-  column: 'name' | 'set' | 'number',
+  column: 'name' | 'set' | 'number' | 'variation',
   direction: CardListSortDirection,
 ): number {
   if (column === 'name') {
@@ -150,8 +153,8 @@ function compareByColumn(
     return direction === 'ascending' ? cmp : -cmp;
   }
 
-  const aValue = column === 'set' ? a.setName : a.localNumber;
-  const bValue = column === 'set' ? b.setName : b.localNumber;
+  const aValue = column === 'set' ? a.setName : column === 'number' ? a.localNumber : a.variation;
+  const bValue = column === 'set' ? b.setName : column === 'number' ? b.localNumber : b.variation;
   if (aValue === null && bValue === null) return 0;
   if (aValue === null) return 1;
   if (bValue === null) return -1;

@@ -8,29 +8,29 @@ import { loadImageForEmbedding } from './binderLayoutPdf.js';
 // (which mirrors the binder's own physical page/slot grid) or the
 // art-print PDF (which packs items by their own pixel dimensions), this is
 // a plain, binder-agnostic printable list: every submitted card renders at
-// the same fixed cell size, in the exact order the caller (routes/
-// binders.ts) already resolved from the request's `cardIds`, with no
-// packing/tiling logic needed.
+// its real physical size (2.5 x 3.5 in), in the exact order the caller
+// (routes/binders.ts) already resolved from the request's `cardIds`, with
+// no packing/scaling logic needed.
 
-// US Letter **portrait** (unlike the binder-layout/art-print PDFs' own
-// landscape orientation) - planning.md's Card List requirement.
+// US Letter **landscape** - fits more real-size (2.5 x 3.5 in), upright
+// cards per page than portrait (8 vs 6 per page at the standard 0.25 inch
+// margin), matching the binder-layout/art-print PDFs' own landscape
+// orientation.
 const POINTS_PER_INCH = 72;
-const PAGE_WIDTH_PT = 8.5 * POINTS_PER_INCH;
-const PAGE_HEIGHT_PT = 11 * POINTS_PER_INCH;
+const PAGE_WIDTH_PT = 11 * POINTS_PER_INCH;
+const PAGE_HEIGHT_PT = 8.5 * POINTS_PER_INCH;
 // The same 0.25 inch page-margin convention as the other PDF exports
 // (stories 29/30).
 const PAGE_MARGIN_PT = 0.25 * POINTS_PER_INCH;
-const COLUMNS = 4;
-const ROWS = 6;
-const CARDS_PER_PAGE = COLUMNS * ROWS;
 // A small gap between adjacent cells, mirroring the binder-layout PDF's
 // own `SLOT_GAP_PT` convention.
 const CELL_GAP_PT = 6;
-// The standard trading-card aspect ratio (2.5 x 3.5 in) - this card list
-// isn't tied to any one binder's own slot aspect ratio (which varies with
-// `widthPerSlot`/`heightPerSlot`), since the same card list page layout
-// applies across every binder.
-const CARD_CELL_ASPECT_RATIO = 2.5 / 3.5;
+// The standard physical trading-card size (2.5 x 3.5 in) - unlike the
+// earlier "scale to fill the page" grid, every card prints at this real
+// size (not just its aspect ratio), so the column/row count below is
+// however many whole cards actually fit rather than a fixed grid.
+const CARD_WIDTH_PT = 2.5 * POINTS_PER_INCH;
+const CARD_HEIGHT_PT = 3.5 * POINTS_PER_INCH;
 
 // Story 16's variation-label overlay, matching the binder-layout PDF's own
 // bottom-edge overlay treatment (see its identical constants) so a printed
@@ -57,35 +57,42 @@ export interface GenerateCardsListPdfOptions {
 }
 
 interface CellGridLayout {
+  columns: number;
+  rows: number;
   cellWidthPt: number;
   cellHeightPt: number;
   originX: number;
   originY: number;
 }
 
-// A fixed 4x6 "contain" grid centered on the page within its margins,
-// sized so every cell keeps the standard card aspect ratio - mirrors the
-// binder-layout PDF's own `computeGridLayout` shape, simplified since this
-// grid never varies per binder.
+// A grid of real-size (2.5 x 3.5 in) cells, centered on the page within
+// its margins - the column/row count is however many whole cards (plus
+// the gap between them) actually fit in the page's usable width/height,
+// rather than a fixed grid scaled to fill the page.
 function computeCellGridLayout(): CellGridLayout {
   const contentWidth = PAGE_WIDTH_PT - 2 * PAGE_MARGIN_PT;
   const contentHeight = PAGE_HEIGHT_PT - 2 * PAGE_MARGIN_PT;
 
-  const horizontalGaps = (COLUMNS - 1) * CELL_GAP_PT;
-  const verticalGaps = (ROWS - 1) * CELL_GAP_PT;
+  // Each additional column/row costs one more card plus one more gap, so
+  // solving `n * cell + (n - 1) * gap <= content` for the largest whole
+  // `n` is the same as flooring `(content + gap) / (cell + gap)`.
+  const columns = Math.max(
+    1,
+    Math.floor((contentWidth + CELL_GAP_PT) / (CARD_WIDTH_PT + CELL_GAP_PT)),
+  );
+  const rows = Math.max(
+    1,
+    Math.floor((contentHeight + CELL_GAP_PT) / (CARD_HEIGHT_PT + CELL_GAP_PT)),
+  );
 
-  const candidateWidthByWidth = (contentWidth - horizontalGaps) / COLUMNS;
-  const candidateWidthByHeight = ((contentHeight - verticalGaps) / ROWS) * CARD_CELL_ASPECT_RATIO;
-
-  const cellWidthPt = Math.min(candidateWidthByWidth, candidateWidthByHeight);
-  const cellHeightPt = cellWidthPt / CARD_CELL_ASPECT_RATIO;
-
-  const totalGridWidth = cellWidthPt * COLUMNS + horizontalGaps;
-  const totalGridHeight = cellHeightPt * ROWS + verticalGaps;
+  const totalGridWidth = CARD_WIDTH_PT * columns + CELL_GAP_PT * (columns - 1);
+  const totalGridHeight = CARD_HEIGHT_PT * rows + CELL_GAP_PT * (rows - 1);
 
   return {
-    cellWidthPt,
-    cellHeightPt,
+    columns,
+    rows,
+    cellWidthPt: CARD_WIDTH_PT,
+    cellHeightPt: CARD_HEIGHT_PT,
     originX: PAGE_MARGIN_PT + (contentWidth - totalGridWidth) / 2,
     originY: PAGE_MARGIN_PT + (contentHeight - totalGridHeight) / 2,
   };
@@ -102,6 +109,7 @@ export async function generateCardsListPdf({
   cards,
 }: GenerateCardsListPdfOptions): Promise<void> {
   const layout = computeCellGridLayout();
+  const cardsPerPage = layout.columns * layout.rows;
 
   const doc = new PDFDocument({
     size: [PAGE_WIDTH_PT, PAGE_HEIGHT_PT],
@@ -118,13 +126,13 @@ export async function generateCardsListPdf({
   doc.pipe(writeStream);
 
   for (const [index, card] of cards.entries()) {
-    if (index % CARDS_PER_PAGE === 0) {
+    if (index % cardsPerPage === 0) {
       doc.addPage();
     }
 
-    const positionOnPage = index % CARDS_PER_PAGE;
-    const row = Math.floor(positionOnPage / COLUMNS);
-    const column = positionOnPage % COLUMNS;
+    const positionOnPage = index % cardsPerPage;
+    const row = Math.floor(positionOnPage / layout.columns);
+    const column = positionOnPage % layout.columns;
 
     const x = layout.originX + column * (layout.cellWidthPt + CELL_GAP_PT);
     const y = layout.originY + row * (layout.cellHeightPt + CELL_GAP_PT);

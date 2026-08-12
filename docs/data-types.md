@@ -362,16 +362,18 @@ Client-only, derived entirely from the already-loaded `cards` array in
 `BinderRouteContext`; none of this state is sent to or stored by the backend except as
 the resolved `cardIds` array in `CardsPdfExportRequest` below.
 
-| Property        | Type                                                             | Notes                                                                                                                                                  |
-| --------------- | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `searchQuery`   | string                                                           | Trimmed, case-insensitive; matches as a substring of `name`, `setName`, `localNumber`, or `variation` (OR logic).                                      |
-| `sortOption`    | enum: `name`, `set`, `number`, `setAndNumber`, `acquisition`     | Defaults to `setAndNumber`. Ties fall back to `Card.createdAt` ascending.                                                                              |
-| `sortDirection` | enum: `ascending`, `descending`                                  | Toggled by clicking the active column's header; a `null`/missing `setName` or `localNumber` always sorts last regardless of direction.                 |
-| `columnFilters` | one value-set per column: `name`, `set`, `number`, `acquisition` | Each is a set of selected distinct values for that column (a dedicated `"(None)"` entry represents `null`); defaults to every distinct value selected. |
+| Property        | Type                                                                          | Notes                                                                                                                                                                                                  |
+| --------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `searchQuery`   | string                                                                        | Trimmed, case-insensitive; matches as a substring of `name`, `setName`, `localNumber`, or `variation` (OR logic).                                                                                      |
+| `sortOption`    | enum: `name`, `set`, `number`, `variation`, `setAndNumber`, `acquisition`     | Defaults to `setAndNumber`. Ties fall back to `Card.createdAt` ascending.                                                                                                                              |
+| `sortDirection` | enum: `ascending`, `descending`                                               | Toggled by clicking the active column's header (label or its always-visible sort-direction icon); a `null`/missing `setName`, `localNumber`, or `variation` always sorts last regardless of direction. |
+| `columnFilters` | one value-set per column: `name`, `set`, `number`, `variation`, `acquisition` | Each is a set of selected distinct values for that column (a dedicated `"(None)"` entry represents `null`); defaults to every distinct value selected.                                                 |
 
 Column filters combine with each other and the search query using AND logic. The
 progress tracker (acquired/total/percentage) always reflects every card in the binder,
-unaffected by any of this state.
+unaffected by any of this state. Below the search bar, an "Applied filters" row
+summarizes any column with an active filter as its own pill, alongside a single control
+that resets the search query, sort, and every column filter back to their defaults.
 
 ### CardsPdfExportRequest (Story 37)
 
