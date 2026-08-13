@@ -6,6 +6,7 @@ import { useVirtualizer } from '@tanstack/react-virtual';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Art, Binder } from '@/lib/api';
+import { Tooltip } from '@/shared/feedback';
 
 import { UnplacedArt } from './UnplacedArt';
 import { UNPLACED_GRID_COLUMNS, UNPLACED_GRID_GAP_PX } from '../card/UnplacedCardsPanel';
@@ -241,15 +242,16 @@ export function UnplacedArtPanel({
             `UnplacedCardsPanel`'s header row. */}
         <div className="size-8 shrink-0" aria-hidden="true" />
         <h2 className="flex-1 text-center text-subheading">Unplaced Art</h2>
-        <button
-          type="button"
-          onClick={onAddArt}
-          aria-label="Add multi-slot art"
-          title="Add art"
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-neutral-100 hover:brightness-110"
-        >
-          <Plus className="size-5" aria-hidden="true" />
-        </button>
+        <Tooltip label="Add art">
+          <button
+            type="button"
+            onClick={onAddArt}
+            aria-label="Add multi-slot art"
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-neutral-100 hover:brightness-110"
+          >
+            <Plus className="size-5" aria-hidden="true" />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="flex items-center gap-2">

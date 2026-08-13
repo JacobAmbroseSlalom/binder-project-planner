@@ -6,6 +6,7 @@ import { Plus } from 'lucide-react';
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 
 import type { Card } from '@/lib/api';
+import { Tooltip } from '@/shared/feedback';
 
 import { UnplacedCard } from './UnplacedCard';
 
@@ -264,15 +265,16 @@ export function UnplacedCardsPanel({
             with an all-null placement target, exactly like an empty
             slot's own "+" button but scoped to the unplaced section
             instead of one coordinate. */}
-        <button
-          type="button"
-          onClick={onAddCard}
-          aria-label="Add an unplaced card"
-          title="Add card"
-          className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-neutral-100 hover:brightness-110"
-        >
-          <Plus className="size-5" aria-hidden="true" />
-        </button>
+        <Tooltip label="Add card">
+          <button
+            type="button"
+            onClick={onAddCard}
+            aria-label="Add an unplaced card"
+            className="flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-full bg-primary text-neutral-100 hover:brightness-110"
+          >
+            <Plus className="size-5" aria-hidden="true" />
+          </button>
+        </Tooltip>
       </div>
 
       <div className="flex items-center gap-2">

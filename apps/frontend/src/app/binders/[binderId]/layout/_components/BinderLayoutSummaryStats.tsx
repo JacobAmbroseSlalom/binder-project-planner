@@ -2,9 +2,12 @@ import { getTotalSlots } from '@binder-project-planner/shared';
 import { Check } from 'lucide-react';
 
 import type { Art, Binder, Card } from '@/lib/api';
+import { Tooltip } from '@/shared/feedback';
 
-// Compact metric token with an immediate custom tooltip on hover/focus,
-// without changing the token's own visual styling.
+// Compact metric token with the shared instant tooltip (hover/focus),
+// without changing the token's own visual styling. The wrapping `span`
+// (rather than a button) carries its own `tabIndex`/`aria-label` since
+// there's no other interactive element here to hang them on.
 function MetricAbbr({
   value,
   suffix,
@@ -15,15 +18,12 @@ function MetricAbbr({
   tooltip: string;
 }) {
   return (
-    <span className="group relative inline-block" tabIndex={0} aria-label={`${value} ${tooltip}`}>
-      <span>
+    <Tooltip label={tooltip}>
+      <span tabIndex={0} aria-label={`${value} ${tooltip}`}>
         {value}
         {suffix}
       </span>
-      <span className="pointer-events-none absolute bottom-full left-1/2 z-20 mb-1 -translate-x-1/2 rounded-standard bg-neutral-900 px-2 py-1 text-caption text-neutral-100 opacity-0 shadow-panel transition-opacity duration-75 group-hover:opacity-100 group-focus-visible:opacity-100">
-        {tooltip}
-      </span>
-    </span>
+    </Tooltip>
   );
 }
 

@@ -147,6 +147,19 @@ export interface BinderRouteContextValue {
   // the card tile can disable that one card's toggle action until the
   // request settles.
   pendingCardAcquiredToggleIds: Set<string>;
+  // Bulk-toggles every listed card's acquired state to `acquired` in one
+  // request (story 46, the Card List tab's select-all/deselect-all header
+  // control): optimistically flips every listed card immediately, then
+  // either confirms them with the backend's authoritative representation
+  // on success, or restores every one of their prior values on failure
+  // (all-or-nothing across the whole set, matching the bulk endpoint's
+  // single request/response shape).
+  toggleCardsAcquisition: (cardIds: string[], acquired: boolean) => void;
+  // Whether a bulk acquisition toggle is currently in flight, so the Card
+  // List tab's header control can disable itself until the request
+  // settles - unlike `pendingCardAcquiredToggleIds`, this isn't scoped to
+  // individual cards since the whole set is applied/rolled back together.
+  isBulkAcquisitionPending: boolean;
   // Duplicates a card into the unplaced-cards section (story 19): inserts
   // an optimistic copy immediately, then replaces it with the backend's
   // authoritative representation on success, or removes it on failure.

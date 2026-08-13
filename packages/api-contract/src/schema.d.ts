@@ -230,6 +230,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/binders/{binderId}/cards/acquisition": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Bulk-update multiple cards' acquisition state
+         * @description Replaces `acquired` for every card identified by `cardIds` in one request (story 46), powering the Card List tab's (story 37) select-all/deselect-all header control instead of the client looping individual `PATCH /cards/{cardId}` requests. Every listed card must belong to the path binder. Unlike every other binder- scoped mutation, this request remains allowed even when the binder is locked, matching the Card List tab's existing lock-state exemption (story 32).
+         */
+        patch: operations["updateCardsAcquisition"];
+        trace?: never;
+    };
     "/card-catalog/search": {
         parameters: {
             query?: never;
@@ -966,6 +988,11 @@ export interface components {
         };
         /** @description `PATCH /cards/{cardId}`'s acquisition-update request body (story 36): replaces the path card's `acquired` field using last-write-wins semantics - the same endpoint used for placement and variation edits, rather than a dedicated acquire/unacquire endpoint. */
         UpdateCardAcquiredRequest: {
+            acquired: boolean;
+        };
+        /** @description `PATCH /binders/{binderId}/cards/acquisition`'s request body (story 46): bulk-replaces `acquired` for every listed card in one request, mirroring `UpdateCardAcquiredRequest`'s single-card shape but applied to many cards at once - used by the Card List tab's (story 37) select-all/deselect-all header control. */
+        UpdateCardsAcquisitionRequest: {
+            cardIds: string[];
             acquired: boolean;
         };
         /** @description A normalized TCGdex catalog card (story 11), returned by `GET /card-catalog/search` and submitted as-is (plus variation and placement) to create a TCGdex-sourced binder card. */
@@ -1970,6 +1997,50 @@ export interface operations {
             };
             /** @description Another bulk card-creation request is already running for this binder. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateCardsAcquisition: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCardsAcquisitionRequest"];
+            };
+        };
+        responses: {
+            /** @description The complete persisted representation of every updated card. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"][];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, the request body did not match the documented schema, or one or more cardIds don't belong to the path binder. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id, or one or more cardIds don't identify an existing card. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

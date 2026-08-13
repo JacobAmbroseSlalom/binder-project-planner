@@ -44,21 +44,21 @@ This index maps every story file to its current bucket.
 | 40    | Add summary stats on Binder Layout Page                                | [docs/stories/completed/2026-08-03-40-add-summary-stats-on-binder-layout-page.md](completed/2026-08-03-40-add-summary-stats-on-binder-layout-page.md)                                                               |
 | 41    | Filter card search by TCG Pocket inclusion and language                | [docs/stories/completed/2026-08-01-41-filter-card-search-by-tcg-pocket-inclusion-and-language.md](completed/2026-08-01-41-filter-card-search-by-tcg-pocket-inclusion-and-language.md)                               |
 | 42    | Preview binder layout and multi-slot art while editing binder settings | [docs/stories/completed/2026-08-03-42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md](completed/2026-08-03-42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md) |
+| 46    | Bulk acquire cards                                                     | [docs/stories/completed/2026-08-12-46-bulk-acquire-cards.md](completed/2026-08-12-46-bulk-acquire-cards.md)                                                                                                         |
 
 ## Ready For Dev
 
-| Story | Title                                   | File                                                                                                                                     |
-| ----- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 32    | Lock a binder                          | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                                                     |
-| 38    | Add card finances                      | [docs/stories/ready-for-dev/38-add-card-finances.md](ready-for-dev/38-add-card-finances.md)                                             |
-| 39    | Add Binder Search and Sort functions   | [docs/stories/ready-for-dev/39-add-binder-search-and-sort-functions.md](ready-for-dev/39-add-binder-search-and-sort-functions.md)       |
-| 44    | Delete custom art finance cost entries | [docs/stories/ready-for-dev/44-delete-custom-art-finance-cost-entries.md](ready-for-dev/44-delete-custom-art-finance-cost-entries.md)   |
-| 46    | Bulk acquire cards                     | [docs/stories/ready-for-dev/46-bulk-acquire-cards.md](ready-for-dev/46-bulk-acquire-cards.md)                                           |
+| Story | Title                                  | File                                                                                                                                  |
+| ----- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 32    | Lock a binder                          | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                                                   |
+| 38    | Add card finances                      | [docs/stories/ready-for-dev/38-add-card-finances.md](ready-for-dev/38-add-card-finances.md)                                           |
+| 39    | Add Binder Search and Sort functions   | [docs/stories/ready-for-dev/39-add-binder-search-and-sort-functions.md](ready-for-dev/39-add-binder-search-and-sort-functions.md)     |
+| 44    | Delete custom art finance cost entries | [docs/stories/ready-for-dev/44-delete-custom-art-finance-cost-entries.md](ready-for-dev/44-delete-custom-art-finance-cost-entries.md) |
 
 ## Needs Refinement
 
-| Story | Title                                  | File                                                                                                                                        |
-| ----- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 43    | Add a card from other API sources      | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md)           |
-| 45    | What I'm looking for section (empty - TBD) | [docs/stories/needs-refinement/45-what-im-looking-for-section.md](needs-refinement/45-what-im-looking-for-section.md)                   |
+| Story | Title                                               | File                                                                                                                                                                  |
+| ----- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 43    | Add a card from other API sources                   | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md)                                     |
+| 45    | What I'm looking for section (empty - TBD)          | [docs/stories/needs-refinement/45-what-im-looking-for-section.md](needs-refinement/45-what-im-looking-for-section.md)                                                 |
 | 47    | Package and export the application as an executable | [docs/stories/needs-refinement/47-package-and-export-the-application-as-an-executable.md](needs-refinement/47-package-and-export-the-application-as-an-executable.md) |

@@ -8,6 +8,7 @@ import {
   duplicateCard as duplicateCardRequest,
   moveCards,
   updateCardAcquired as updateCardAcquiredRequest,
+  updateCardsAcquisition as updateCardsAcquisitionRequest,
   updateCardVariation as updateCardVariationRequest,
   type Card,
   type CardPositionUpdate,
@@ -139,6 +140,12 @@ export function useCardMutations({
   const [pendingCardAcquiredToggleIds, setPendingCardAcquiredToggleIds] = useState<Set<string>>(
     new Set(),
   );
+  // Story 46's single in-flight-bulk-acquisition-toggle flag - unlike the
+  // per-card `pendingCardAcquiredToggleIds` above, the whole affected set
+  // is applied/rolled back together in one request, so there's nothing to
+  // track per-card; the Card List tab's header control disables itself
+  // while this is `true`.
+  const [isBulkAcquisitionPending, setIsBulkAcquisitionPending] = useState(false);
 
   // Assigns a manually-entered custom card to a binder slot (story 12).
   // Mirrors `assignCards`'s optimistic lifecycle, but creates its own
@@ -380,6 +387,63 @@ export function useCardMutations({
     [cards, setCards, start, retry],
   );
 
+  // Bulk-toggles every card in `cardIds` to `acquired` in one request
+  // (story 46's Card List tab header select-all/deselect-all control),
+  // mirroring `toggleCardAcquired`'s optimistic-apply/restore-on-failure
+  // lifecycle but applied to the whole affected set together rather than
+  // one card at a time: every listed card optimistically flips to
+  // `acquired` immediately, and if the bulk request fails, every one of
+  // them rolls back to its own prior value (all-or-nothing, matching the
+  // single request/response shape of the bulk endpoint) rather than each
+  // card being applied/rolled back independently. Not gated by binder lock
+  // state on the caller's side, mirroring `toggleCardAcquired` above - the
+  // backend's bulk endpoint has no lock check at all (story 32's Card List
+  // tab exemption).
+  const toggleCardsAcquisition = useCallback(
+    (cardIds: string[], acquired: boolean) => {
+      if (cardIds.length === 0) return;
+      const targetIds = new Set(cardIds);
+
+      const previousAcquiredById = new Map(
+        cards.filter((card) => targetIds.has(card.id)).map((card) => [card.id, card.acquired]),
+      );
+
+      setCards((previous) =>
+        previous.map((card) => (targetIds.has(card.id) ? { ...card, acquired } : card)),
+      );
+      setIsBulkAcquisitionPending(true);
+
+      const toast = start('bulk-toggle-cards-acquisition');
+
+      updateCardsAcquisitionRequest(binderId, cardIds, acquired)
+        .then((updated) => {
+          setCards((previous) =>
+            previous.map((card) => updated.find((row) => row.id === card.id) ?? card),
+          );
+          toast.markSaved();
+        })
+        .catch((error) => {
+          setCards((previous) =>
+            previous.map((card) =>
+              previousAcquiredById.has(card.id)
+                ? { ...card, acquired: previousAcquiredById.get(card.id)! }
+                : card,
+            ),
+          );
+          toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this bulk toggle
+          // was rejected because the binder is now locked (unreachable in
+          // practice today, since this endpoint has no lock check - kept
+          // for parity with every other mutation's failure handling).
+          if (isLockedBinderConflict(error)) retry();
+        })
+        .finally(() => {
+          setIsBulkAcquisitionPending(false);
+        });
+    },
+    [binderId, cards, setCards, start, retry],
+  );
+
   // Duplicates a card into the unplaced-cards section (story 19),
   // mirroring `duplicateArt`'s optimistic-insert/replace-or-remove
   // lifecycle exactly: the copy always lands unplaced (even when the
@@ -569,6 +633,8 @@ export function useCardMutations({
     pendingCardVariationEditIds,
     toggleCardAcquired,
     pendingCardAcquiredToggleIds,
+    toggleCardsAcquisition,
+    isBulkAcquisitionPending,
     duplicateCard,
     pendingCardDuplicateIds,
     moveCard,

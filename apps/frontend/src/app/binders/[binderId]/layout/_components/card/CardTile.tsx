@@ -2,6 +2,7 @@ import type { DraggableAttributes, DraggableSyntheticListeners } from '@dnd-kit/
 import { Circle, CircleCheck, Copy, Pencil, Trash2 } from 'lucide-react';
 
 import { resolveCardImageUrl, type Card } from '@/lib/api';
+import { Tooltip } from '@/shared/feedback';
 
 // The shared visual tile both `BinderSlot` (an occupied binder slot) and
 // `UnplacedCard` (a card in the unplaced-cards section, story 15) render
@@ -148,50 +149,54 @@ export function CardTile({
           locked. */}
       {!isLocked && (
         <div className="pointer-events-none absolute inset-x-0 top-0 z-10 flex -translate-y-1 items-center justify-evenly rounded-t-standard bg-black/60 px-1 py-1 opacity-0 transition-all duration-150 ease-out group-hover:pointer-events-auto group-hover:translate-y-0 group-hover:opacity-100">
-          <button
-            type="button"
-            disabled={isAcquiredTogglePending}
-            onClick={() => onToggleAcquired(card.id)}
-            aria-label={toggleAcquiredAriaLabel}
-            title={card.acquired ? 'Mark as unacquired' : 'Mark as acquired'}
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {card.acquired ? (
-              <CircleCheck className="size-3.5" aria-hidden="true" />
-            ) : (
-              <Circle className="size-3.5" aria-hidden="true" />
-            )}
-          </button>
-          <button
-            type="button"
-            disabled={isVariationEditPending}
-            onClick={() => onEditVariation(card)}
-            aria-label={editVariationAriaLabel}
-            title="Edit variation"
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Pencil className="size-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            disabled={isDuplicatePending}
-            onClick={() => onDuplicateCard(card.id)}
-            aria-label={duplicateAriaLabel}
-            title="Duplicate card"
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Copy className="size-3.5" aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            disabled={isRemovalPending}
-            onClick={() => onRemoveCard(card.id)}
-            aria-label={removeAriaLabel}
-            title="Remove card"
-            className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Trash2 className="size-3.5" aria-hidden="true" />
-          </button>
+          <Tooltip label={card.acquired ? 'Mark as unacquired' : 'Mark as acquired'}>
+            <button
+              type="button"
+              disabled={isAcquiredTogglePending}
+              onClick={() => onToggleAcquired(card.id)}
+              aria-label={toggleAcquiredAriaLabel}
+              className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {card.acquired ? (
+                <CircleCheck className="size-3.5" aria-hidden="true" />
+              ) : (
+                <Circle className="size-3.5" aria-hidden="true" />
+              )}
+            </button>
+          </Tooltip>
+          <Tooltip label="Edit variation">
+            <button
+              type="button"
+              disabled={isVariationEditPending}
+              onClick={() => onEditVariation(card)}
+              aria-label={editVariationAriaLabel}
+              className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Pencil className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Duplicate card">
+            <button
+              type="button"
+              disabled={isDuplicatePending}
+              onClick={() => onDuplicateCard(card.id)}
+              aria-label={duplicateAriaLabel}
+              className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Copy className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Remove card">
+            <button
+              type="button"
+              disabled={isRemovalPending}
+              onClick={() => onRemoveCard(card.id)}
+              aria-label={removeAriaLabel}
+              className="flex size-6 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Trash2 className="size-3.5" aria-hidden="true" />
+            </button>
+          </Tooltip>
         </div>
       )}
       {/* Story 16's variation label - overlaid directly on the card image's

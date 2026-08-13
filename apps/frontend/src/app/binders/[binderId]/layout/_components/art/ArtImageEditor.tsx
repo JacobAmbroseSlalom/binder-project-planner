@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Image as KonvaImage, Layer, Stage } from 'react-konva';
 import type Konva from 'konva';
 
+import { Tooltip } from '@/shared/feedback';
 import {
   computeArtDisplayGeometry,
   type ArtTransform,
@@ -186,26 +187,28 @@ export function ArtImageEditor({
             regardless of the frame's own width. */}
         <div className="flex w-32 shrink-0 flex-col gap-4">
           <div className="flex items-center justify-center gap-2">
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => rotate(-90)}
-              aria-label="Rotate left"
-              title="Rotate left"
-              className="cursor-pointer rounded-full p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCcw className="size-5" />
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => rotate(90)}
-              aria-label="Rotate right"
-              title="Rotate right"
-              className="cursor-pointer rounded-full p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <RotateCw className="size-5" />
-            </button>
+            <Tooltip label="Rotate left">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => rotate(-90)}
+                aria-label="Rotate left"
+                className="cursor-pointer rounded-full p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RotateCcw className="size-5" />
+              </button>
+            </Tooltip>
+            <Tooltip label="Rotate right">
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => rotate(90)}
+                aria-label="Rotate right"
+                className="cursor-pointer rounded-full p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <RotateCw className="size-5" />
+              </button>
+            </Tooltip>
           </div>
 
           <div className="flex w-full flex-col gap-3">

@@ -225,6 +225,31 @@ export async function updateCardAcquired(cardId: string, acquired: boolean): Pro
   return data as Card;
 }
 
+// Bulk-updates multiple cards' acquisition state through `PATCH /binders/
+// {binderId}/cards/acquisition` (story 46), used by the Card List tab's
+// select-all/deselect-all header control instead of looping individual
+// `updateCardAcquired` calls. Returns the complete persisted
+// representation of every updated card (order not guaranteed to match
+// `cardIds`), so the caller can replace its optimistic values with the
+// authoritative ones. Throws the Problem Details body on failure so the
+// caller can roll back its optimistic bulk toggle.
+export async function updateCardsAcquisition(
+  binderId: string,
+  cardIds: string[],
+  acquired: boolean,
+): Promise<Card[]> {
+  const { data, error } = await apiClient.PATCH('/binders/{binderId}/cards/acquisition', {
+    params: { path: { binderId } },
+    body: { cardIds, acquired },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 // Duplicates a card into the unplaced-cards section through `POST
 // /cards/{cardId}/duplicate` (story 19), mirroring `duplicateArt` above.
 // `idempotencyKey` is a client-generated UUID sent as the

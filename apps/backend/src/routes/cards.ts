@@ -130,6 +130,16 @@ interface UpdateCardAcquiredRequestBody {
   acquired: boolean;
 }
 
+// The validated, OpenAPI-typed shape of `PATCH /binders/{binderId}/cards/
+// acquisition`'s request body (story 46): bulk-replaces `acquired` for
+// every listed card in one request, rather than the client looping
+// individual `PATCH /cards/{cardId}` requests - used by the Card List
+// tab's (story 37) select-all/deselect-all header control.
+interface UpdateCardsAcquisitionRequestBody {
+  cardIds: string[];
+  acquired: boolean;
+}
+
 interface CardRow {
   id: string;
   binderId: string;
@@ -1074,6 +1084,62 @@ export function createCardsRouter(
     }
   });
 
+  // Story 46's bulk acquisition-toggle endpoint: replaces `acquired` for
+  // every card in `cardIds` in one request, powering the Card List tab's
+  // (story 37) select-all/deselect-all header control instead of the
+  // client looping individual `PATCH /cards/{cardId}` requests. Mirrors
+  // that single-card endpoint's own acquisition branch in remaining
+  // allowed while the binder is locked (see this file's other `acquired`
+  // branch above) - deliberately the one binder-scoped mutation in this
+  // router with no locked-binder check.
+  router.patch('/binders/:binderId/cards/acquisition', (request, response) => {
+    const { binderId } = request.params;
+    const body = request.body as UpdateCardsAcquisitionRequestBody;
+
+    const binder = database.select().from(binders).where(eq(binders.id, binderId)).get();
+    if (!binder) {
+      response
+        .status(404)
+        .type('application/problem+json')
+        .json(problem(404, 'Not Found', `No binder exists with id "${binderId}".`));
+      return;
+    }
+
+    const cardRows = database.select().from(cards).where(inArray(cards.id, body.cardIds)).all();
+    const foundIds = new Set(cardRows.map((row) => row.id));
+    const missingId = body.cardIds.find((id) => !foundIds.has(id));
+    if (missingId) {
+      response
+        .status(404)
+        .type('application/problem+json')
+        .json(problem(404, 'Not Found', `No card exists with id "${missingId}".`));
+      return;
+    }
+
+    // Every card must belong to the path binder - a request mixing card
+    // ids from a different binder is rejected outright rather than only
+    // updating the subset that matches, mirroring the move/swap endpoint's
+    // own cross-binder rejection above.
+    const foreignCard = cardRows.find((row) => row.binderId !== binderId);
+    if (foreignCard) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(problem(400, 'Bad Request', 'Every cardId must belong to the path binder.'));
+      return;
+    }
+
+    const updatedAt = new Date().toISOString();
+    database
+      .update(cards)
+      .set({ acquired: body.acquired, updatedAt })
+      .where(and(eq(cards.binderId, binderId), inArray(cards.id, body.cardIds)))
+      .run();
+
+    const updatedRows = cardRows.map((row) => ({ ...row, acquired: body.acquired, updatedAt }));
+    response.status(200).json(updatedRows.map(serializeCard));
+  });
+
   // Story 14's card move/swap endpoint (and story 16's variation-update
   // endpoint, which shares this same path/method): applies one update (a
   // simple move) or two updates (a swap) in a single transaction. Each
@@ -1111,20 +1177,13 @@ export function createCardsRouter(
         return;
       }
 
-      // Story 32: toggling a card's acquisition state is a restricted
-      // mutation too, mirroring the variation-update branch below - though
-      // planning.md still allows it from the Card List tab (story 37)
-      // while locked, which is a separate endpoint/flow from this one.
-      const binderForAcquiredEdit = database
-        .select({ locked: binders.locked })
-        .from(binders)
-        .where(eq(binders.id, existing.binderId))
-        .get();
-      if (binderForAcquiredEdit?.locked) {
-        response.status(409).type('application/problem+json').json(lockedBinderConflictProblem());
-        return;
-      }
-
+      // Story 32/37: unlike every other mutation guarded by this file's
+      // locked-binder checks, acquisition changes remain allowed while the
+      // binder is locked - the Card List tab's (story 37) row toggle and
+      // its bulk select-all/deselect-all control (story 46, `PATCH
+      // /binders/{binderId}/cards/acquisition` below) are the two flows
+      // that call this behavior, so there's deliberately no lock check
+      // here.
       const updatedAt = new Date().toISOString();
       database
         .update(cards)

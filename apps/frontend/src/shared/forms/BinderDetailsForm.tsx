@@ -12,6 +12,8 @@ import {
 import { RotateCcw } from 'lucide-react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { Tooltip } from '@/shared/feedback';
+
 import type { BinderDetailsFormInput, BinderDetailsFormValues } from './binderDetailsSchema';
 import { BinderSettingsArtPreview, BinderSettingsLayoutPreview } from './BinderSettingsPreview';
 
@@ -76,7 +78,7 @@ function Field({
 // their defaults (each row wires its own `onClick` handler with the
 // specific fields/values it owns). Colocated here rather than promoted to
 // `src/shared/buttons/` since this file is still its only consumer. The
-// "Reset to default" label is exposed via `title` (a native hover tooltip)
+// "Reset to default" label is exposed via the shared instant `Tooltip`
 // and `aria-label` rather than always-visible text, since the icon alone
 // is enough once its meaning is established.
 //
@@ -111,28 +113,29 @@ function ResetButton({
         {'\u00A0'}
       </span>
       <div className="flex h-10 items-center">
-        <button
-          type="button"
-          disabled={disabled}
-          onClick={(event) => {
-            onClick();
-            // The "Edit Details" tab (story 7) saves dirty fields on
-            // `blur`, bubbling up from whichever field loses focus - but
-            // resetting via this button doesn't blur an input itself, so
-            // without an explicit blur here the just-reset values would
-            // sit dirty and unsaved until the user happened to focus/blur
-            // something else. Blurring the button immediately after
-            // applying the reset mirrors a normal field edit + blur.
-            event.currentTarget.blur();
-          }}
-          title="Reset to default"
-          aria-label={`Reset ${label} to default`}
-          className={`text-neutral-500 hover:text-primary ${
-            disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-          }`}
-        >
-          <RotateCcw className="size-6" />
-        </button>
+        <Tooltip label="Reset to default">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={(event) => {
+              onClick();
+              // The "Edit Details" tab (story 7) saves dirty fields on
+              // `blur`, bubbling up from whichever field loses focus - but
+              // resetting via this button doesn't blur an input itself, so
+              // without an explicit blur here the just-reset values would
+              // sit dirty and unsaved until the user happened to focus/blur
+              // something else. Blurring the button immediately after
+              // applying the reset mirrors a normal field edit + blur.
+              event.currentTarget.blur();
+            }}
+            aria-label={`Reset ${label} to default`}
+            className={`text-neutral-500 hover:text-primary ${
+              disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+            }`}
+          >
+            <RotateCcw className="size-6" />
+          </button>
+        </Tooltip>
       </div>
     </div>
   );

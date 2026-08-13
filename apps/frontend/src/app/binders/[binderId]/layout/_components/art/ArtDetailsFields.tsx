@@ -5,6 +5,7 @@ import type { ChangeEvent } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
 import type { Binder } from '@/lib/api';
+import { Tooltip } from '@/shared/feedback';
 
 import { ArtGridSelector } from './ArtGridSelector';
 import type { ArtDetailsFormValues } from './artSchema';
@@ -154,15 +155,16 @@ export function ArtDetailsFields({
               className={`${inputClassName} w-full`}
             />
           </label>
-          <button
-            type="button"
-            onClick={onResetBorderStyle}
-            title="Reset to binder settings"
-            aria-label="Reset border style fields to binder settings"
-            className="flex h-10 shrink-0 cursor-pointer items-center text-neutral-500 hover:text-primary"
-          >
-            <RotateCcw className="size-6" />
-          </button>
+          <Tooltip label="Reset to binder settings">
+            <button
+              type="button"
+              onClick={onResetBorderStyle}
+              aria-label="Reset border style fields to binder settings"
+              className="flex h-10 shrink-0 cursor-pointer items-center text-neutral-500 hover:text-primary"
+            >
+              <RotateCcw className="size-6" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 

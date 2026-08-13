@@ -28,8 +28,14 @@ const DEFAULT_SORT_DIRECTION: CardListSortDirection = 'ascending';
 // acquisition mutation from `BinderRouteContext` rather than fetching or
 // mutating anything on its own.
 export default function BinderCardListPage() {
-  const { binder, cards, toggleCardAcquired, pendingCardAcquiredToggleIds } =
-    useBinderRouteContext();
+  const {
+    binder,
+    cards,
+    toggleCardAcquired,
+    pendingCardAcquiredToggleIds,
+    toggleCardsAcquisition,
+    isBulkAcquisitionPending,
+  } = useBinderRouteContext();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<CardListSortOption>(DEFAULT_SORT_OPTION);
@@ -81,6 +87,17 @@ export default function BinderCardListPage() {
     setColumnFilters((current) => ({ ...current, [column]: next }));
   }
 
+  // Story 46's header select-all/deselect-all control: bulk-toggles every
+  // currently visible (search/filter-derived) card to `acquired` in one
+  // request, rather than the currently displayed set including cards
+  // hidden by the active search/filters.
+  function handleToggleAllAcquisition(acquired: boolean) {
+    toggleCardsAcquisition(
+      visibleCards.map((card) => card.id),
+      acquired,
+    );
+  }
+
   return (
     <div className="flex flex-col gap-2 px-8 pb-8">
       <div className="mt-4 flex items-center gap-4">
@@ -114,6 +131,8 @@ export default function BinderCardListPage() {
         onColumnFilterChange={handleColumnFilterChange}
         onToggleAcquired={toggleCardAcquired}
         pendingCardAcquiredToggleIds={pendingCardAcquiredToggleIds}
+        onToggleAllAcquisition={handleToggleAllAcquisition}
+        isBulkAcquisitionPending={isBulkAcquisitionPending}
       />
     </div>
   );

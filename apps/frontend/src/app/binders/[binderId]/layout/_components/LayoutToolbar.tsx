@@ -2,6 +2,8 @@
 
 import { Check, Images, Printer, Redo2, Undo2 } from 'lucide-react';
 
+import { Tooltip } from '@/shared/feedback';
+
 // Shared styling for the direct page-number input, matching
 // styling.instructions.md's "Forms & inputs" section (neutral-800 fill,
 // primary border on focus), sized narrow and centered for a short numeric
@@ -187,27 +189,29 @@ export function LayoutToolbar({
           is itself unavailable. */}
       {!isLocked && (
         <>
-          <button
-            type="button"
-            onClick={onUndo}
-            disabled={!canUndoLayoutMovement || isMovePending}
-            aria-label="Undo layout movement"
-            title="Undo"
-            className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Undo2 className="size-5" />
-          </button>
+          <Tooltip label="Undo">
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={!canUndoLayoutMovement || isMovePending}
+              aria-label="Undo layout movement"
+              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Undo2 className="size-5" />
+            </button>
+          </Tooltip>
 
-          <button
-            type="button"
-            onClick={onRedo}
-            disabled={!canRedoLayoutMovement || isMovePending}
-            aria-label="Redo layout movement"
-            title="Redo"
-            className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Redo2 className="size-5" />
-          </button>
+          <Tooltip label="Redo">
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedoLayoutMovement || isMovePending}
+              aria-label="Redo layout movement"
+              className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Redo2 className="size-5" />
+            </button>
+          </Tooltip>
         </>
       )}
 
@@ -216,16 +220,17 @@ export function LayoutToolbar({
           mutate the binder), disabled only while its own export is in
           flight. Icon-only, so it relies on `aria-label`/`title` for its
           accessible name rather than visible text. */}
-      <button
-        type="button"
-        onClick={onExportPdf}
-        disabled={isExportingPdf}
-        aria-label="Print to PDF"
-        title="Print to PDF"
-        className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        <Printer className="size-5" />
-      </button>
+      <Tooltip label="Print to PDF">
+        <button
+          type="button"
+          onClick={onExportPdf}
+          disabled={isExportingPdf}
+          aria-label="Print to PDF"
+          className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Printer className="size-5" />
+        </button>
+      </Tooltip>
 
       {/* Story 30's print-art button: opens the selection modal rather
           than immediately generating a PDF, and (like `Printer` above) is
@@ -233,16 +238,19 @@ export function LayoutToolbar({
           tooltip when the binder has no placed multi-slot art at all
           (planning.md: "the modal cannot be opened"). Icon-only, so it
           relies on `aria-label`/`title` for its accessible name. */}
-      <button
-        type="button"
-        onClick={onOpenPrintArtModal}
-        disabled={placedArtCount === 0}
-        aria-label="Print art to PDF"
-        title={placedArtCount === 0 ? 'Place multi-slot art to enable this' : 'Print art to PDF'}
-        className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+      <Tooltip
+        label={placedArtCount === 0 ? 'Place multi-slot art to enable this' : 'Print art to PDF'}
       >
-        <Images className="size-5" />
-      </button>
+        <button
+          type="button"
+          onClick={onOpenPrintArtModal}
+          disabled={placedArtCount === 0}
+          aria-label="Print art to PDF"
+          className="flex cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Images className="size-5" />
+        </button>
+      </Tooltip>
     </div>
   );
 }

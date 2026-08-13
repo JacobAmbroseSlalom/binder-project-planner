@@ -1,9 +1,10 @@
 'use client';
 
+import { Printer } from 'lucide-react';
 import { useState } from 'react';
 
 import { exportCardsListPdf } from '@/lib/api';
-import { useSaveStatusToast } from '@/shared/feedback';
+import { Tooltip, useSaveStatusToast } from '@/shared/feedback';
 
 // Story 37's Card List export button: generates and downloads a Card List
 // PDF for the tab's currently visible (search/sort/filter-derived) cards,
@@ -46,16 +47,16 @@ export function ExportCardListButton({
   const isDisabled = isExporting || cardIds.length === 0;
 
   return (
-    <button
-      type="button"
-      onClick={handleExport}
-      disabled={isDisabled}
-      title={cardIds.length === 0 ? 'No cards to export' : 'Export as PDF'}
-      className={`shrink-0 rounded-standard bg-primary px-3 py-2 font-bold text-neutral-100 hover:brightness-110 ${
-        isDisabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-      }`}
-    >
-      Export PDF
-    </button>
+    <Tooltip label={cardIds.length === 0 ? 'No cards to export' : 'Export as PDF'}>
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={isDisabled}
+        aria-label="Export card list as PDF"
+        className="flex shrink-0 cursor-pointer items-center justify-center rounded-standard bg-primary p-2 text-neutral-100 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <Printer className="size-5" />
+      </button>
+    </Tooltip>
   );
 }

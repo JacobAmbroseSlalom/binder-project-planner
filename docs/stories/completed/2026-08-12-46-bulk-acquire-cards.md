@@ -1,6 +1,6 @@
 # 46. Bulk acquire cards
 
-**Status:** Not started
+**Status:** Done (2026-08-12 21:59 EDT)
 
 #### Acceptance criteria
 
@@ -34,9 +34,9 @@
   otherwise the unacquired icon - matching Story 37's existing `deriveVisibleCards`
   filtering.
 - The backend doesn't yet support multi-card acquisition updates - `PATCH
-  /cards/{cardId}` (Story 36) only ever updates one card at a time. This story needs a
+/cards/{cardId}` (Story 36) only ever updates one card at a time. This story needs a
   new bulk endpoint (e.g. `PATCH /binders/{binderId}/cards/acquisition` accepting `{
-  "cardIds": string[], "acquired": boolean }`), mirroring the existing bulk-create
+"cardIds": string[], "acquired": boolean }`), mirroring the existing bulk-create
   contract (`POST /binders/{binderId}/cards/bulk`, Stories 17/18) rather than the
   client looping individual `PATCH /cards/{cardId}` requests.
 - Applying the bulk change reuses the same `useSaveStatusToast` save-status feedback

@@ -633,6 +633,53 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /binders/{binderId}/cards/acquisition:
+    parameters:
+      - $ref: '#/components/parameters/binderId'
+    patch:
+      operationId: updateCardsAcquisition
+      summary: Bulk-update multiple cards' acquisition state
+      description: >-
+        Replaces `acquired` for every card identified by `cardIds` in one
+        request (story 46), powering the Card List tab's (story 37)
+        select-all/deselect-all header control instead of the client
+        looping individual `PATCH /cards/{cardId}` requests. Every listed
+        card must belong to the path binder. Unlike every other binder-
+        scoped mutation, this request remains allowed even when the binder
+        is locked, matching the Card List tab's existing lock-state
+        exemption (story 32).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCardsAcquisitionRequest'
+      responses:
+        '200':
+          description: The complete persisted representation of every updated card.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Card'
+        '400':
+          description: >-
+            The binderId path parameter is not a well-formed UUID, the
+            request body did not match the documented schema, or one or
+            more cardIds don't belong to the path binder.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: >-
+            No binder exists with the given id, or one or more cardIds
+            don't identify an existing card.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /card-catalog/search:
     get:
       operationId: searchCardCatalog
@@ -2499,6 +2546,27 @@ components:
       required:
         - acquired
       properties:
+        acquired:
+          type: boolean
+    UpdateCardsAcquisitionRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `PATCH /binders/{binderId}/cards/acquisition`'s request body
+        (story 46): bulk-replaces `acquired` for every listed card in one
+        request, mirroring `UpdateCardAcquiredRequest`'s single-card shape
+        but applied to many cards at once - used by the Card List tab's
+        (story 37) select-all/deselect-all header control.
+      required:
+        - cardIds
+        - acquired
+      properties:
+        cardIds:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
         acquired:
           type: boolean
     TcgDexCatalogCard:

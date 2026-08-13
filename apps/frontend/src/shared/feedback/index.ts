@@ -12,3 +12,12 @@ export type { FailedToastDetails, ToastEntry, ToastStatus } from './types';
 // `useDelayedLoading` wherever the app waits on a backend request.
 export { LoadingIndicator } from './LoadingIndicator';
 export { useDelayedLoading } from './useDelayedLoading';
+
+// The shared instant hover/focus tooltip: wrap an icon-only button (or any
+// single trigger) to replace the native `title` attribute's slow
+// browser-default hover delay.
+export { Tooltip } from './Tooltip';
+
+// The shared instant hover/focus enlarged-image preview: wrap a small
+// thumbnail trigger to show a much larger version of the same image.
+export { ImagePreview } from './ImagePreview';

@@ -3,6 +3,8 @@
 import { Check, ListFilter } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 
+import { Tooltip } from '@/shared/feedback';
+
 import type { CardListFilterOption } from '../_lib/cardListDerivation';
 
 // Story 37's per-column filter dropdown, used for each of the card list
@@ -91,19 +93,20 @@ export function ColumnFilterDropdown({
 
   return (
     <div ref={containerRef} className="relative inline-block">
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={isOpen}
-        aria-label={`Filter by ${columnLabel}`}
-        title={`Filter by ${columnLabel}`}
-        onClick={() => setIsOpen((open) => !open)}
-        className={`flex size-6 cursor-pointer items-center justify-center rounded-standard hover:bg-neutral-700 ${
-          isFiltered ? 'text-primary' : 'text-neutral-500'
-        }`}
-      >
-        <ListFilter className="size-4" aria-hidden="true" />
-      </button>
+      <Tooltip label={`Filter by ${columnLabel}`}>
+        <button
+          type="button"
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-label={`Filter by ${columnLabel}`}
+          onClick={() => setIsOpen((open) => !open)}
+          className={`flex size-6 cursor-pointer items-center justify-center rounded-standard hover:bg-neutral-700 ${
+            isFiltered ? 'text-primary' : 'text-neutral-500'
+          }`}
+        >
+          <ListFilter className="size-4" aria-hidden="true" />
+        </button>
+      </Tooltip>
       {isOpen && (
         <div
           role="listbox"
