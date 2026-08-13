@@ -25,6 +25,12 @@ interface LoadingIndicatorProps {
   // spinner as a page/list's primary loading state can opt into `'8'` or
   // `'10'` for more prominence.
   size?: LoadingIndicatorSize;
+  // Overrides the wrapper's default `justify-center p-8` (a full-width,
+  // padded block suited to standing alone as a list/page's primary
+  // loading state). Pass a lighter className (e.g. `''`) to render the
+  // spinner inline alongside other controls - such as a toolbar row -
+  // without it claiming a whole row's height/width for itself.
+  className?: string;
 }
 
 // The shared inline loading indicator (story 6: "Add reusable loading
@@ -34,9 +40,9 @@ interface LoadingIndicatorProps {
 // polite-live-region accessibility behavior already used by the "saving"
 // toast (story 3), satisfying this story's "selected library's default
 // accessibility behavior" requirement without a UI component library.
-export function LoadingIndicator({ label, size = '6' }: LoadingIndicatorProps) {
+export function LoadingIndicator({ label, size = '6', className }: LoadingIndicatorProps) {
   return (
-    <div role="status" className="flex justify-center p-8">
+    <div role="status" className={`flex items-center ${className ?? 'justify-center p-8'}`}>
       <Loader2
         className={`${SPINNER_SIZE_CLASSES[size]} animate-spin text-neutral-500`}
         aria-hidden="true"

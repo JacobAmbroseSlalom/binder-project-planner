@@ -252,6 +252,50 @@ export interface paths {
         patch: operations["updateCardsAcquisition"];
         trace?: never;
     };
+    "/binders/{binderId}/cards/prices/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch pokemontcg.io price data for a set of cards
+         * @description Requests current pricing data from pokemontcg.io (story 38) for exactly the card ids supplied - the Card List tab's "Fetch card prices" button sends the card ids its active search/sort/filter state currently produces, not every card in the binder. Every listed card must belong to the path binder. The backend resolves each card's matching pokemontcg.io card (by its TCGdex providerSetId or set name, combined with its localNumber) and returns normalized per-card price data; a card the backend can't confidently match, or that has no TCGplayer price data, is reported with an empty variants array rather than failing the whole request. Nothing is persisted by this endpoint - fetched prices are client-side review state until `PATCH /binders/ {binderId}/cards/prices` commits them.
+         */
+        post: operations["fetchCardPrices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/binders/{binderId}/cards/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Save reviewed card prices
+         * @description Commits every reviewed row's new price at once (story 38's "Save all" action), setting each card's `price`, `isManualPrice`, and `priceUpdatedAt`. Each submitted price is applied independently, so a failure on one card rolls back only that card rather than the whole batch, mirroring `POST /binders/{binderId}/cards/bulk`'s per-item outcome pattern.
+         */
+        patch: operations["updateCardPrices"];
+        trace?: never;
+    };
     "/card-catalog/search": {
         parameters: {
             query?: never;
@@ -1042,6 +1086,47 @@ export interface components {
             /** @description Present only when `status` is `failed`. */
             problem?: components["schemas"]["ProblemDetails"];
         };
+        /** @description `POST /binders/{binderId}/cards/prices/fetch`'s request body (story 38): requests pokemontcg.io price data for exactly this set of card ids - the Card List's currently filtered/displayed cards, not every card in the binder. */
+        CardPriceFetchRequest: {
+            cardIds: string[];
+        };
+        /** @description One pokemontcg.io print variant's normalized price data for a card (story 38), e.g. `holofoil`, `normal`, `reverseHolofoil`. Only variant keys pokemontcg.io actually reports for that card are included. */
+        CardPriceVariant: {
+            variantKey: string;
+            /** @description US dollars, to two decimal places. Null when unavailable. */
+            marketPrice: number | null;
+            /** @description US dollars, to two decimal places. Null when unavailable. */
+            lowPrice: number | null;
+        };
+        /** @description One requested card's price-fetch outcome (story 38), preserving the request's `cardIds` order. An empty `variants` array means the card couldn't be confidently matched to a pokemontcg.io card, or it matched but pokemontcg.io has no TCGplayer price data for it - both display identically on the frontend (`--` for market/lowest price and the price-change indicator). `tcgplayerUrl` is the same TCGplayer product-page link for every variant of this card (pokemontcg.io only exposes one per card, not per variant); it's a best-guess link inferred from the card's pokemontcg.io id even when `variants` is empty, and null only when no pokemontcg.io set could be resolved for this card at all. */
+        CardPriceFetchResult: {
+            /** Format: uuid */
+            cardId: string;
+            variants: components["schemas"]["CardPriceVariant"][];
+            /** Format: uri */
+            tcgplayerUrl: string | null;
+        };
+        /** @description One reviewed row of `PATCH /binders/{binderId}/cards/prices`'s request body (story 38): the new-price value being committed for one card, plus whether it was hand-edited. */
+        CardPriceUpdate: {
+            /** Format: uuid */
+            cardId: string;
+            /** @description US dollars, to two decimal places. */
+            price: number;
+            isManualPrice: boolean;
+        };
+        /** @description `PATCH /binders/{binderId}/cards/prices`'s request body (story 38): commits every reviewed row's new-price value at once (the "Save all" action). */
+        UpdateCardPricesRequest: {
+            prices: components["schemas"]["CardPriceUpdate"][];
+        };
+        /** @description One submitted price's independent save outcome (story 38), mirroring `BulkCardOutcome`'s "created"/"failed" pattern and preserving the submitted array's order regardless of processing completion order. */
+        CardPriceUpdateOutcome: {
+            /** @enum {string} */
+            status: "updated" | "failed";
+            /** @description Present only when `status` is `updated`. */
+            card?: components["schemas"]["Card"];
+            /** @description Present only when `status` is `failed`. */
+            problem?: components["schemas"]["ProblemDetails"];
+        };
         /** @description Creates a manually-entered custom binder card via `multipart/ form-data` (story 12). The backend assigns `source: 'custom'` server-side, never accepts TCGdex identity fields, and computes a SHA-256 digest of the uploaded image while streaming it to temporary storage so identical uploads share one image asset. Placement is optional: supply `physicalPage`, `row`, and `column` together for a placed card, or omit all three for an unplaced card (story 15's unplaced-cards section) - supplying only some of the three is rejected. */
         CreateCustomCardRequest: {
             /** @description Trimmed and required after trimming on the backend. */
@@ -1085,6 +1170,15 @@ export interface components {
             imageUrl: string;
             /** @description Story 36: whether this card has been acquired. Defaults to `false` for a newly created card and is updated through `PATCH /cards/{cardId}`'s acquisition-update request body. */
             acquired: boolean;
+            /** @description Story 38: US dollars, to two decimal places. Null until a price has ever been fetched or manually entered for this card; set by `PATCH /binders/{binderId}/cards/prices`. */
+            price: number | null;
+            /** @description Story 38: whether `price` was hand-edited by the user (true) rather than auto-filled from an unedited pokemontcg.io market or lowest price (false) at the moment it was last saved. Defaults to `false` for a newly created card. */
+            isManualPrice: boolean;
+            /**
+             * Format: date-time
+             * @description Story 38: set whenever `price` changes; null until then.
+             */
+            priceUpdatedAt: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -2040,6 +2134,103 @@ export interface operations {
                 };
             };
             /** @description No binder exists with the given id, or one or more cardIds don't identify an existing card. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    fetchCardPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CardPriceFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-card price data, in the same order as the request's cardIds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPriceFetchResult"][];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, the request body did not match the documented schema, or one or more cardIds don't belong to the path binder. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id, or one or more cardIds don't identify an existing card. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateCardPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderId: components["parameters"]["binderId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCardPricesRequest"];
+            };
+        };
+        responses: {
+            /** @description Every submitted price was saved successfully. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPriceUpdateOutcome"][];
+                };
+            };
+            /** @description One or more submitted prices failed to save, including a batch in which every price failed. The response body still contains an outcome entry for every submitted price. */
+            207: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CardPriceUpdateOutcome"][];
+                };
+            };
+            /** @description The binderId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No binder exists with the given id. */
             404: {
                 headers: {
                     [name: string]: unknown;

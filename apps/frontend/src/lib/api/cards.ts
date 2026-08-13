@@ -4,6 +4,9 @@ import type {
   BulkTargetPlacement,
   Card,
   CardPositionUpdate,
+  CardPriceFetchResult,
+  CardPriceUpdate,
+  CardPriceUpdateOutcome,
   CardSearchLanguage,
   CardSearchResponse,
   TcgDexCatalogCard,
@@ -261,6 +264,56 @@ export async function updateCardsAcquisition(
 export async function duplicateCard(cardId: string, idempotencyKey: string): Promise<Card> {
   const { data, error } = await apiClient.POST('/cards/{cardId}/duplicate', {
     params: { path: { cardId }, header: { 'Idempotency-Key': idempotencyKey } },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+// Requests current pokemontcg.io price data for `cardIds` through
+// `POST /binders/{binderId}/cards/prices/fetch` (story 38's "Fetch card
+// prices" button). Nothing is persisted by this endpoint - the returned
+// per-card variants are purely client-side review state until
+// `updateCardPrices` below commits them. A card the backend couldn't
+// confidently match to a pokemontcg.io card comes back with an empty
+// `variants` array rather than failing the whole request. Throws the
+// Problem Details body only for a request-wide failure (e.g. a cardId
+// that doesn't belong to this binder).
+export async function fetchCardPrices(
+  binderId: string,
+  cardIds: string[],
+  signal?: AbortSignal,
+): Promise<CardPriceFetchResult[]> {
+  const { data, error } = await apiClient.POST('/binders/{binderId}/cards/prices/fetch', {
+    params: { path: { binderId } },
+    body: { cardIds },
+    signal,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+// Commits every reviewed row's new price at once through
+// `PATCH /binders/{binderId}/cards/prices` (story 38's "Save all" action).
+// Each submitted price is applied independently (mirroring
+// `createCardsBulk`'s per-item outcome pattern), so a failure on one
+// card's price doesn't block the rest of the batch from saving - the
+// backend's `207 Multi-Status` response for a partial failure is still a
+// successful fetch, reported through the returned outcome array instead.
+export async function updateCardPrices(
+  binderId: string,
+  prices: CardPriceUpdate[],
+): Promise<CardPriceUpdateOutcome[]> {
+  const { data, error } = await apiClient.PATCH('/binders/{binderId}/cards/prices', {
+    params: { path: { binderId } },
+    body: { prices },
   });
 
   if (error) {

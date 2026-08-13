@@ -337,9 +337,8 @@ export const cardImageAssets = sqliteTable(
   ],
 );
 
-// A binder-owned card (stories 11 and 12). Acquisition/pricing fields
-// (stories 36/38) aren't modeled yet; only what TCGdex and custom card
-// creation/placement need exists so far.
+// A binder-owned card (stories 11 and 12), plus acquisition (story 36)
+// and pricing (story 38) fields.
 export const cards = sqliteTable(
   'cards',
   {
@@ -372,6 +371,19 @@ export const cards = sqliteTable(
     // single or bulk) - mirrors `locked`'s SQLite-boolean-as-integer
     // storage convention above.
     acquired: integer({ mode: 'boolean' }).notNull().default(false),
+    // Story 38: "Add card finances". `priceCents` is the saved price in
+    // integer cents (mirroring `finance/currency.ts`'s cents-storage/
+    // decimal-dollars-at-the-API-boundary convention for every other
+    // monetary value), null until a price has ever been fetched or
+    // manually entered. `isManualPrice` tracks whether that saved value
+    // was hand-edited (true) versus auto-filled from an unedited
+    // pokemontcg.io market/lowest price (false) at the moment it was last
+    // saved via `PATCH /binders/{binderId}/cards/prices`. `priceUpdatedAt`
+    // is set whenever `priceCents` changes, displayed alongside it on the
+    // Card List.
+    priceCents: integer(),
+    isManualPrice: integer({ mode: 'boolean' }).notNull().default(false),
+    priceUpdatedAt: text(),
     createdAt: text().notNull(),
     updatedAt: text().notNull(),
   },

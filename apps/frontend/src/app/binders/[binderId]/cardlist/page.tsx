@@ -1,12 +1,15 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+
+import { LoadingIndicator } from '@/shared/feedback';
+import { useSetNavigationGuardMessage } from '@/shared/navigation';
 
 import { useBinderRouteContext } from '../BinderRouteContext';
 import { AppliedFiltersRow } from './_components/AppliedFiltersRow';
 import { CardListTable } from './_components/CardListTable';
+import { CardListTotals } from './_components/CardListTotals';
 import { ExportCardListButton } from './_components/ExportCardListButton';
-import { ProgressTracker } from './_components/ProgressTracker';
 import {
   createDefaultColumnFilters,
   deriveVisibleCards,
@@ -15,22 +18,32 @@ import {
   type CardListSortDirection,
   type CardListSortOption,
 } from './_lib/cardListDerivation';
+import { useCardPriceReview } from './useCardPriceReview';
 
 // The default sort - Set + Number, ascending - used both on first render
 // and whenever "Reset sort" is clicked.
 const DEFAULT_SORT_OPTION: CardListSortOption = 'setAndNumber';
 const DEFAULT_SORT_DIRECTION: CardListSortDirection = 'ascending';
 
+// Shown while a price-review-in-progress leaves unsaved new-price values,
+// both for the in-app navigation guard (tab switches, the app header's
+// home link) and the browser-native `beforeunload` prompt (tab close/
+// refresh/external navigation).
+const UNSAVED_PRICE_REVIEW_MESSAGE = 'You have unsaved card price changes. Leave without saving?';
+
 // The "Card List" tab (story 37): lists every card in the binder (both
 // placed and unplaced) with a search box, sortable/filterable columns, a
 // progress tracker, per-entry acquisition toggling, and a print-ready PDF
 // export - reusing the already-loaded `cards` array and story 36's
 // acquisition mutation from `BinderRouteContext` rather than fetching or
-// mutating anything on its own.
+// mutating anything on its own. Story 38 adds a price-review workflow
+// ("Fetch card prices" -> adjust each row's variant/new-price -> "Save
+// all"/"Cancel") plus a totals row, both driven by `useCardPriceReview`.
 export default function BinderCardListPage() {
   const {
     binder,
     cards,
+    setCards,
     toggleCardAcquired,
     pendingCardAcquiredToggleIds,
     toggleCardsAcquisition,
@@ -46,6 +59,38 @@ export default function BinderCardListPage() {
   const [columnFilters, setColumnFilters] = useState<CardListColumnFilters>(() =>
     createDefaultColumnFilters(cards),
   );
+
+  const {
+    isPriceReviewActive,
+    isFetchingCardPrices,
+    isSavingCardPrices,
+    priceReviewRows,
+    startPriceReview,
+    cancelPriceReview,
+    updateReviewVariant,
+    setReviewPrice,
+    savePriceReview,
+  } = useCardPriceReview({ binderId: binder.id, cards, setCards });
+
+  // Registers the in-app "navigate away" guard for the whole lifetime of
+  // an active price review (both while fetching and while the user is
+  // still adjusting rows) - clears itself automatically on unmount or once
+  // the review ends (save/cancel).
+  useSetNavigationGuardMessage(isPriceReviewActive, UNSAVED_PRICE_REVIEW_MESSAGE);
+
+  // The browser-native equivalent of the above guard, for a tab close,
+  // refresh, or typed/bookmarked navigation the in-app guard can't
+  // intercept.
+  useEffect(() => {
+    if (!isPriceReviewActive) return;
+
+    function handleBeforeUnload(event: BeforeUnloadEvent) {
+      event.preventDefault();
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isPriceReviewActive]);
 
   const visibleCards = useMemo(
     () =>
@@ -98,18 +143,69 @@ export default function BinderCardListPage() {
     );
   }
 
+  // Starts the price-review workflow (story 38): fetches prices only for
+  // the currently filtered/displayed cards (`visibleCards`), per this
+  // story's AC - the active search/sort/filter state is left alone rather
+  // than cleared, since it's what determines this review's scope.
+  function handleFetchCardPrices() {
+    startPriceReview(visibleCards.map((card) => card.id));
+  }
+
+  function handlePriceInputChange(cardId: string, rawValue: string) {
+    const parsed = rawValue.trim() === '' ? null : Number.parseFloat(rawValue);
+    setReviewPrice(cardId, parsed === null || Number.isNaN(parsed) ? null : parsed, 'manual');
+  }
+
   return (
     <div className="flex flex-col gap-2 px-8 pb-8">
-      <div className="mt-4 flex items-center gap-4">
+      <CardListTotals
+        allCards={cards}
+        unacquiredCards={cards.filter((card) => !card.acquired)}
+        filteredCards={visibleCards}
+        className="mt-4 justify-center text-center"
+      />
+
+      <div className="flex items-center gap-4">
         <input
           type="text"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
           placeholder="Search by name, set, number, or variation"
           aria-label="Search the card list"
-          className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
+          disabled={isPriceReviewActive}
+          className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         />
-        <ProgressTracker cards={cards} />
+        {isPriceReviewActive ? (
+          <>
+            <button
+              type="button"
+              disabled={isSavingCardPrices}
+              onClick={cancelPriceReview}
+              className="cursor-pointer rounded-standard px-4 py-2 font-bold text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={isFetchingCardPrices || isSavingCardPrices}
+              onClick={savePriceReview}
+              className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Save all
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={handleFetchCardPrices}
+            className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold whitespace-nowrap hover:brightness-110"
+          >
+            Fetch card prices
+          </button>
+        )}
+        {isFetchingCardPrices && (
+          <LoadingIndicator label="Fetching card prices…" size="5" className="" />
+        )}
         <ExportCardListButton binderId={binder.id} cardIds={visibleCards.map((card) => card.id)} />
       </div>
 
@@ -133,6 +229,17 @@ export default function BinderCardListPage() {
         pendingCardAcquiredToggleIds={pendingCardAcquiredToggleIds}
         onToggleAllAcquisition={handleToggleAllAcquisition}
         isBulkAcquisitionPending={isBulkAcquisitionPending}
+        priceReview={
+          isPriceReviewActive
+            ? {
+                isFetching: isFetchingCardPrices,
+                rows: priceReviewRows,
+                onVariantChange: updateReviewVariant,
+                onPriceInputChange: handlePriceInputChange,
+                onFillPrice: setReviewPrice,
+              }
+            : null
+        }
       />
     </div>
   );

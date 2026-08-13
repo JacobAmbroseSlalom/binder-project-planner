@@ -1,4 +1,5 @@
 import type { Card } from '@/lib/api';
+import { formatCurrency } from '@/shared/finance/formatCurrency';
 
 // Story 37's Card List tab: all client-side derivation logic (search,
 // sort, and per-column filtering) lives here as pure functions, kept
@@ -6,10 +7,14 @@ import type { Card } from '@/lib/api';
 // components' own rendering, per `docs/data-types.md`'s `CardListState`
 // shape.
 
-// The 5 columns that get their own clickable sort header and filter
-// dropdown. "Set + Number" (the default combined sort) has no column of
-// its own - see `CardListSortOption` below.
-export type CardListColumnKey = 'name' | 'set' | 'number' | 'variation' | 'acquisition';
+// The 7 columns that get their own clickable sort header and filter
+// dropdown - the original 5 (story 37) plus `price`/`priceUpdatedAt`
+// (story 38's saved-price columns, added here after the fact so they get
+// the same sort/filter treatment as every other column). "Set + Number"
+// (the default combined sort) has no column of its own - see
+// `CardListSortOption` below.
+export type CardListColumnKey =
+  'name' | 'set' | 'number' | 'variation' | 'acquisition' | 'price' | 'priceUpdatedAt';
 
 // One more option than `CardListColumnKey` has entries: `setAndNumber` is
 // the default combined sort with no single clickable column header (per
@@ -39,7 +44,26 @@ export function createDefaultColumnFilters(cards: readonly Card[]): CardListColu
     acquisition: new Set(
       getDistinctColumnValues(cards, 'acquisition').map((option) => option.value),
     ),
+    price: new Set(getDistinctColumnValues(cards, 'price').map((option) => option.value)),
+    priceUpdatedAt: new Set(
+      getDistinctColumnValues(cards, 'priceUpdatedAt').map((option) => option.value),
+    ),
   };
+}
+
+// `priceUpdatedAt`'s filter groups cards by calendar day (matching what
+// the table cell actually displays via `toLocaleDateString`) rather than
+// by exact timestamp, since two cards updated seconds apart on the same
+// day would otherwise never share a filter value. Built from the date's
+// local (not UTC) year/month/day so it lines up with `toLocaleDateString`
+// exactly, and zero-padded so plain string comparison still sorts
+// chronologically.
+function toLocalDateKey(isoTimestamp: string): string {
+  const date = new Date(isoTimestamp);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 // This card's own filter value for `column` - the same value used both to
@@ -57,6 +81,10 @@ export function getColumnFilterValue(card: Card, column: CardListColumnKey): str
       return card.variation ?? NONE_FILTER_VALUE;
     case 'acquisition':
       return card.acquired ? 'acquired' : 'unacquired';
+    case 'price':
+      return card.price === null ? NONE_FILTER_VALUE : card.price.toString();
+    case 'priceUpdatedAt':
+      return card.priceUpdatedAt === null ? NONE_FILTER_VALUE : toLocalDateKey(card.priceUpdatedAt);
   }
 }
 
@@ -67,9 +95,10 @@ export interface CardListFilterOption {
 
 // This column's distinct values found among every binder card (not just
 // the currently-visible subset), for populating its filter dropdown's
-// option list. Sorted so "(None)" always trails the real values, matching
+// option list. "(None)" always leads the real values here (the opposite of
 // the "always sorts last" convention used for sorting the same nullable
-// columns below.
+// columns below), so it's easy to find/toggle at the top of the dropdown
+// rather than scrolling to the bottom.
 export function getDistinctColumnValues(
   cards: readonly Card[],
   column: CardListColumnKey,
@@ -84,6 +113,40 @@ export function getDistinctColumnValues(
     ];
   }
 
+  if (column === 'price' || column === 'priceUpdatedAt') {
+    // Unlike the other columns, this filter's value (raw price/local date
+    // key, for correct numeric/chronological sorting and exact-match
+    // testing) and its label (the same formatted text the table cell
+    // itself displays) come from different transforms of the same card
+    // field, so they can't share one `value === label` mapping the way
+    // the generic branch below does - build the value/label pairing
+    // directly from each distinct card instead.
+    const labelByValue = new Map<string, string>();
+    for (const card of cards) {
+      const value = getColumnFilterValue(card, column);
+      if (value === NONE_FILTER_VALUE || labelByValue.has(value)) continue;
+      const label =
+        column === 'price'
+          ? formatCurrency(card.price as number)
+          : new Date(card.priceUpdatedAt as string).toLocaleDateString();
+      labelByValue.set(value, label);
+    }
+    const hasNone = cards.some((card) => getColumnFilterValue(card, column) === NONE_FILTER_VALUE);
+
+    const sortedEntries = [...labelByValue.entries()].sort(([a], [b]) =>
+      column === 'price' ? compareNumberStrings(a, b) : a.localeCompare(b),
+    );
+
+    const options: CardListFilterOption[] = sortedEntries.map(([value, label]) => ({
+      value,
+      label,
+    }));
+    if (hasNone) {
+      options.unshift({ value: NONE_FILTER_VALUE, label: '(None)' });
+    }
+    return options;
+  }
+
   const values = new Set(cards.map((card) => getColumnFilterValue(card, column)));
   const hasNone = values.has(NONE_FILTER_VALUE);
   values.delete(NONE_FILTER_VALUE);
@@ -94,7 +157,7 @@ export function getDistinctColumnValues(
 
   const options: CardListFilterOption[] = sortedValues.map((value) => ({ value, label: value }));
   if (hasNone) {
-    options.push({ value: NONE_FILTER_VALUE, label: '(None)' });
+    options.unshift({ value: NONE_FILTER_VALUE, label: '(None)' });
   }
   return options;
 }
@@ -145,11 +208,33 @@ export function matchesCardListFilters(card: Card, filters: CardListColumnFilter
 function compareByColumn(
   a: Card,
   b: Card,
-  column: 'name' | 'set' | 'number' | 'variation',
+  column: 'name' | 'set' | 'number' | 'variation' | 'price' | 'priceUpdatedAt',
   direction: CardListSortDirection,
 ): number {
   if (column === 'name') {
     const cmp = a.name.localeCompare(b.name);
+    return direction === 'ascending' ? cmp : -cmp;
+  }
+
+  if (column === 'price') {
+    const aValue = a.price;
+    const bValue = b.price;
+    if (aValue === null && bValue === null) return 0;
+    if (aValue === null) return 1;
+    if (bValue === null) return -1;
+    const cmp = aValue - bValue;
+    return direction === 'ascending' ? cmp : -cmp;
+  }
+
+  if (column === 'priceUpdatedAt') {
+    const aValue = a.priceUpdatedAt;
+    const bValue = b.priceUpdatedAt;
+    if (aValue === null && bValue === null) return 0;
+    if (aValue === null) return 1;
+    if (bValue === null) return -1;
+    // ISO timestamps compare correctly under plain string ordering, same
+    // as `createdAt`'s tiebreaker comparison below.
+    const cmp = aValue.localeCompare(bValue);
     return direction === 'ascending' ? cmp : -cmp;
   }
 

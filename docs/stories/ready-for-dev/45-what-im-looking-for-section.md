@@ -34,8 +34,7 @@
   - For a card referencing a binder card, removing it only removes the reference; the
     original card is untouched on its binder's Card List.
 - An entry that references a binder card additionally has a "Mark as acquired &
-  remove" action: it sets that card's `acquired` state to `true` on its binder (Story
-  36) and removes the entry from the What I'm Looking For list in one action. A card
+  remove" action: it sets that card's `acquired` state to `true` on its binder (Story 36) and removes the entry from the What I'm Looking For list in one action. A card
   added directly via "Add card" (not linked to any binder) has no acquired state and
   so has no equivalent action.
 - Rows can be manually reordered via drag and drop, top to bottom, to reflect which
@@ -94,8 +93,7 @@
   else points to that row (including its own `ImageAsset`, cleaned up the same way an
   unreferenced card's image already is).
 - "Mark as acquired & remove" is only offered when `cardId` is set: it updates that
-  card's `acquired` field to `true` through the existing acquisition mutation (Story
-  36) and deletes the `WatchlistEntry` row, ideally as one request so a partial
+  card's `acquired` field to `true` through the existing acquisition mutation (Story 36) and deletes the `WatchlistEntry` row, ideally as one request so a partial
   failure can't leave the entry removed without the card actually marked acquired (or
   vice versa).
 - A persistent link to the What I'm Looking For page is added to the shared

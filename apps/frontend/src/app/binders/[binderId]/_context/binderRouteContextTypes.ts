@@ -7,6 +7,7 @@ import type {
   TcgDexCatalogCard,
   UpdateBinderResult,
 } from '@/lib/api';
+import type { Dispatch, SetStateAction } from 'react';
 
 import type {
   BulkAddFailure,
@@ -26,6 +27,13 @@ import type { LayoutMovementResultFocus } from './useLayoutMovement';
 export interface BinderRouteContextValue {
   binder: Binder;
   cards: Card[];
+  // Story 38: lets the Card List tab's `useCardPriceReview` hook apply its
+  // optimistic price updates (and roll them back on a failed save)
+  // directly to the context's card array, the same way
+  // `useCardMutations`/`useBulkCardAdd`/`useLayoutMovement` already do
+  // internally - exposed here since price review runs from the tab page
+  // itself rather than from a context-owned hook.
+  setCards: Dispatch<SetStateAction<Card[]>>;
   art: Art[];
   // Replaces the context's binder with the backend's authoritative
   // representation, e.g. after the Edit Details tab's `PATCH` succeeds.

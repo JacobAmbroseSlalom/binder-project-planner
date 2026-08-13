@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+
+import { useNavigationGuard } from '@/shared/navigation';
 
 // The binder tabs in display order. "View Financials" was enabled by story
 // 34; "Card List" was enabled by story 37.
@@ -29,6 +31,8 @@ const TAB_JUSTIFY_SELF = [
 // never appear before there's data for them to show.
 export function BinderTabs({ binderId }: { binderId: string }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { isBlocked, confirmNavigation } = useNavigationGuard();
 
   return (
     // A 4-column grid keeps tab hit areas stable as disabled placeholders
@@ -67,6 +71,15 @@ export function BinderTabs({ binderId }: { binderId: string }) {
             href={href}
             aria-current={isActive ? 'page' : undefined}
             className={className}
+            onClick={(event) => {
+              // Story 38: only intercept when a feature (currently just
+              // the Card List tab's price review) has registered an
+              // unsaved-changes guard, and only for a tab switch that
+              // would actually navigate somewhere else.
+              if (!isBlocked || isActive) return;
+              event.preventDefault();
+              confirmNavigation(() => router.push(href));
+            }}
           >
             {label}
           </Link>

@@ -45,3 +45,7 @@ export type CreateHolographicPaperCostEntryRequest =
   components['schemas']['CreateHolographicPaperCostEntryRequest'];
 export type UpdateHolographicPaperCostEntryRequest =
   components['schemas']['UpdateHolographicPaperCostEntryRequest'];
+export type CardPriceVariant = components['schemas']['CardPriceVariant'];
+export type CardPriceFetchResult = components['schemas']['CardPriceFetchResult'];
+export type CardPriceUpdate = components['schemas']['CardPriceUpdate'];
+export type CardPriceUpdateOutcome = components['schemas']['CardPriceUpdateOutcome'];

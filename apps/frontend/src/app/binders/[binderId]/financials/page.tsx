@@ -21,13 +21,14 @@ import {
 } from '@/shared/feedback';
 
 import { useBinderRouteContext } from '../BinderRouteContext';
-import { CardsPlaceholderSection } from './_components/CardsPlaceholderSection';
+import { CardsFinanceSection } from './_components/CardsFinanceSection';
 import {
   computeHolographicPaperCost,
   computePrintingCost,
   computeTimeCost,
   TIME_COST_CATEGORIES,
 } from './_lib/financeCalculations';
+import { computeCardPriceTotal } from '@/shared/finance/computeCardPriceTotal';
 import { PhysicalCostsSection } from './_components/PhysicalCostsSection';
 import { StickyTotals } from './_components/StickyTotals';
 import { TimeCostsSection } from './_components/TimeCostsSection';
@@ -55,7 +56,7 @@ interface FinancialsData {
 // already-loaded `BinderRouteContext`, but fetches finance settings, the 3
 // physical cost-entry catalogs, and the art-print page count itself.
 export default function BinderFinancialsPage() {
-  const { binder, updateBinder } = useBinderRouteContext();
+  const { binder, cards, updateBinder } = useBinderRouteContext();
   const { markFailed, dismiss } = useToastContext();
 
   const [status, setStatus] = useState<LoadStatus>('loading');
@@ -177,8 +178,10 @@ export default function BinderFinancialsPage() {
   const timeCostsTotal = timeCostResults.reduce((sum, result) => sum + result.price, 0);
   const totalHours = timeCostResults.reduce((sum, result) => sum + result.hours, 0);
 
-  // The Cards section is a static placeholder ($0.00) until story 38.
-  const cardsTotal = 0;
+  // The Cards section's sticky total (story 38): the same all-cards saved-
+  // price sum shown in the Cards section below, computed once here so both
+  // places agree.
+  const cardsTotal = computeCardPriceTotal(cards).sum;
 
   return (
     <div className="flex flex-col gap-6 px-8 pb-8">
@@ -268,7 +271,7 @@ export default function BinderFinancialsPage() {
           />
         </div>
         <div className="flex-1">
-          <CardsPlaceholderSection />
+          <CardsFinanceSection cards={cards} />
         </div>
       </div>
     </div>

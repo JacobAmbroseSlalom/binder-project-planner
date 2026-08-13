@@ -10,7 +10,15 @@ import {
 
 // Fixed left-to-right pill order, matching the table's column order (minus
 // the non-filterable thumbnail column).
-const COLUMN_ORDER: CardListColumnKey[] = ['name', 'set', 'number', 'variation', 'acquisition'];
+const COLUMN_ORDER: CardListColumnKey[] = [
+  'name',
+  'set',
+  'number',
+  'variation',
+  'acquisition',
+  'price',
+  'priceUpdatedAt',
+];
 
 // Each column's plural/summary label for its pill - distinct from
 // `CardListTable`'s singular column header labels ("Set" vs "Sets") since
@@ -21,6 +29,8 @@ const COLUMN_PILL_LABELS: Record<CardListColumnKey, string> = {
   number: 'Numbers',
   variation: 'Variations',
   acquisition: 'Acquisition',
+  price: 'Prices',
+  priceUpdatedAt: 'Price updated dates',
 };
 
 // Above this many selected values, a pill shows a count ("5 Selected")

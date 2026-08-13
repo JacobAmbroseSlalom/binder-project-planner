@@ -8,6 +8,12 @@
 // application-owned defaults.
 import type { TimeCosts } from '@/lib/api';
 
+// Re-exported so this file's existing consumers (every section of the
+// "View Financials" tab) keep importing `formatCurrency` from here,
+// without needing to know it's moved to a shared location for story 38's
+// Card List totals to reuse too.
+export { formatCurrency } from '@/shared/finance/formatCurrency';
+
 // Rounds a dollar amount to the nearest cent using round-half-up, matching
 // normal money display. `Math.round` already rounds halves up (not to
 // even) for the positive values every cost in this app produces.
@@ -18,11 +24,6 @@ export function roundCents(value: number): number {
 // Rounds an hours value to 2 decimal places for display, also round-half-up.
 export function roundHours(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-// Formats an already-rounded dollar amount for display (e.g. `$12.50`).
-export function formatCurrency(value: number): string {
-  return `$${value.toFixed(2)}`;
 }
 
 // The number of extra whole pages the error margin adds, rounded up, to

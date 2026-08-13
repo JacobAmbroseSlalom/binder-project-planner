@@ -1,6 +1,6 @@
 # 38. Add card finances
 
-**Status:** Not started
+**Status:** Done (2026-08-13 12:16 EDT)
 
 #### Acceptance criteria
 

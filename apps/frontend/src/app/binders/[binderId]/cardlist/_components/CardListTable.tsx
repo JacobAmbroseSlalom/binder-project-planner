@@ -4,8 +4,12 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Circle, CircleCheck } from 'lucide-rea
 
 import { resolveCardImageUrl, type Card } from '@/lib/api';
 import { ImagePreview, Tooltip } from '@/shared/feedback';
+import { computeCardPriceChange } from '@/shared/finance/computeCardPriceChange';
+import { formatCurrency } from '@/shared/finance/formatCurrency';
+import { MoneyInput } from '@/shared/finance/MoneyInput';
 
 import { ColumnFilterDropdown } from './ColumnFilterDropdown';
+import { VariantSelect } from './VariantSelect';
 import {
   getDistinctColumnValues,
   type CardListColumnFilters,
@@ -13,6 +17,7 @@ import {
   type CardListSortDirection,
   type CardListSortOption,
 } from '../_lib/cardListDerivation';
+import type { PriceReviewRow, PriceReviewSource } from '../useCardPriceReview';
 
 // Each sortable column's display label, keyed by `CardListColumnKey` -
 // `SortableColumnHeader` below looks up a column's own label from here
@@ -23,12 +28,29 @@ const COLUMN_LABELS: Record<CardListColumnKey, string> = {
   number: 'Number',
   variation: 'Variation',
   acquisition: 'Acquisition',
+  price: 'Price',
+  priceUpdatedAt: 'Price updated',
 };
 
-// Total column count, for the empty-results row's `colSpan`: the 5
-// sortable columns (`COLUMN_LABELS`) plus the thumbnail column, which has
-// no sort/filter of its own.
-const TOTAL_COLUMN_COUNT = Object.keys(COLUMN_LABELS).length + 1;
+// Total column count, for the empty-results row's `colSpan`: the 7
+// sortable columns (`COLUMN_LABELS`, which now includes Price/Price
+// updated) plus the thumbnail column, plus, only while the price-review
+// state is active, its 6 expanded review columns.
+function getTotalColumnCount(isPriceReviewActive: boolean): number {
+  const baseColumnCount = Object.keys(COLUMN_LABELS).length + 1;
+  return isPriceReviewActive ? baseColumnCount + 6 : baseColumnCount;
+}
+
+// Story 38's price-review row data a table cell needs, plus the handlers
+// it calls back into `useCardPriceReview` through. `null` while the
+// price-review state isn't active at all.
+export interface PriceReviewTableProps {
+  isFetching: boolean;
+  rows: Map<string, PriceReviewRow>;
+  onVariantChange: (cardId: string, variantKey: string) => void;
+  onPriceInputChange: (cardId: string, rawValue: string) => void;
+  onFillPrice: (cardId: string, value: number | null, source: PriceReviewSource) => void;
+}
 
 // Story 46's select-all/deselect-all header control for the Acquisition
 // column. Its icon state is derived from the currently visible
@@ -42,10 +64,14 @@ function BulkAcquisitionHeaderControl({
   visibleCards,
   onToggleAllAcquisition,
   isBulkAcquisitionPending,
+  disabled,
 }: {
   visibleCards: readonly Card[];
   onToggleAllAcquisition: (acquired: boolean) => void;
   isBulkAcquisitionPending: boolean;
+  // Story 38: disabled while the card list's price-review state is
+  // active.
+  disabled?: boolean;
 }) {
   const allAcquired = visibleCards.length > 0 && visibleCards.every((card) => card.acquired);
   const label = allAcquired
@@ -56,7 +82,7 @@ function BulkAcquisitionHeaderControl({
     <Tooltip label={label}>
       <button
         type="button"
-        disabled={isBulkAcquisitionPending || visibleCards.length === 0}
+        disabled={disabled || isBulkAcquisitionPending || visibleCards.length === 0}
         onClick={() => onToggleAllAcquisition(!allAcquired)}
         aria-label={label}
         className="flex size-7 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -84,6 +110,7 @@ function SortableColumnHeader({
   onColumnFilterChange,
   headerAccessory,
   align = 'left',
+  disabled,
 }: {
   column: CardListColumnKey;
   allCards: readonly Card[];
@@ -101,6 +128,10 @@ function SortableColumnHeader({
   // its centered, icon-only body cells rather than the text columns'
   // left-aligned reading flow.
   align?: 'left' | 'center';
+  // Story 38: disabled while the card list's price-review state is
+  // active, so the reviewed card set can't change out from under the
+  // pending new-price values.
+  disabled?: boolean;
 }) {
   const label = COLUMN_LABELS[column];
   const isActive = sortOption === column;
@@ -110,9 +141,10 @@ function SortableColumnHeader({
         {headerAccessory}
         <button
           type="button"
+          disabled={disabled}
           onClick={() => onSortColumnClick(column)}
           aria-label={`Sort by ${label}`}
-          className={`flex cursor-pointer items-center gap-1 rounded-standard px-1 py-0.5 hover:bg-neutral-700 ${
+          className={`flex cursor-pointer items-center gap-1 rounded-standard px-1 py-0.5 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent ${
             isActive ? 'text-primary' : ''
           }`}
         >
@@ -132,6 +164,7 @@ function SortableColumnHeader({
           options={getDistinctColumnValues(allCards, column)}
           selected={columnFilters[column]}
           onChange={(next) => onColumnFilterChange(column, next)}
+          disabled={disabled}
         />
       </div>
     </th>
@@ -142,9 +175,15 @@ function SortableColumnHeader({
 // column's sortable header + filter dropdown with the currently
 // search/sort/filter-derived rows, plus an empty-results state. Column
 // order (left to right): Acquisition, thumbnail, Name, Variation, Set,
-// Number - Acquisition leads since it's the tab's primary action, and is
-// centered over its icon-only body cells unlike the left-aligned text
-// columns; Variation sits fourth, directly after Name.
+// Number, Price, Price updated (story 38) - Acquisition leads since it's
+// the tab's primary action, and is centered over its icon-only body cells
+// unlike the left-aligned text columns; Variation sits fourth, directly
+// after Name. Price and Price updated get the same sort/filter treatment
+// as the other 5 columns (added after the fact, once users started
+// wanting to sort/find cards by saved price). While `priceReview` is
+// active, 6 more columns (Variant, Market price, Low price, TCGplayer,
+// New price, Change) appear after Price updated, per that story's
+// "expands" requirement.
 export function CardListTable({
   allCards,
   visibleCards,
@@ -157,6 +196,7 @@ export function CardListTable({
   pendingCardAcquiredToggleIds,
   onToggleAllAcquisition,
   isBulkAcquisitionPending,
+  priceReview,
 }: {
   // Every binder card, used only to compute each column's full
   // distinct-value list for its filter dropdown - never rendered
@@ -178,7 +218,14 @@ export function CardListTable({
   // control.
   onToggleAllAcquisition: (acquired: boolean) => void;
   isBulkAcquisitionPending: boolean;
+  // Story 38: present only while the price-review state is active. Its
+  // mere presence (rather than a separate boolean) both disables the
+  // search/sort/filter controls and switches the table into its expanded
+  // review-column rendering.
+  priceReview: PriceReviewTableProps | null;
 }) {
+  const controlsDisabled = priceReview !== null;
+
   const sortableHeaderProps = {
     allCards,
     sortOption,
@@ -186,6 +233,7 @@ export function CardListTable({
     onSortColumnClick,
     columnFilters,
     onColumnFilterChange,
+    disabled: controlsDisabled,
   };
 
   return (
@@ -201,6 +249,7 @@ export function CardListTable({
                 visibleCards={visibleCards}
                 onToggleAllAcquisition={onToggleAllAcquisition}
                 isBulkAcquisitionPending={isBulkAcquisitionPending}
+                disabled={controlsDisabled}
               />
             }
           />
@@ -212,18 +261,34 @@ export function CardListTable({
           <SortableColumnHeader column="variation" {...sortableHeaderProps} />
           <SortableColumnHeader column="set" {...sortableHeaderProps} />
           <SortableColumnHeader column="number" {...sortableHeaderProps} />
+          <SortableColumnHeader column="price" {...sortableHeaderProps} />
+          <SortableColumnHeader column="priceUpdatedAt" {...sortableHeaderProps} />
+          {priceReview && (
+            <>
+              <th className="py-2 pr-4 font-regular">Variant</th>
+              <th className="py-2 pr-4 font-regular">Market price</th>
+              <th className="py-2 pr-4 font-regular">Low price</th>
+              <th className="py-2 pr-4 font-regular">TCGplayer</th>
+              <th className="py-2 pr-4 font-regular">New price</th>
+              <th className="py-2 pr-4 font-regular">Change</th>
+            </>
+          )}
         </tr>
       </thead>
       <tbody>
         {visibleCards.length === 0 && (
           <tr>
-            <td colSpan={TOTAL_COLUMN_COUNT} className="py-8 text-center text-neutral-500">
+            <td
+              colSpan={getTotalColumnCount(priceReview !== null)}
+              className="py-8 text-center text-neutral-500"
+            >
               No cards match the current search and filters.
             </td>
           </tr>
         )}
         {visibleCards.map((card) => {
           const isTogglePending = pendingCardAcquiredToggleIds.has(card.id);
+          const reviewRow = priceReview?.rows.get(card.id) ?? null;
           return (
             <tr key={card.id} className="border-b border-neutral-800">
               <td className="py-2 pr-4 text-center">
@@ -283,10 +348,142 @@ export function CardListTable({
               <td className="py-2 pr-4 text-neutral-500">{card.variation ?? '—'}</td>
               <td className="py-2 pr-4 text-neutral-500">{card.setName ?? '—'}</td>
               <td className="py-2 pr-4 text-neutral-500">{card.localNumber ?? '—'}</td>
+              <td className="py-2 pr-4">
+                {/* Story 38: clicking the saved price fills the review
+                    row's new-price input with it (only meaningful, and
+                    only clickable, while review is active) - a manually
+                    entered price renders in the secondary color to stay
+                    visually distinct from an API-derived one. */}
+                {card.price === null ? (
+                  <span className="text-neutral-500">--</span>
+                ) : priceReview ? (
+                  <button
+                    type="button"
+                    onClick={() => priceReview.onFillPrice(card.id, card.price, 'savedPrice')}
+                    className={`cursor-pointer hover:underline ${
+                      card.isManualPrice ? 'text-secondary' : ''
+                    }`}
+                  >
+                    {formatCurrency(card.price)}
+                  </button>
+                ) : (
+                  <span className={card.isManualPrice ? 'text-secondary' : ''}>
+                    {formatCurrency(card.price)}
+                  </span>
+                )}
+              </td>
+              <td className="py-2 pr-4 text-neutral-500">
+                {card.priceUpdatedAt ? new Date(card.priceUpdatedAt).toLocaleDateString() : '--'}
+              </td>
+              {priceReview && (
+                <PriceReviewCells card={card} row={reviewRow} priceReview={priceReview} />
+              )}
             </tr>
           );
         })}
       </tbody>
     </table>
+  );
+}
+
+// Story 38's 6 expanded review-mode cells for one card's row, split out
+// from the main row markup above purely to keep that already-long row
+// template readable.
+function PriceReviewCells({
+  card,
+  row,
+  priceReview,
+}: {
+  card: Card;
+  row: PriceReviewRow | null;
+  priceReview: PriceReviewTableProps;
+}) {
+  const selectedVariant =
+    row?.variants.find((variant) => variant.variantKey === row.selectedVariantKey) ?? null;
+  const change = computeCardPriceChange(card.price, row?.newPrice ?? null);
+  const isRowLoading = priceReview.isFetching || row === null;
+  // pokemontcg.io's "low" price is meant to sit at or below its "market"
+  // price - when a listing anomaly flips that (low > market), flag the
+  // low price in the secondary color so the reviewer notices before
+  // filling it into the new-price input.
+  const hasPriceAnomaly =
+    !!selectedVariant &&
+    selectedVariant.marketPrice !== null &&
+    selectedVariant.lowPrice !== null &&
+    selectedVariant.lowPrice > selectedVariant.marketPrice;
+
+  return (
+    <>
+      <td className="py-2 pr-4">
+        {isRowLoading ? (
+          <span className="text-neutral-500">--</span>
+        ) : (
+          <VariantSelect
+            variants={row.variants}
+            selectedVariantKey={row.selectedVariantKey}
+            onChange={(variantKey) => priceReview.onVariantChange(card.id, variantKey)}
+          />
+        )}
+      </td>
+      <td className="py-2 pr-4">
+        {isRowLoading || !selectedVariant || selectedVariant.marketPrice === null ? (
+          <span className="text-neutral-500">--</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => priceReview.onFillPrice(card.id, selectedVariant.marketPrice, 'variant')}
+            className="cursor-pointer hover:underline"
+          >
+            {formatCurrency(selectedVariant.marketPrice)}
+          </button>
+        )}
+      </td>
+      <td className="py-2 pr-4">
+        {isRowLoading || !selectedVariant || selectedVariant.lowPrice === null ? (
+          <span className="text-neutral-500">--</span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => priceReview.onFillPrice(card.id, selectedVariant.lowPrice, 'variant')}
+            className={`cursor-pointer hover:underline ${hasPriceAnomaly ? 'text-secondary' : ''}`}
+          >
+            {formatCurrency(selectedVariant.lowPrice)}
+          </button>
+        )}
+      </td>
+      <td className="py-2 pr-4">
+        {isRowLoading || !row?.tcgplayerUrl ? (
+          <span className="text-neutral-500">--</span>
+        ) : (
+          <a
+            href={row.tcgplayerUrl}
+            target="_blank"
+            rel="noreferrer noopener"
+            className="text-primary hover:underline"
+          >
+            View
+          </a>
+        )}
+      </td>
+      <td className="py-2 pr-4">
+        <MoneyInput
+          min={0}
+          disabled={isRowLoading}
+          value={row?.newPrice?.toString() ?? ''}
+          onChange={(event) => priceReview.onPriceInputChange(card.id, event.target.value)}
+          ariaLabel={`${card.name} new price`}
+          className="w-28"
+        />
+      </td>
+      <td className="py-2 pr-4 whitespace-nowrap">
+        {change.direction === null || change.direction === 'unchanged' ? (
+          <span className="text-neutral-500">--</span>
+        ) : change.direction === 'increase' ? (
+          <span className="text-success">▲ +{formatCurrency(change.amount)}</span>
+        ) : (
+          <span className="text-error">▼ -{formatCurrency(change.amount)}</span>
+        )}
+      </td>
+    </>
   );
 }

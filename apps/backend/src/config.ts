@@ -35,4 +35,10 @@ export const config = {
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? DEFAULT_FRONTEND_ORIGIN,
   host: process.env.HOST ?? DEFAULT_BACKEND_HOST,
   port: readPort(process.env.PORT),
+  // Story 38: "Add card finances". Optional pokemontcg.io API key - the
+  // provider works unauthenticated but enforces a much lower rate limit
+  // without one, per its documentation. Left undefined (rather than
+  // defaulted in `defaults.ts`, per the coding conventions' secrets rule)
+  // when the environment variable isn't set.
+  pokemonTcgApiKey: process.env.POKEMONTCG_API_KEY,
 } as const;

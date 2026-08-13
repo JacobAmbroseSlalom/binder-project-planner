@@ -129,6 +129,11 @@ export function useBulkCardAdd({
           // endpoint) replaces this optimistic entry.
           imageUrl: catalogCard.imageUrl,
           acquired,
+          // Story 38: every new card starts with no saved price, matching
+          // the backend's default for a newly created card.
+          price: null,
+          isManualPrice: false,
+          priceUpdatedAt: null,
           createdAt: now,
           updatedAt: now,
         };

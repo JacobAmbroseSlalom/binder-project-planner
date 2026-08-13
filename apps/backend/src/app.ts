@@ -25,6 +25,10 @@ interface CreateAppOptions {
   // callers (e.g. tests) that don't exercise image storage don't need to
   // supply one; falls back to a throwaway directory under the OS temp dir.
   imagesDirectory?: string;
+  // Story 38: optional pokemontcg.io API key, forwarded to the cards
+  // router for price-fetch requests. Undefined works too (unauthenticated
+  // requests), just at a much lower provider rate limit.
+  pokemonTcgApiKey?: string;
 }
 
 interface HttpError extends Error {
@@ -35,6 +39,7 @@ export function createApp({
   database,
   frontendOrigin,
   imagesDirectory = join(tmpdir(), 'binder-project-planner-images'),
+  pokemonTcgApiKey,
 }: CreateAppOptions): Express {
   const app = express();
 
@@ -90,7 +95,7 @@ export function createApp({
   });
 
   app.use(createBindersRouter(database, imagesDirectory));
-  app.use(createCardsRouter(database, imagesDirectory));
+  app.use(createCardsRouter(database, imagesDirectory, pokemonTcgApiKey));
   app.use(createArtRouter(database, imagesDirectory));
   app.use(createFinanceSettingsRouter(database));
   app.use(createCostEntriesRouter(database));

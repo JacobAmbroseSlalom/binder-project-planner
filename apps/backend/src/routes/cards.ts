@@ -19,18 +19,27 @@ import {
   CUSTOM_CARD_NUMBER_MAX_LENGTH,
   CUSTOM_CARD_SET_MAX_LENGTH,
   DEFAULT_CARD_ACQUIRED,
+  DEFAULT_CARD_IS_MANUAL_PRICE,
+  POKEMONTCG_PRICE_FETCH_CONCURRENCY,
 } from '@binder-project-planner/shared';
 import { and, asc, desc, eq, inArray } from 'drizzle-orm';
 import { Router, type Response } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
 import { binders, cardImageAssets, cards } from '../database/schema.js';
+import { fromCents, toCents } from '../finance/currency.js';
 import { detectImageFormat } from '../images/imageFormat.js';
 import {
   findIdempotentOutcome,
   saveIdempotentOutcome,
 } from '../idempotency/mutationIdempotency.js';
 import { translateEnglishNameToJapanese } from '../integrations/pokeapi.js';
+import {
+  createPriceFetchBatchCache,
+  fetchCardPriceData,
+  PokemonTcgAbortedError,
+  type CardPriceFetchResult,
+} from '../integrations/pokemontcg.js';
 import { lockedBinderConflictProblem } from '../lockedBinderProblem.js';
 import { getOccupiedCells } from '../placement/occupancy.js';
 import {
@@ -140,6 +149,36 @@ interface UpdateCardsAcquisitionRequestBody {
   acquired: boolean;
 }
 
+// The validated, OpenAPI-typed shape of `POST /binders/{binderId}/cards/
+// prices/fetch`'s request body (story 38): requests pokemontcg.io price
+// data for exactly this set of card ids - the Card List's currently
+// filtered/displayed cards, not every card in the binder.
+interface CardPriceFetchRequestBody {
+  cardIds: string[];
+}
+
+// One reviewed row of `PATCH /binders/{binderId}/cards/prices`'s request
+// body (story 38): the new-price value the user is committing for one
+// card, plus whether it was hand-edited (`isManualPrice`) - see this
+// file's route handler comment for the provenance rules that determine
+// this flag client-side.
+interface CardPriceUpdate {
+  cardId: string;
+  price: number;
+  isManualPrice: boolean;
+}
+
+interface UpdateCardPricesRequestBody {
+  prices: CardPriceUpdate[];
+}
+
+// One submitted price update's independent outcome (story 38), mirroring
+// `BulkCardOutcome`'s "created"/"failed" pattern - preserves the submitted
+// array's order regardless of processing completion order.
+type CardPriceUpdateOutcome =
+  | { status: 'updated'; card: ReturnType<typeof serializeCard> }
+  | { status: 'failed'; problem: ReturnType<typeof problem> };
+
 interface CardRow {
   id: string;
   binderId: string;
@@ -155,12 +194,30 @@ interface CardRow {
   column: number | null;
   imageAssetId: string;
   acquired: boolean;
+  priceCents: number | null;
+  isManualPrice: boolean;
+  priceUpdatedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 function problem(status: number, title: string, detail: string) {
   return { type: 'about:blank', title, status, detail };
+}
+
+// Converts pokemontcg.io price-fetch results (internal, cents-based) into
+// the OpenAPI `CardPriceFetchResult` response shape (decimal dollars),
+// matching `serializeCard`'s own cents-to-dollars boundary conversion.
+function serializeCardPriceFetchResults(results: CardPriceFetchResult[]) {
+  return results.map((result) => ({
+    cardId: result.cardId,
+    tcgplayerUrl: result.tcgplayerUrl,
+    variants: result.variants.map((variant) => ({
+      variantKey: variant.variantKey,
+      marketPrice: variant.marketPriceCents === null ? null : fromCents(variant.marketPriceCents),
+      lowPrice: variant.lowPriceCents === null ? null : fromCents(variant.lowPriceCents),
+    })),
+  }));
 }
 
 // Serializes a persisted card row as the OpenAPI `Card` response shape. The
@@ -180,6 +237,12 @@ function serializeCard(row: CardRow) {
     placement: { physicalPage: row.physicalPage, row: row.row, column: row.column },
     imageUrl: `/cards/${row.id}/image`,
     acquired: row.acquired,
+    // Story 38: converts the internally-stored integer cents back to
+    // decimal dollars at the API boundary (`finance/currency.ts`'s
+    // convention); null (never fetched or entered) passes through as-is.
+    price: row.priceCents === null ? null : fromCents(row.priceCents),
+    isManualPrice: row.isManualPrice,
+    priceUpdatedAt: row.priceUpdatedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -508,6 +571,7 @@ function resolveCustomImageAsset(
 export function createCardsRouter(
   database: DatabaseConnection['database'],
   imagesDirectory: string,
+  pokemonTcgApiKey: string | undefined,
 ): Router {
   const router = Router();
 
@@ -614,6 +678,9 @@ export function createCardsRouter(
       column: number | null;
       imageAssetId: string;
       acquired: boolean;
+      priceCents: null;
+      isManualPrice: boolean;
+      priceUpdatedAt: null;
       createdAt: string;
       updatedAt: string;
     },
@@ -834,6 +901,11 @@ export function createCardsRouter(
         column: placementResult.placement.column,
         imageAssetId: asset.assetId,
         acquired,
+        // Story 38: every new card starts with no saved price regardless
+        // of creation path, matching `DEFAULT_CARD_IS_MANUAL_PRICE`.
+        priceCents: null,
+        isManualPrice: DEFAULT_CARD_IS_MANUAL_PRICE,
+        priceUpdatedAt: null,
         createdAt: now,
         updatedAt: now,
       },
@@ -1038,6 +1110,11 @@ export function createCardsRouter(
             column: placement.column,
             imageAssetId: asset.assetId,
             acquired,
+            // Story 38: every new card starts with no saved price
+            // regardless of creation path.
+            priceCents: null,
+            isManualPrice: DEFAULT_CARD_IS_MANUAL_PRICE,
+            priceUpdatedAt: null,
             createdAt: now,
             updatedAt: now,
           };
@@ -1138,6 +1215,162 @@ export function createCardsRouter(
 
     const updatedRows = cardRows.map((row) => ({ ...row, acquired: body.acquired, updatedAt }));
     response.status(200).json(updatedRows.map(serializeCard));
+  });
+
+  // Story 38's price-fetch endpoint: requests pokemontcg.io price data for
+  // exactly the card ids the Card List's active search/sort/filter state
+  // currently produces (not every card in the binder) - the frontend's
+  // "Fetch card prices" button. Every listed card must belong to the path
+  // binder. Purely a read: no card is mutated by this endpoint - fetched
+  // prices are client-side review state until "Save all" calls the
+  // sibling `PATCH /binders/{binderId}/cards/prices` endpoint below.
+  router.post('/binders/:binderId/cards/prices/fetch', async (request, response) => {
+    const { binderId } = request.params;
+    const body = request.body as CardPriceFetchRequestBody;
+
+    const binder = database.select().from(binders).where(eq(binders.id, binderId)).get();
+    if (!binder) {
+      response
+        .status(404)
+        .type('application/problem+json')
+        .json(problem(404, 'Not Found', `No binder exists with id "${binderId}".`));
+      return;
+    }
+
+    const cardRows = database
+      .select()
+      .from(cards)
+      .where(inArray(cards.id, body.cardIds))
+      .all() as CardRow[];
+    const foundIds = new Set(cardRows.map((row) => row.id));
+    const missingId = body.cardIds.find((id) => !foundIds.has(id));
+    if (missingId) {
+      response
+        .status(404)
+        .type('application/problem+json')
+        .json(problem(404, 'Not Found', `No card exists with id "${missingId}".`));
+      return;
+    }
+
+    const foreignCard = cardRows.find((row) => row.binderId !== binderId);
+    if (foreignCard) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(problem(400, 'Bad Request', 'Every cardId must belong to the path binder.'));
+      return;
+    }
+
+    // Propagates a disconnected/aborted client request to every in-flight
+    // upstream pokemontcg.io lookup (planning.md's existing convention for
+    // proxied provider requests).
+    const controller = new AbortController();
+    request.on('close', () => controller.abort());
+
+    // Shared across every card in this request so two cards resolving to
+    // the same pokemontcg.io card (e.g. a "normal" print and a "Reverse
+    // Holo" print of the same physical card share one set + number)
+    // trigger a single upstream price request instead of one each - see
+    // `createPriceFetchBatchCache`'s own comment for why this is scoped to
+    // one request rather than reused across requests.
+    const priceFetchBatchCache = createPriceFetchBatchCache();
+
+    try {
+      const results = await mapWithConcurrencyLimit(
+        cardRows,
+        POKEMONTCG_PRICE_FETCH_CONCURRENCY,
+        (row) =>
+          fetchCardPriceData(
+            {
+              cardId: row.id,
+              setName: row.setName,
+              providerSetId: row.providerSetId,
+              localNumber: row.localNumber,
+            },
+            pokemonTcgApiKey,
+            controller.signal,
+            priceFetchBatchCache,
+          ),
+      );
+      response.status(200).json(serializeCardPriceFetchResults(results));
+    } catch (error) {
+      // The per-card lookup itself never throws for an individual provider
+      // failure (see `fetchCardPriceData`'s own try/catch) - only a client
+      // disconnect (`PokemonTcgAbortedError`) or a genuinely unexpected
+      // error reaches here, both of which are request-level failures.
+      if (error instanceof PokemonTcgAbortedError) return;
+      throw error;
+    }
+  });
+
+  // Story 38's "Save all" endpoint: commits every reviewed row's new price
+  // in one request. Mirrors the bulk create-cards endpoint's (stories
+  // 17/18) per-item independent outcome pattern - a failure on one card's
+  // price rolls back only that card rather than the whole batch, since
+  // each is applied as its own update.
+  router.patch('/binders/:binderId/cards/prices', (request, response) => {
+    const { binderId } = request.params;
+    const body = request.body as UpdateCardPricesRequestBody;
+
+    const binder = database.select().from(binders).where(eq(binders.id, binderId)).get();
+    if (!binder) {
+      response
+        .status(404)
+        .type('application/problem+json')
+        .json(problem(404, 'Not Found', `No binder exists with id "${binderId}".`));
+      return;
+    }
+
+    const requestedIds = body.prices.map((entry) => entry.cardId);
+    const cardRows = database
+      .select()
+      .from(cards)
+      .where(inArray(cards.id, requestedIds))
+      .all() as CardRow[];
+    const cardRowsById = new Map(cardRows.map((row) => [row.id, row]));
+
+    const updatedAt = new Date().toISOString();
+    const outcomes: CardPriceUpdateOutcome[] = body.prices.map((entry) => {
+      const existing = cardRowsById.get(entry.cardId);
+      if (!existing) {
+        return {
+          status: 'failed',
+          problem: problem(404, 'Not Found', `No card exists with id "${entry.cardId}".`),
+        };
+      }
+      if (existing.binderId !== binderId) {
+        return {
+          status: 'failed',
+          problem: problem(400, 'Bad Request', 'Every cardId must belong to the path binder.'),
+        };
+      }
+
+      const priceCents = toCents(entry.price);
+      database
+        .update(cards)
+        .set({
+          priceCents,
+          isManualPrice: entry.isManualPrice,
+          priceUpdatedAt: updatedAt,
+          updatedAt,
+        })
+        .where(eq(cards.id, entry.cardId))
+        .run();
+
+      return {
+        status: 'updated',
+        card: serializeCard({
+          ...existing,
+          priceCents,
+          isManualPrice: entry.isManualPrice,
+          priceUpdatedAt: updatedAt,
+          updatedAt,
+        }),
+      };
+    });
+
+    const responseStatus = outcomes.some((outcome) => outcome.status === 'failed') ? 207 : 200;
+    response.status(responseStatus).json(outcomes);
   });
 
   // Story 14's card move/swap endpoint (and story 16's variation-update

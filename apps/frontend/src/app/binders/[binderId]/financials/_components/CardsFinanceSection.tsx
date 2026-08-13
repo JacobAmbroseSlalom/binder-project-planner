@@ -1,10 +1,20 @@
+import { computeCardPriceTotal } from '@/shared/finance/computeCardPriceTotal';
+import { formatCurrency } from '@/shared/finance/formatCurrency';
+import type { Card } from '@/lib/api';
+
 import { financeInputClassName, FinanceField } from './FinanceField';
 
-// The "Cards" section placeholder (story 34): static, zeroed totals with no
-// query against card data, since neither the `acquired` field (story 36)
-// nor card pricing (story 38) exist yet. Wiring this up to real totals is
-// explicitly out of scope here and belongs to story 38.
-export function CardsPlaceholderSection() {
+// The "Cards" section (story 38, previously story 34's static
+// `CardsPlaceholderSection` placeholder): shows the binder's all-cards and
+// unacquired-cards saved-price totals. Per the product decision made for
+// this story, this section intentionally has no "filtered cards" total -
+// that distinction only applies to the Card List tab's own totals row,
+// which has direct access to the currently active search/sort/filter
+// state that this tab doesn't share.
+export function CardsFinanceSection({ cards }: { cards: readonly Card[] }) {
+  const allCardsTotal = computeCardPriceTotal(cards);
+  const unacquiredCardsTotal = computeCardPriceTotal(cards.filter((card) => !card.acquired));
+
   return (
     <section className="flex flex-col gap-3">
       <div className="grid grid-cols-[1fr_auto_1fr] items-center">
@@ -29,10 +39,14 @@ export function CardsPlaceholderSection() {
       </div>
       <div className="flex gap-4 rounded-standard bg-surface p-4 shadow-panel">
         <p className="text-body text-neutral-500">
-          All cards total: <span className="font-bold text-neutral-100">$0.00</span>
+          All cards total:{' '}
+          <span className="font-bold text-neutral-100">{formatCurrency(allCardsTotal.sum)}</span>
         </p>
         <p className="text-body text-neutral-500">
-          Unacquired cards total: <span className="font-bold text-neutral-100">$0.00</span>
+          Unacquired cards total:{' '}
+          <span className="font-bold text-neutral-100">
+            {formatCurrency(unacquiredCardsTotal.sum)}
+          </span>
         </p>
       </div>
     </section>

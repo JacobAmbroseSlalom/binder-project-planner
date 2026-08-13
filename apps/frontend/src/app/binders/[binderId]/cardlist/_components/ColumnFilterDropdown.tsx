@@ -17,6 +17,7 @@ export function ColumnFilterDropdown({
   options,
   selected,
   onChange,
+  disabled,
 }: {
   // The column's display name, used for the trigger button's accessible
   // label and the dropdown's own `aria-label`.
@@ -28,6 +29,10 @@ export function ColumnFilterDropdown({
   // This column's currently selected value set.
   selected: Set<string>;
   onChange: (next: Set<string>) => void;
+  // Story 38: disabled while the card list's price-review state is
+  // active, so the reviewed card set can't change out from under the
+  // pending new-price values.
+  disabled?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,18 +101,19 @@ export function ColumnFilterDropdown({
       <Tooltip label={`Filter by ${columnLabel}`}>
         <button
           type="button"
+          disabled={disabled}
           aria-haspopup="listbox"
           aria-expanded={isOpen}
           aria-label={`Filter by ${columnLabel}`}
           onClick={() => setIsOpen((open) => !open)}
-          className={`flex size-6 cursor-pointer items-center justify-center rounded-standard hover:bg-neutral-700 ${
+          className={`flex size-6 cursor-pointer items-center justify-center rounded-standard hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent ${
             isFiltered ? 'text-primary' : 'text-neutral-500'
           }`}
         >
           <ListFilter className="size-4" aria-hidden="true" />
         </button>
       </Tooltip>
-      {isOpen && (
+      {isOpen && !disabled && (
         <div
           role="listbox"
           aria-label={`Filter by ${columnLabel}`}

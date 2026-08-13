@@ -259,3 +259,30 @@ export const ART_PRINT_TILE_OVERLAP_INCHES = 0.25;
 // Holographic Paper) - the frontend Zod schema, the OpenAPI request/
 // response contracts, and backend validation all import this same value.
 export const COST_ENTRY_NAME_MAX_LENGTH = 100;
+
+// Story 38: "Add card finances". A newly created card has no saved price
+// until it's first fetched from pokemontcg.io or manually entered, so
+// `isManualPrice` defaults to `false` (not yet provenance-tracked)
+// alongside the `null` `price`/`priceUpdatedAt` defaults, mirroring
+// `DEFAULT_CARD_ACQUIRED`'s pattern above.
+export const DEFAULT_CARD_IS_MANUAL_PRICE = false;
+
+// Upstream pokemontcg.io price lookups (set-ID resolution and per-card
+// price requests) are aborted after this long and treated as a failed
+// lookup for that card rather than blocking the rest of the batch.
+export const POKEMONTCG_REQUEST_TIMEOUT_MS = 30_000;
+// How long the backend waits before retrying one failed pokemontcg.io
+// request (network error, timeout, 429, or 5xx) when the provider doesn't
+// supply a valid `Retry-After` header - mirrors `TCGDEX_RETRY_DELAY_MS`.
+export const POKEMONTCG_RETRY_DELAY_MS = 500;
+// How long the backend's in-memory set-ID resolution cache (name/provider
+// set ID -> resolved pokemontcg.io set ID) retains a result. Sets are
+// essentially immutable once printed, so this is far longer than the
+// TCGdex search cache's TTL.
+export const POKEMONTCG_SET_ID_CACHE_TTL_MS = 86_400_000; // 24 hours
+// The maximum number of `POST /binders/{binderId}/cards/prices/fetch`
+// per-card pokemontcg.io lookups the backend processes concurrently for
+// one request - mirrors `BULK_CARD_CREATE_CONCURRENCY`'s rationale (avoids
+// opening an unbounded number of simultaneous upstream requests for one
+// large card-list selection).
+export const POKEMONTCG_PRICE_FETCH_CONCURRENCY = 5;

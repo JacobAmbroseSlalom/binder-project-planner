@@ -304,6 +304,7 @@ export function BinderRouteProvider({
     return {
       binder,
       cards,
+      setCards,
       art,
       updateBinder,
       applyBinderResizeUpdate,
@@ -359,6 +360,7 @@ export function BinderRouteProvider({
     status,
     binder,
     cards,
+    setCards,
     art,
     updateBinder,
     applyBinderResizeUpdate,

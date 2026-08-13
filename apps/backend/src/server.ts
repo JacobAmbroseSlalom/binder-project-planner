@@ -7,6 +7,7 @@ const app = createApp({
   database: connection.database,
   frontendOrigin: config.frontendOrigin,
   imagesDirectory: config.imagesDirectory,
+  pokemonTcgApiKey: config.pokemonTcgApiKey,
 });
 
 const server = app.listen(config.port, config.host, () => {

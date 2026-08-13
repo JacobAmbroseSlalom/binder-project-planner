@@ -2,8 +2,10 @@
 
 import { Home, Lock } from 'lucide-react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 import { useAppHeaderTitle } from './AppHeaderTitle';
+import { useNavigationGuard } from './NavigationGuard';
 
 // A persistent top bar rendered once in the root layout (rather than per-page)
 // so every page - including ones with no navigation of their own, like
@@ -14,11 +16,22 @@ import { useAppHeaderTitle } from './AppHeaderTitle';
 // heading.
 export function AppHeader() {
   const { title, locked } = useAppHeaderTitle();
+  const router = useRouter();
+  const { isBlocked, confirmNavigation } = useNavigationGuard();
 
   return (
     <header className="relative flex items-center bg-surface px-6 py-4 shadow-panel">
       <Link
         href="/"
+        onClick={(event) => {
+          // Story 38: only intercept the click while some feature has
+          // registered an unsaved-changes guard - otherwise this behaves
+          // as a normal `Link` (still lets a middle-click/ctrl-click open
+          // a new tab, prefetches normally, etc.).
+          if (!isBlocked) return;
+          event.preventDefault();
+          confirmNavigation(() => router.push('/'));
+        }}
         className="flex items-center gap-2 font-bold text-neutral-100 hover:brightness-110"
       >
         <Home className="size-5" />

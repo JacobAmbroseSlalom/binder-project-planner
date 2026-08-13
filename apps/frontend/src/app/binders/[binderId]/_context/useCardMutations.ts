@@ -185,6 +185,11 @@ export function useCardMutations({
         placement: placement ?? { physicalPage: null, row: null, column: null },
         imageUrl: previewUrl,
         acquired: values.acquired,
+        // Story 38: every new card starts with no saved price, matching
+        // the backend's default for a newly created card.
+        price: null,
+        isManualPrice: false,
+        priceUpdatedAt: null,
         createdAt: now,
         updatedAt: now,
       };
