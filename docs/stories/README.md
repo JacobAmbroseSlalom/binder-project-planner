@@ -47,15 +47,18 @@ This index maps every story file to its current bucket.
 
 ## Ready For Dev
 
-| Story | Title         | File                                                                                |
-| ----- | ------------- | ----------------------------------------------------------------------------------- |
-| 32    | Lock a binder | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md) |
+| Story | Title                                   | File                                                                                                                                     |
+| ----- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| 32    | Lock a binder                          | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                                                     |
+| 38    | Add card finances                      | [docs/stories/ready-for-dev/38-add-card-finances.md](ready-for-dev/38-add-card-finances.md)                                             |
+| 39    | Add Binder Search and Sort functions   | [docs/stories/ready-for-dev/39-add-binder-search-and-sort-functions.md](ready-for-dev/39-add-binder-search-and-sort-functions.md)       |
+| 44    | Delete custom art finance cost entries | [docs/stories/ready-for-dev/44-delete-custom-art-finance-cost-entries.md](ready-for-dev/44-delete-custom-art-finance-cost-entries.md)   |
+| 46    | Bulk acquire cards                     | [docs/stories/ready-for-dev/46-bulk-acquire-cards.md](ready-for-dev/46-bulk-acquire-cards.md)                                           |
 
 ## Needs Refinement
 
 | Story | Title                                  | File                                                                                                                                        |
-| ----- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| 38    | Add card finances                      | [docs/stories/needs-refinement/38-add-card-finances.md](needs-refinement/38-add-card-finances.md)                                           |
-| 39    | Add Binder Search and Sort functions   | [docs/stories/needs-refinement/39-add-binder-search-and-sort-functions.md](needs-refinement/39-add-binder-search-and-sort-functions.md)     |
+| ----- | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | 43    | Add a card from other API sources      | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md)           |
-| 44    | Delete custom art finance cost entries | [docs/stories/needs-refinement/44-delete-custom-art-finance-cost-entries.md](needs-refinement/44-delete-custom-art-finance-cost-entries.md) |
+| 45    | What I'm looking for section (empty - TBD) | [docs/stories/needs-refinement/45-what-im-looking-for-section.md](needs-refinement/45-what-im-looking-for-section.md)                   |
+| 47    | Package and export the application as an executable | [docs/stories/needs-refinement/47-package-and-export-the-application-as-an-executable.md](needs-refinement/47-package-and-export-the-application-as-an-executable.md) |
