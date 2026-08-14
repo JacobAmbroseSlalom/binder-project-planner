@@ -53,6 +53,7 @@ function getBinderFormValues(binder: Binder): BinderDetailsFormInput {
     borderRadius: binder.borderRadius,
     borderWidth: binder.borderWidth,
     previewPhysicalPage: binder.previewPhysicalPage,
+    tags: binder.tags,
   };
 }
 

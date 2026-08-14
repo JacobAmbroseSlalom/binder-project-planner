@@ -116,6 +116,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List distinct binder tag suggestions
+         * @description Story 51: returns the distinct tag text currently used by any binder (a `SELECT DISTINCT` over the `BinderTag` table), alphabetically ordered case-insensitively, for the tags combobox's suggestion list. A tag removed from every binder it was on naturally disappears from this list.
+         */
+        get: operations["listTagSuggestions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/binders/{binderId}/exports/pdf": {
         parameters: {
             query?: never;
@@ -838,6 +858,8 @@ export interface components {
         BinderPreviewPhysicalPage: number;
         /** @description Story 23: free-form Markdown-source notes for the binder, or null when unset. An exactly-empty string sent on update is normalized to null by the backend; non-empty content is stored as-is without trimming. */
         BinderNotes: string | null;
+        /** @description Story 51: this binder's tags, in the order they were added. Trimmed and case-insensitively deduplicated by the backend (a candidate that case-insensitively matches an existing tag is a no-op and keeps the existing tag's original casing). Sent as a full replacement array by `POST /binders` and `PATCH /binders/{binderId}` - there is no separate add/remove endpoint or tag-rename operation. */
+        BinderTags: string[];
         CreateBinderRequest: {
             /** @description Trimmed on the backend; case-insensitive uniqueness is enforced there. */
             name: string;
@@ -862,6 +884,8 @@ export interface components {
             /** @description Defaults to the shared DEFAULT_BORDER_WIDTH_CM value when omitted. */
             borderWidth?: components["schemas"]["BinderBorderWidth"];
             previewPhysicalPage?: components["schemas"]["BinderPreviewPhysicalPage"];
+            /** @description Story 51: defaults to an empty array when omitted. Held in local component state on the create-binder page (there is no binder to attach tags to yet) and submitted as part of this same request. */
+            tags?: components["schemas"]["BinderTags"];
         };
         /** @description A partial update; only supplied fields are changed. Story 7 covers name/width/height/pages; story 24 adds the dimension and multi-slot-art style fields below; later stories add notes, preview page, and lock-state fields to this same request schema. */
         UpdateBinderRequest: {
@@ -889,6 +913,7 @@ export interface components {
             selectedBinderCostEntryId?: components["schemas"]["SelectedBinderCostEntryId"];
             selectedPrintingCostEntryId?: components["schemas"]["SelectedPrintingCostEntryId"];
             selectedHolographicPaperCostEntryId?: components["schemas"]["SelectedHolographicPaperCostEntryId"];
+            tags?: components["schemas"]["BinderTags"];
         };
         /** @description Story 27's dry-run request body for `POST /binders/{binderId}/resize-preview`. */
         ResizePreviewRequest: {
@@ -953,6 +978,7 @@ export interface components {
             selectedBinderCostEntryId: components["schemas"]["SelectedBinderCostEntryId"];
             selectedPrintingCostEntryId: components["schemas"]["SelectedPrintingCostEntryId"];
             selectedHolographicPaperCostEntryId: components["schemas"]["SelectedHolographicPaperCostEntryId"];
+            tags: components["schemas"]["BinderTags"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -980,6 +1006,7 @@ export interface components {
             selectedBinderCostEntryId: components["schemas"]["SelectedBinderCostEntryId"];
             selectedPrintingCostEntryId: components["schemas"]["SelectedPrintingCostEntryId"];
             selectedHolographicPaperCostEntryId: components["schemas"]["SelectedHolographicPaperCostEntryId"];
+            tags: components["schemas"]["BinderTags"];
             /** @description Story 22: the total number of card slots in the binder (width * height * 2 * pages). The client derives the slot-completion percentage as occupiedSlots / totalSlots * 100. */
             totalSlots: number;
             /** @description Story 22: how many slots hold a card or are covered by placed multi-slot art, deduplicated across overlaps. Unplaced cards and art are excluded. */
@@ -1803,6 +1830,26 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listTagSuggestions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The distinct tag suggestion list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
                 };
             };
         };

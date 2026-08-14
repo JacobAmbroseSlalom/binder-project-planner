@@ -32,6 +32,7 @@ truth; update this reference when a story adds, removes, or changes a route.
 | `DELETE` | `/binders/{binderId}`                | Permanently deletes a binder and its owned graph. Returns `204 No Content` whether present or already absent; locked binders return `409 Conflict`.                                                                                 |
 | `POST`   | `/binders/{binderId}/duplicate`      | Deep-copies the authoritative binder graph into a new unlocked binder while reusing immutable image assets. Returns `201 Created`, a `Location` header, and the new binder summary.                                                 |
 | `POST`   | `/binders/{binderId}/resize-preview` | Read-only dry run for a proposed width, height, and stored page count reduction. Returns affected card and art IDs and separate counts without changing data.                                                                       |
+| `GET`    | `/tags`                              | Returns the distinct tag text currently used by any binder, alphabetically ordered case-insensitively, for the tags combobox's suggestion list (Story 51).                                                                          |
 
 ## Binder Content Reads
 

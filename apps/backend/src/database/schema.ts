@@ -287,6 +287,41 @@ export const binders = sqliteTable(
   ],
 );
 
+// A binder's own tags (story 51: "Add binder tags"). Deliberately just this
+// one table - there is no separate `Tag` catalog table and no tag-rename
+// operation; a tag can only be added to or deleted from a binder. The
+// combobox's suggestion list (`GET /tags`) is a `SELECT DISTINCT` over this
+// table's `tag` text across every binder, so a tag removed from every
+// binder it was on naturally disappears from suggestions without any
+// separate cleanup step. `normalizedTag` (lowercased) mirrors binders'
+// `normalizedName` column - it enforces case-insensitive per-binder
+// uniqueness at the DB level and lets `GET /tags` group case-insensitive
+// duplicates across binders into one suggestion.
+export const binderTags = sqliteTable(
+  'binder_tags',
+  {
+    id: text().primaryKey(),
+    binderId: text()
+      .notNull()
+      .references(() => binders.id, { onDelete: 'cascade' }),
+    // Trimmed, original-casing tag text (up to 30 characters); displayed
+    // as-is on its own pill.
+    tag: text().notNull(),
+    normalizedTag: text().notNull(),
+    createdAt: text().notNull(),
+  },
+  (table) => [
+    check('binder_tag_length', sql`length(${table.tag}) <= 30`),
+    // Belt-and-suspenders alongside the application-level case-insensitive
+    // dedupe: at most one tag row per binder for a given normalized tag
+    // text.
+    uniqueIndex('binder_tags_binder_id_normalized_tag_unique').on(
+      table.binderId,
+      table.normalizedTag,
+    ),
+  ],
+);
+
 // A shared, immutable local image asset (story 11: "Select a card for a
 // binder slot"). Story 12 adds the SHA-256 digest and sanitized original
 // filename columns its custom-upload dedupe/metadata requirements need;

@@ -10,12 +10,15 @@ import {
   DEFAULT_WIDTH_PER_SLOT_CM,
 } from '@binder-project-planner/shared';
 import { RotateCcw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 
+import { listTagSuggestions } from '@/lib/api';
 import { Tooltip } from '@/shared/feedback';
 
 import type { BinderDetailsFormInput, BinderDetailsFormValues } from './binderDetailsSchema';
 import { BinderSettingsArtPreview, BinderSettingsLayoutPreview } from './BinderSettingsPreview';
+import { TagsInput } from './TagsInput';
 
 // The filled-input treatment documented in styling.instructions.md's "Forms &
 // inputs" section: neutral-800 fill, no visible resting border, primary
@@ -176,6 +179,27 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
     formState: { errors },
   } = form;
 
+  // Story 51: the tags combobox's suggestion list - fetched once here
+  // (rather than by each of this form's two callers separately) since both
+  // the create-binder page and the Edit Details tab render this same
+  // component. A fetch failure is treated as "no suggestions yet" rather
+  // than an error state - freeform tag entry still works either way, and
+  // this list is a convenience, not a requirement for the field to
+  // function.
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>([]);
+  useEffect(() => {
+    const controller = new AbortController();
+
+    listTagSuggestions(controller.signal)
+      .then(setTagSuggestions)
+      .catch(() => {
+        // Ignored - see the comment above `tagSuggestions` for why a
+        // failed fetch doesn't surface an error.
+      });
+
+    return () => controller.abort();
+  }, []);
+
   // The color-swatch input mirrors the editable text field below it (per
   // planning.md's "color input paired with an editable text value"). Its
   // own `value` must always be a well-formed 6-digit hex string or the
@@ -234,6 +258,19 @@ export function BinderDetailsForm({ form, disabled }: BinderDetailsFormProps) {
           disabled={disabled}
           className={errors.name ? errorInputClassName : inputClassName}
           {...register('name')}
+        />
+      </Field>
+      {/* Story 51: directly below the binder name field, per its own
+          acceptance criteria. */}
+      <Field label="Tags" htmlFor="binder-tags" error={errors.tags?.message}>
+        <TagsInput
+          id="binder-tags"
+          value={watch('tags')}
+          onChange={(next) =>
+            form.setValue('tags', next, { shouldDirty: true, shouldValidate: true })
+          }
+          suggestions={tagSuggestions}
+          disabled={disabled}
         />
       </Field>
       {/* Page-count fields first (story 42 reorder): the stored page count

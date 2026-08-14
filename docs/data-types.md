@@ -46,6 +46,7 @@ shape, name, or persistence contract in the relevant story file under
 | `selectedBinderCostEntryId`           | UUID or `null`            | Yes      | Selected `BinderCostEntry` for this binder's Finances tab; nulled server-side when a width/height/pages change no longer matches the selected entry's stored dimensions.                       |
 | `selectedPrintingCostEntryId`         | UUID or `null`            | Yes      | Selected `PrintingCostEntry` for this binder's Finances tab.                                                                                                                                   |
 | `selectedHolographicPaperCostEntryId` | UUID or `null`            | Yes      | Selected `HolographicPaperCostEntry` for this binder's Finances tab.                                                                                                                           |
+| `tags`                                | string array              | Yes      | Zero to many tags (Story 51); each trimmed, 1 to 30 characters, case-insensitively unique within the binder. Stored as `BinderTag` rows, not a column on this table.                           |
 | `cachedArtPrintPageCount`             | nonnegative integer       | Yes      | Cached result of `GET /binders/{binderId}/art-print-page-count`, recomputed only when the cache signature below no longer matches.                                                             |
 | art-print page-count cache signature  | derived value             | Yes      | `COUNT` of currently-placed art rows plus `MAX(updatedAt)` across them plus the binder's own `updatedAt`; not a stored column, computed on read to detect staleness cheaply.                   |
 | `createdAt`                           | UTC timestamp             | Yes      | Backend-managed.                                                                                                                                                                               |
@@ -53,7 +54,8 @@ shape, name, or persistence contract in the relevant story file under
 
 **Relationships:** A binder owns cards and multi-slot art. It references neither image
 files nor image-asset storage paths directly. It also optionally references one shared
-`BinderCostEntry`, `PrintingCostEntry`, and `HolographicPaperCostEntry` (Story 34).
+`BinderCostEntry`, `PrintingCostEntry`, and `HolographicPaperCostEntry` (Story 34), and
+owns zero to many `BinderTag` rows (Story 51).
 
 ### PlacementCoordinates
 
@@ -200,15 +202,15 @@ A shared, reusable catalog entry (Story 34) selectable from any binder's Finance
 Returned by `GET /binders` and binder duplication. It contains a lightweight subset of
 the binder graph.
 
-| Property                                                                     | Type            | Notes                                                                                                        |
-| ---------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------------------------------ |
-| `id`, `name`, `width`, `height`, `pages`, `locked`, `createdAt`, `updatedAt` | Binder fields   | Base summary fields.                                                                                         |
-| preview spread                                                               | `PreviewSpread` | Selected preview page or spread with only display data required for the miniature layout.                    |
-| `totalSlots`                                                                 | integer         | Canonical slot count.                                                                                        |
-| `occupiedSlots`                                                              | integer         | Cards plus art-covered slots.                                                                                |
-| `emptySlots`                                                                 | integer         | Total minus occupied slots.                                                                                  |
-| `acquiredCards`                                                              | integer         | Number of card records with `acquired = true` (Story 36); counts placed and unplaced cards and excludes art. |
-| `totalCards`                                                                 | integer         | All binder-owned card records, placed and unplaced.                                                          |
+| Property                                                                             | Type            | Notes                                                                                                        |
+| ------------------------------------------------------------------------------------ | --------------- | ------------------------------------------------------------------------------------------------------------ |
+| `id`, `name`, `width`, `height`, `pages`, `locked`, `tags`, `createdAt`, `updatedAt` | Binder fields   | Base summary fields.                                                                                         |
+| preview spread                                                                       | `PreviewSpread` | Selected preview page or spread with only display data required for the miniature layout.                    |
+| `totalSlots`                                                                         | integer         | Canonical slot count.                                                                                        |
+| `occupiedSlots`                                                                      | integer         | Cards plus art-covered slots.                                                                                |
+| `emptySlots`                                                                         | integer         | Total minus occupied slots.                                                                                  |
+| `acquiredCards`                                                                      | integer         | Number of card records with `acquired = true` (Story 36); counts placed and unplaced cards and excludes art. |
+| `totalCards`                                                                         | integer         | All binder-owned card records, placed and unplaced.                                                          |
 
 The client derives rounded slot-completion and card-acquisition percentages. Card
 acquisition percentage is `null` and displays as `N/A` when `totalCards` is zero.
@@ -236,6 +238,7 @@ acquisition state, pending-operation feedback, and editing controls are not rend
 | `pages`                                                    | positive integer             | Yes                                                         |
 | `widthPerSlot`, `widthBase`, `heightPerSlot`, `heightBase` | corresponding Binder fields  | No; defaults to the shared dimension defaults when omitted. |
 | `borderColor`, `borderRadius`, `borderWidth`               | corresponding Binder fields  | No; defaults to the shared art-style defaults when omitted. |
+| `tags`                                                     | string array                 | No; defaults to an empty array when omitted (Story 51).     |
 
 `POST /binders` returns `201 Created`, a `Location` header, and the complete `Binder`.
 
@@ -244,13 +247,14 @@ acquisition state, pending-operation feedback, and editing controls are not rend
 This is a partial request. It may contain any valid dirty binder field plus the
 resize-confirmation flag when needed.
 
-| Property                                                   | Type                        | Notes                                                  |
-| ---------------------------------------------------------- | --------------------------- | ------------------------------------------------------ |
-| `name`, `width`, `height`, `pages`                         | corresponding Binder fields | Standard detail updates.                               |
-| `previewPhysicalPage`, `locked`, `notes`                   | corresponding Binder fields | Metadata updates.                                      |
-| `widthPerSlot`, `widthBase`, `heightPerSlot`, `heightBase` | corresponding Binder fields | Dimension updates.                                     |
-| `borderColor`, `borderRadius`, `borderWidth`               | corresponding Binder fields | Binder art-style updates.                              |
-| `moveAffectedItemsToUnplaced`                              | boolean                     | Only present after confirmed affected-item relocation. |
+| Property                                                   | Type                        | Notes                                                                                        |
+| ---------------------------------------------------------- | --------------------------- | -------------------------------------------------------------------------------------------- |
+| `name`, `width`, `height`, `pages`                         | corresponding Binder fields | Standard detail updates.                                                                     |
+| `previewPhysicalPage`, `locked`, `notes`                   | corresponding Binder fields | Metadata updates.                                                                            |
+| `widthPerSlot`, `widthBase`, `heightPerSlot`, `heightBase` | corresponding Binder fields | Dimension updates.                                                                           |
+| `borderColor`, `borderRadius`, `borderWidth`               | corresponding Binder fields | Binder art-style updates.                                                                    |
+| `tags`                                                     | string array                | Full replacement of this binder's tags (Story 51); there is no separate add/remove endpoint. |
+| `moveAffectedItemsToUnplaced`                              | boolean                     | Only present after confirmed affected-item relocation.                                       |
 
 ### ResizePreviewRequest and ResizePreviewResult
 
@@ -397,6 +401,20 @@ that resets the search query, sort, and every column filter back to their defaul
 | other RFC 9457 fields | **TBD** | The complete OpenAPI Problem Details schema remains to be defined. |
 
 ## Supporting Persisted Records
+
+### BinderTag
+
+One binder's one tag (Story 51). No separate `Tag` catalog table exists; the `GET /tags`
+suggestion list is a `SELECT DISTINCT` over this table's tag text across every binder.
+
+| Property    | Type          | Notes                                                                                    |
+| ----------- | ------------- | ---------------------------------------------------------------------------------------- |
+| `binderId`  | UUID          | Owning binder.                                                                           |
+| tag text    | string        | Trimmed, 1 to 30 characters. Case-insensitively unique per binder; original casing kept. |
+| `createdAt` | UTC timestamp | Backend-managed; determines this binder's own tag display order.                         |
+
+There is no tag-rename operation: correcting a typo means deleting the old tag and adding
+the corrected one.
 
 ### MutationIdempotencyOutcome
 

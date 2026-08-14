@@ -259,6 +259,25 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /tags:
+    get:
+      operationId: listTagSuggestions
+      summary: List distinct binder tag suggestions
+      description: >-
+        Story 51: returns the distinct tag text currently used by any
+        binder (a `SELECT DISTINCT` over the `BinderTag` table),
+        alphabetically ordered case-insensitively, for the tags
+        combobox's suggestion list. A tag removed from every binder it was
+        on naturally disappears from this list.
+      responses:
+        '200':
+          description: The distinct tag suggestion list.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
   /binders/{binderId}/exports/pdf:
     parameters:
       - $ref: '#/components/parameters/binderId'
@@ -2014,6 +2033,20 @@ components:
         when unset. An exactly-empty string sent on update is normalized to
         null by the backend; non-empty content is stored as-is without
         trimming.
+    BinderTags:
+      type: array
+      items:
+        type: string
+        minLength: 1
+        maxLength: 30
+      description: >-
+        Story 51: this binder's tags, in the order they were added. Trimmed
+        and case-insensitively deduplicated by the backend (a candidate
+        that case-insensitively matches an existing tag is a no-op and
+        keeps the existing tag's original casing). Sent as a full
+        replacement array by `POST /binders` and
+        `PATCH /binders/{binderId}` - there is no separate add/remove
+        endpoint or tag-rename operation.
     CreateBinderRequest:
       type: object
       additionalProperties: false
@@ -2080,6 +2113,14 @@ components:
             omitted.
         previewPhysicalPage:
           $ref: '#/components/schemas/BinderPreviewPhysicalPage'
+        tags:
+          allOf:
+            - $ref: '#/components/schemas/BinderTags'
+          description: >-
+            Story 51: defaults to an empty array when omitted. Held in
+            local component state on the create-binder page (there is no
+            binder to attach tags to yet) and submitted as part of this
+            same request.
     UpdateBinderRequest:
       type: object
       additionalProperties: false
@@ -2149,6 +2190,8 @@ components:
           $ref: '#/components/schemas/SelectedPrintingCostEntryId'
         selectedHolographicPaperCostEntryId:
           $ref: '#/components/schemas/SelectedHolographicPaperCostEntryId'
+        tags:
+          $ref: '#/components/schemas/BinderTags'
     ResizePreviewRequest:
       type: object
       additionalProperties: false
@@ -2309,6 +2352,7 @@ components:
         - selectedBinderCostEntryId
         - selectedPrintingCostEntryId
         - selectedHolographicPaperCostEntryId
+        - tags
         - createdAt
         - updatedAt
       properties:
@@ -2360,6 +2404,8 @@ components:
           $ref: '#/components/schemas/SelectedPrintingCostEntryId'
         selectedHolographicPaperCostEntryId:
           $ref: '#/components/schemas/SelectedHolographicPaperCostEntryId'
+        tags:
+          $ref: '#/components/schemas/BinderTags'
         createdAt:
           type: string
           format: date-time
@@ -2395,6 +2441,7 @@ components:
         - selectedBinderCostEntryId
         - selectedPrintingCostEntryId
         - selectedHolographicPaperCostEntryId
+        - tags
         - totalSlots
         - occupiedSlots
         - emptySlots
@@ -2452,6 +2499,8 @@ components:
           $ref: '#/components/schemas/SelectedPrintingCostEntryId'
         selectedHolographicPaperCostEntryId:
           $ref: '#/components/schemas/SelectedHolographicPaperCostEntryId'
+        tags:
+          $ref: '#/components/schemas/BinderTags'
         totalSlots:
           type: integer
           minimum: 0

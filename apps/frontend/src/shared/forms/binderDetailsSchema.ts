@@ -121,6 +121,10 @@ export const binderDetailsSchema = z
     // (checked below in the cross-field refinement), so only the lower
     // bound is expressed on the field itself.
     previewPhysicalPage: positiveIntegerField('Preview page'),
+    // Story 51: zero to many tags, added/removed through `TagsInput`
+    // itself (which already trims and case-insensitively dedupes via the
+    // shared `addBinderTag` helper), so no further parsing is needed here.
+    tags: z.array(z.string()),
   })
   .superRefine((values, ctx) => {
     // Cross-field validation that can't be expressed on one field alone:
@@ -180,4 +184,5 @@ export const defaultBinderDetailsFormValues: BinderDetailsFormInput = {
   borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
   borderWidth: DEFAULT_BORDER_WIDTH_CM,
   previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  tags: [],
 };

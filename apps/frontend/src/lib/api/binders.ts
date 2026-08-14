@@ -26,6 +26,19 @@ export async function listBinders(signal?: AbortSignal): Promise<BinderSummary[]
   return data;
 }
 
+// Story 51: fetches the tags combobox's suggestion list through
+// `GET /tags` - the distinct tag text currently used by any binder,
+// alphabetically ordered case-insensitively.
+export async function listTagSuggestions(signal?: AbortSignal): Promise<string[]> {
+  const { data, error } = await apiClient.GET('/tags', { signal });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 // Creates a binder through `POST /binders` (story 4). On failure, throws the
 // backend's Problem Details body as-is so callers (via
 // `useSaveStatusToast`/`toProblemDetailsInfo`) can read its `detail`,

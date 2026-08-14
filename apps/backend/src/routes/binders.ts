@@ -9,6 +9,7 @@ import {
   ART_PRINT_TILE_OVERLAP_INCHES,
   BINDER_NAME_MAX_LENGTH,
   BINDER_NOTES_MAX_LENGTH,
+  BINDER_TAG_MAX_LENGTH,
   DEFAULT_BINDER_LOCKED,
   DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
   DEFAULT_BORDER_COLOR,
@@ -21,6 +22,7 @@ import {
   generateUniqueBinderCopyName,
   getMaxPhysicalPage,
   getTotalSlots,
+  normalizeBinderTagsList,
   resolveSpread,
 } from '@binder-project-planner/shared';
 import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
@@ -32,6 +34,7 @@ import {
   artImageAssets,
   binderCostEntries,
   binders,
+  binderTags,
   cardImageAssets,
   cards,
   holographicPaperCostEntries,
@@ -68,6 +71,10 @@ interface CreateBinderRequestBody {
   borderWidth?: number;
   previewPhysicalPage?: number;
   notes?: string | null;
+  // Story 51: defaults to an empty array when omitted; held in local
+  // component state on the create-binder page and submitted as part of
+  // this same request.
+  tags?: string[];
 }
 
 // The validated, OpenAPI-typed shape of an update-binder request body
@@ -98,6 +105,10 @@ interface UpdateBinderRequestBody {
   selectedBinderCostEntryId?: string | null;
   selectedPrintingCostEntryId?: string | null;
   selectedHolographicPaperCostEntryId?: string | null;
+  // Story 51: a full replacement of this binder's tags - when present,
+  // every currently stored tag is replaced by this array (there is no
+  // separate add/remove endpoint).
+  tags?: string[];
 }
 
 // Story 27's dry-run resize preview request body.
@@ -161,8 +172,10 @@ function fromTenThousandths(value: number): number {
 // Strips internal-only columns (`normalizedName`, the `*Hundredths` storage
 // columns) and converts stored hundredths back to their documented decimal
 // units before a binder row is serialized as an OpenAPI `Binder`, shared by
-// every route that returns one.
-function serializeBinder(row: BinderRow) {
+// every route that returns one. `tags` (story 51) lives in its own table
+// keyed by `binderId` rather than a column on this row, so every call site
+// fetches it separately (via `listTagsForBinder`) and passes it in.
+function serializeBinder(row: BinderRow, tags: string[]) {
   return {
     id: row.id,
     name: row.name,
@@ -182,9 +195,59 @@ function serializeBinder(row: BinderRow) {
     selectedBinderCostEntryId: row.selectedBinderCostEntryId,
     selectedPrintingCostEntryId: row.selectedPrintingCostEntryId,
     selectedHolographicPaperCostEntryId: row.selectedHolographicPaperCostEntryId,
+    tags,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+// Story 51: this binder's own tags, in the order they were added
+// (`createdAt` ascending) - the order new pills appear alongside the tags
+// input.
+function listTagsForBinder(database: DatabaseConnection['database'], binderId: string): string[] {
+  return database
+    .select({ tag: binderTags.tag })
+    .from(binderTags)
+    .where(eq(binderTags.binderId, binderId))
+    .orderBy(asc(binderTags.createdAt))
+    .all()
+    .map((row) => row.tag);
+}
+
+// Story 51: the first trimmed tag (in array order) whose length exceeds the
+// shared 30-character maximum, or null when every tag is within bounds.
+// Defense-in-depth alongside the OpenAPI request schema's own `maxLength`
+// and the database's `binder_tag_length` check constraint.
+function findOverlongTag(tags: string[]): string | null {
+  return tags.find((tag) => tag.length > BINDER_TAG_MAX_LENGTH) ?? null;
+}
+
+// Story 51: replaces every tag currently stored for `binderId` with
+// `tags` (already trimmed and case-insensitively deduplicated by
+// `normalizeBinderTagsList`), inside the caller's transaction. Used by both
+// `POST /binders` (starting from no existing rows) and
+// `PATCH /binders/{binderId}` (a full replacement of whatever was there
+// before).
+function replaceBinderTags(
+  tx: DatabaseConnection['database'],
+  binderId: string,
+  tags: string[],
+  now: string,
+): void {
+  tx.delete(binderTags).where(eq(binderTags.binderId, binderId)).run();
+  if (tags.length === 0) return;
+
+  tx.insert(binderTags)
+    .values(
+      tags.map((tag) => ({
+        id: randomUUID(),
+        binderId,
+        tag,
+        normalizedTag: tag.toLowerCase(),
+        createdAt: now,
+      })),
+    )
+    .run();
 }
 
 // A validated `#RRGGBB` hex color (case-insensitive input; OpenAPI's
@@ -346,7 +409,7 @@ function buildBinderSummary(database: DatabaseConnection['database'], row: Binde
   const { acquiredCards, totalCards } = countCardAcquisition(database, row.id);
 
   return {
-    ...serializeBinder(row),
+    ...serializeBinder(row, listTagsForBinder(database, row.id)),
     totalSlots,
     occupiedSlots,
     emptySlots: totalSlots - occupiedSlots,
@@ -419,6 +482,23 @@ export function createBindersRouter(
     response.status(200).json(summaries);
   });
 
+  // Story 51: the tags combobox's suggestion list - the distinct tag text
+  // currently used by any binder, alphabetically ordered case-
+  // insensitively. Grouping by `normalizedTag` collapses two binders'
+  // differently-cased spellings of the same tag (e.g. "Foil" and "foil")
+  // into one suggestion; `min(tag)` picks one deterministic casing to
+  // display for that group.
+  router.get('/tags', (_request, response) => {
+    const rows = database
+      .select({ tag: sql<string>`min(${binderTags.tag})` })
+      .from(binderTags)
+      .groupBy(binderTags.normalizedTag)
+      .orderBy(asc(binderTags.normalizedTag))
+      .all();
+
+    response.status(200).json(rows.map((row) => row.tag));
+  });
+
   router.post('/binders', (request, response) => {
     const body = request.body as CreateBinderRequestBody;
     const trimmedName = body.name.trim();
@@ -482,6 +562,24 @@ export function createBindersRouter(
       return;
     }
 
+    // Story 51: an omitted tags array defaults to none; a supplied array is
+    // trimmed and case-insensitively deduplicated (belt-and-suspenders
+    // alongside the frontend's own combobox normalization), then checked
+    // against the shared 30-character maximum.
+    const tags = normalizeBinderTagsList(body.tags ?? []);
+    const overlongTag = findOverlongTag(tags);
+    if (overlongTag) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          badRequestProblem(
+            `Tag "${overlongTag}" must be ${BINDER_TAG_MAX_LENGTH} characters or fewer.`,
+          ),
+        );
+      return;
+    }
+
     const now = new Date().toISOString();
     const binder = {
       id: randomUUID(),
@@ -522,7 +620,13 @@ export function createBindersRouter(
     };
 
     try {
-      database.insert(binders).values(binder).run();
+      // Story 51: the binder row and its initial tags are inserted
+      // together so a failure partway through (e.g. the name-uniqueness
+      // conflict below) never leaves orphaned tag rows.
+      database.transaction((tx) => {
+        tx.insert(binders).values(binder).run();
+        replaceBinderTags(tx as unknown as DatabaseConnection['database'], binder.id, tags, now);
+      });
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         response
@@ -543,7 +647,7 @@ export function createBindersRouter(
 
     // Only the documented Binder fields are returned; `normalizedName` is an
     // internal uniqueness-enforcement detail and is never exposed to clients.
-    response.status(201).location(`/binders/${binder.id}`).json(serializeBinder(binder));
+    response.status(201).location(`/binders/${binder.id}`).json(serializeBinder(binder, tags));
   });
 
   // Story 7: "Create the view/edit binder page". Backs the shared binder
@@ -557,7 +661,7 @@ export function createBindersRouter(
       return;
     }
 
-    response.status(200).json(serializeBinder(row));
+    response.status(200).json(serializeBinder(row, listTagsForBinder(database, binderId)));
   });
 
   // Story 27's read-only dry run: identifies currently placed card/art
@@ -657,6 +761,28 @@ export function createBindersRouter(
         return;
       }
       updates.notes = body.notes === '' ? null : body.notes;
+    }
+
+    // Story 51: a full replacement of this binder's tags, mirroring the
+    // OpenAPI contract's "no separate add/remove endpoint" design (see
+    // `BinderTags`). `undefined` means "leave the currently stored tags
+    // untouched"; computed here (rather than inside `updates`, which only
+    // holds `binders` table columns) since tags live in their own table.
+    let normalizedTags: string[] | undefined;
+    if (body.tags !== undefined) {
+      normalizedTags = normalizeBinderTagsList(body.tags);
+      const overlongTag = findOverlongTag(normalizedTags);
+      if (overlongTag) {
+        response
+          .status(400)
+          .type('application/problem+json')
+          .json(
+            badRequestProblem(
+              `Tag "${overlongTag}" must be ${BINDER_TAG_MAX_LENGTH} characters or fewer.`,
+            ),
+          );
+        return;
+      }
     }
 
     // Cross-field dimension validation (story 24) runs against the
@@ -912,6 +1038,17 @@ export function createBindersRouter(
           .returning()
           .get() as BinderRow;
 
+        // Story 51: a full replacement of this binder's tags, in the same
+        // transaction as the rest of the update.
+        if (normalizedTags !== undefined) {
+          replaceBinderTags(
+            tx as unknown as DatabaseConnection['database'],
+            binderId,
+            normalizedTags,
+            now,
+          );
+        }
+
         return updatedRow;
       });
 
@@ -964,7 +1101,7 @@ export function createBindersRouter(
         : listArtForBinder(database, binderId).filter((artItem) => movedArtIdSet.has(artItem.id));
 
     response.status(200).json({
-      binder: serializeBinder(updated),
+      binder: serializeBinder(updated, listTagsForBinder(database, binderId)),
       movedCards,
       movedArt,
       affectedCardCount,

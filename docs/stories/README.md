@@ -49,6 +49,7 @@ This index maps every story file to its current bucket.
 | 46    | Bulk acquire cards                                                     | [docs/stories/completed/2026-08-12-46-bulk-acquire-cards.md](completed/2026-08-12-46-bulk-acquire-cards.md)                                                                                                         |
 | 49    | Edit a card's info from the Card List                                  | [docs/stories/completed/2026-08-14-49-edit-a-cards-info-from-the-card-list.md](completed/2026-08-14-49-edit-a-cards-info-from-the-card-list.md)                                                                     |
 | 50    | Enhance the View Financials Cards section                              | [docs/stories/completed/2026-08-13-50-enhance-view-financials-cards-section.md](completed/2026-08-13-50-enhance-view-financials-cards-section.md)                                                                   |
+| 51    | Add binder tags                                                        | [docs/stories/completed/2026-08-14-51-add-binder-tags.md](completed/2026-08-14-51-add-binder-tags.md)                                                                                                               |
 
 ## Ready For Dev
 
@@ -57,7 +58,6 @@ This index maps every story file to its current bucket.
 | 32    | Lock a binder                          | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                                                   |
 | 44    | Delete custom art finance cost entries | [docs/stories/ready-for-dev/44-delete-custom-art-finance-cost-entries.md](ready-for-dev/44-delete-custom-art-finance-cost-entries.md) |
 | 45    | What I'm looking for section           | [docs/stories/ready-for-dev/45-what-im-looking-for-section.md](ready-for-dev/45-what-im-looking-for-section.md)                       |
-| 51    | Add binder tags                        | [docs/stories/ready-for-dev/51-add-binder-tags.md](ready-for-dev/51-add-binder-tags.md)                                               |
 
 ## Needs Refinement
 

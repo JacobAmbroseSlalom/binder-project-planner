@@ -1,6 +1,6 @@
 # 51. Add binder tags
 
-**Status:** Not started
+**Status:** Done (2026-08-14 14:35 EDT)
 
 #### Acceptance criteria
 

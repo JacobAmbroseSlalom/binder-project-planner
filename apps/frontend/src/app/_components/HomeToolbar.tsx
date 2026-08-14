@@ -16,6 +16,7 @@ import { useLocalStorageBoolean } from '@/shared/hooks/useLocalStorageBoolean';
 
 import { COMPLETION_METRICS_VISIBLE_STORAGE_KEY, type BinderSortOption } from './BinderList';
 import { ImportConfirmDialog } from './ImportConfirmDialog';
+import { TagFilterControl } from './TagFilterControl';
 
 // Fixed toast ids so a retried export/import replaces its own toast rather
 // than stacking a new one.
@@ -33,6 +34,9 @@ export function HomeToolbar({
   onSearchChange,
   sortOption,
   onToggleSort,
+  availableTags,
+  selectedTags,
+  onSelectedTagsChange,
 }: {
   // Story 39's search box value and sort toggle state, lifted to the home
   // page so this toolbar and `BinderList` (which actually filters/sorts)
@@ -41,6 +45,12 @@ export function HomeToolbar({
   onSearchChange: (value: string) => void;
   sortOption: BinderSortOption;
   onToggleSort: () => void;
+  // Story 51's tag filter: the distinct tag options (reported up by
+  // `BinderList` itself) and the currently selected tags, also lifted to
+  // the home page for the same reason as the search/sort state above.
+  availableTags: string[];
+  selectedTags: string[];
+  onSelectedTagsChange: (next: string[]) => void;
 }) {
   const { start } = useSaveStatusToast();
   const { markFailed } = useToastContext();
@@ -155,6 +165,14 @@ export function HomeToolbar({
           <ArrowUpDown className="size-4" aria-hidden="true" />
           Sort: {sortOption === 'lastActive' ? 'Last Active' : 'Name'}
         </button>
+
+        {/* Story 51's tag filter, alongside the search box/sort toggle
+            above and the completion-metrics toggle below. */}
+        <TagFilterControl
+          availableTags={availableTags}
+          selectedTags={selectedTags}
+          onSelectedTagsChange={onSelectedTagsChange}
+        />
 
         {/* Story 4's create button. */}
         <Link

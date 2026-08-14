@@ -179,6 +179,11 @@ export const MUTATION_IDEMPOTENCY_RETENTION_MS = 86_400_000; // 24 hours
 // unbounded number of simultaneous TCGdex image downloads/database writes.
 export const BULK_CARD_CREATE_CONCURRENCY = 5;
 
+// Story 51: "Add binder tags". Maximum trimmed tag length, shared by the
+// frontend tags combobox/schema, the OpenAPI contract, and backend
+// validation. There is no maximum number of tags per binder.
+export const BINDER_TAG_MAX_LENGTH = 30;
+
 // Story 20: "Add a binder preview". The reusable binder-details form's
 // `previewPhysicalPage` field defaults to physical page 2 (the binder's
 // first two-page spread) for a newly created binder. The backend also

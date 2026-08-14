@@ -65,9 +65,18 @@ const LIST_BINDERS_TOAST_ID = 'list-binders';
 export function BinderList({
   searchQuery,
   sortOption,
+  selectedTags,
+  onAvailableTagsChange,
 }: {
   searchQuery: string;
   sortOption: BinderSortOption;
+  // Story 51: the home page's currently selected tag filter (OR logic) and
+  // a callback this list uses to report the distinct tag options available
+  // to pick from - derived from this already-fetched binder list itself,
+  // rather than a separate `GET /tags` request, per its own "client-side,
+  // no new backend query parameters" technical requirement.
+  selectedTags: string[];
+  onAvailableTagsChange: (tags: string[]) => void;
 }) {
   const router = useRouter();
   const [status, setStatus] = useState<BinderListStatus>('loading');
@@ -101,17 +110,50 @@ export function BinderList({
     DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE,
   );
 
+  // Story 51: the distinct tag options the home page's tag filter offers,
+  // derived from this already-fetched `binders` list rather than a
+  // separate `GET /tags` request. Case-insensitively deduped (keeping the
+  // first-seen casing) and alphabetically ordered, mirroring the backend's
+  // own `GET /tags` suggestion-list semantics.
+  const availableTags = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const binder of binders) {
+      for (const tag of binder.tags) {
+        const normalized = tag.toLowerCase();
+        if (!seen.has(normalized)) {
+          seen.set(normalized, tag);
+        }
+      }
+    }
+    return [...seen.values()].sort((a, b) => a.localeCompare(b));
+  }, [binders]);
+
+  useEffect(() => {
+    onAvailableTagsChange(availableTags);
+  }, [availableTags, onAvailableTagsChange]);
+
   // Story 39's search/sort, applied client-side over the already-fetched
   // `binders`: a case-insensitive substring match on name, then either the
   // fetched (newest-first) order as-is or a client-side ascending,
-  // case-insensitive re-sort by name. Recomputed only when the underlying
-  // data or the search/sort state actually changes, rather than on every
-  // render.
+  // case-insensitive re-sort by name. Story 51 adds an OR-logic tag filter
+  // over the same already-fetched list. Recomputed only when the underlying
+  // data or the search/sort/tag-filter state actually changes, rather than
+  // on every render.
   const visibleBinders = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
-    const matching = normalizedQuery
+    const matchingSearch = normalizedQuery
       ? binders.filter((binder) => binder.name.toLowerCase().includes(normalizedQuery))
       : binders;
+
+    // Story 51: a binder matching ANY selected tag (OR logic) passes;
+    // selecting no tags applies no tag filter at all.
+    const normalizedSelectedTags = selectedTags.map((tag) => tag.toLowerCase());
+    const matching =
+      normalizedSelectedTags.length === 0
+        ? matchingSearch
+        : matchingSearch.filter((binder) =>
+            binder.tags.some((tag) => normalizedSelectedTags.includes(tag.toLowerCase())),
+          );
 
     if (sortOption === 'name') {
       return [...matching].sort((a, b) => a.name.localeCompare(b.name));
@@ -119,7 +161,7 @@ export function BinderList({
     // "Last Active": `GET /binders`'s own newest-first order is already
     // exactly this ordering, so no re-sort is needed.
     return matching;
-  }, [binders, searchQuery, sortOption]);
+  }, [binders, searchQuery, sortOption, selectedTags]);
 
   useEffect(() => {
     // Aborts this fetch if the effect cleans up (unmount, or a future

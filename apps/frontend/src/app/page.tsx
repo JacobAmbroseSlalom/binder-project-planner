@@ -22,12 +22,20 @@ const DEFAULT_SORT_OPTION: BinderSortOption = 'lastActive';
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<BinderSortOption>(DEFAULT_SORT_OPTION);
+  // Story 51: the tag filter's currently selected tags (OR logic) and the
+  // distinct tag options it offers - the latter reported up by `BinderList`
+  // itself (derived from its own already-fetched binder list) rather than
+  // a separate `GET /tags` request. Neither is persisted, so a fresh page
+  // load always starts with no tags selected, matching the search box and
+  // sort toggle's own reset-on-load behavior.
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
 
   return (
     <main className="flex flex-col items-center gap-8 p-8">
-      {/* Stories 22/4/33/39: the search box, sort toggle, completion-metrics
-          toggle, the centered "Create new binder" button, and the export/
-          import actions, all on one row. */}
+      {/* Stories 22/4/33/39/51: the search box, sort toggle,
+          completion-metrics toggle, tag filter, the centered "Create new
+          binder" button, and the export/import actions, all on one row. */}
       <HomeToolbar
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
@@ -35,9 +43,17 @@ export default function Home() {
         onToggleSort={() =>
           setSortOption((previous) => (previous === 'lastActive' ? 'name' : 'lastActive'))
         }
+        availableTags={availableTags}
+        selectedTags={selectedTags}
+        onSelectedTagsChange={setSelectedTags}
       />
 
-      <BinderList searchQuery={searchQuery} sortOption={sortOption} />
+      <BinderList
+        searchQuery={searchQuery}
+        sortOption={sortOption}
+        selectedTags={selectedTags}
+        onAvailableTagsChange={setAvailableTags}
+      />
     </main>
   );
 }
