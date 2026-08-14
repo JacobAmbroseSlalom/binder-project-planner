@@ -57,13 +57,13 @@ This index maps every story file to its current bucket.
 
 ## Ready For Dev
 
-| Story | Title | File |
-| ----- | ----- | ---- |
+| Story | Title                                                 | File                                                                                                                                                                    |
+| ----- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 43    | Add a card from other API sources                   | [docs/stories/ready-for-dev/43-add-a-card-from-other-api-sources.md](ready-for-dev/43-add-a-card-from-other-api-sources.md)                                            |
+| 47    | Package and export the application as an executable | [docs/stories/ready-for-dev/47-package-and-export-the-application-as-an-executable.md](ready-for-dev/47-package-and-export-the-application-as-an-executable.md)       |
+| 48    | House cleaning                                      | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md)                                                                                   |
 
 ## Needs Refinement
 
-| Story | Title                                               | File                                                                                                                                                                  |
-| ----- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 43    | Add a card from other API sources                   | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md)                                     |
-| 47    | Package and export the application as an executable | [docs/stories/needs-refinement/47-package-and-export-the-application-as-an-executable.md](needs-refinement/47-package-and-export-the-application-as-an-executable.md) |
-| 48    | House cleaning                                      | [docs/stories/needs-refinement/48-house-cleaning.md](needs-refinement/48-house-cleaning.md)                                                                           |
+| Story | Title | File |
+| ----- | ----- | ---- |
