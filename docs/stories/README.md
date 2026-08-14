@@ -37,6 +37,7 @@ This index maps every story file to its current bucket.
 | 29    | Export a binder as a PDF                                               | [docs/stories/completed/2026-08-03-29-export-a-binder-as-a-pdf.md](completed/2026-08-03-29-export-a-binder-as-a-pdf.md)                                                                                             |
 | 30    | Export multi-slot art for printing                                     | [docs/stories/completed/2026-08-03-30-export-multi-slot-art-for-printing.md](completed/2026-08-03-30-export-multi-slot-art-for-printing.md)                                                                         |
 | 31    | Search and filter unplaced items                                       | [docs/stories/completed/2026-08-04-31-search-and-filter-unplaced-items.md](completed/2026-08-04-31-search-and-filter-unplaced-items.md)                                                                             |
+| 32    | Lock a binder                                                           | [docs/stories/completed/2026-08-07-32-lock-a-binder.md](completed/2026-08-07-32-lock-a-binder.md)                                                                                                                   |
 | 33    | Export and import all application data                                 | [docs/stories/completed/2026-08-04-33-export-and-import-all-application-data.md](completed/2026-08-04-33-export-and-import-all-application-data.md)                                                                 |
 | 34    | Add custom art finances                                                | [docs/stories/completed/2026-08-10-34-add-custom-art-finances.md](completed/2026-08-10-34-add-custom-art-finances.md)                                                                                               |
 | 36    | Track card acquisition                                                 | [docs/stories/completed/2026-08-10-36-track-card-acquisition.md](completed/2026-08-10-36-track-card-acquisition.md)                                                                                                 |
@@ -55,9 +56,9 @@ This index maps every story file to its current bucket.
 
 ## Ready For Dev
 
-| Story | Title         | File                                                                                |
-| ----- | ------------- | ----------------------------------------------------------------------------------- |
-| 32    | Lock a binder | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md) |
+| Story | Title                                                                    | File                                                                                                                                                   |
+| ----- | ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 52    | Persist What I'm Looking For order and add a movable PDF export divider | [docs/stories/ready-for-dev/52-persist-watchlist-order-and-pdf-export-divider.md](ready-for-dev/52-persist-watchlist-order-and-pdf-export-divider.md) |
 
 ## Needs Refinement
 
