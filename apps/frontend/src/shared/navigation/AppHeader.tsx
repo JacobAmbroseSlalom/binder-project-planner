@@ -1,6 +1,6 @@
 'use client';
 
-import { Home, Lock } from 'lucide-react';
+import { Home, Lock, Search } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -13,25 +13,28 @@ import { useNavigationGuard } from './NavigationGuard';
 // page (per the "back to home" affordance requested alongside story 4). Pages
 // can also surface a title here via `useSetAppHeaderTitle` - the binder
 // view/edit pages show the binder name in this bar instead of an in-page
-// heading.
+// heading. Story 45 adds a second persistent link, to the "What I'm Looking
+// For" page, at the opposite (right) end of the bar.
 export function AppHeader() {
   const { title, locked } = useAppHeaderTitle();
   const router = useRouter();
   const { isBlocked, confirmNavigation } = useNavigationGuard();
 
+  // Both persistent links share the same "intercept while a feature has
+  // registered an unsaved-changes guard" click handling (story 38), so it's
+  // factored out here rather than duplicated between the home link below
+  // and the new watchlist link.
+  function handleGuardedNavigate(event: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    if (!isBlocked) return;
+    event.preventDefault();
+    confirmNavigation(() => router.push(href));
+  }
+
   return (
     <header className="relative flex items-center bg-surface px-6 py-4 shadow-panel">
       <Link
         href="/"
-        onClick={(event) => {
-          // Story 38: only intercept the click while some feature has
-          // registered an unsaved-changes guard - otherwise this behaves
-          // as a normal `Link` (still lets a middle-click/ctrl-click open
-          // a new tab, prefetches normally, etc.).
-          if (!isBlocked) return;
-          event.preventDefault();
-          confirmNavigation(() => router.push('/'));
-        }}
+        onClick={(event) => handleGuardedNavigate(event, '/')}
         className="flex items-center gap-2 font-bold text-neutral-100 hover:brightness-110"
       >
         <Home className="size-5" />
@@ -71,6 +74,19 @@ export function AppHeader() {
           )}
         </h1>
       )}
+      {/* Story 45: a persistent right-aligned link to the "What I'm
+          Looking For" page, the only other content in this bar besides
+          the home link (left) and the centered title above - `ml-auto`
+          pushes it to the opposite end of the flex row without disturbing
+          either of those. */}
+      <Link
+        href="/watchlist"
+        onClick={(event) => handleGuardedNavigate(event, '/watchlist')}
+        className="ml-auto flex items-center gap-2 font-bold text-neutral-100 hover:brightness-110"
+      >
+        <Search className="size-5" />
+        What I&apos;m Looking For
+      </Link>
     </header>
   );
 }

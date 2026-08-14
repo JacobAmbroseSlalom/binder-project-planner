@@ -78,9 +78,12 @@ interface ManualCardFormProps {
   // Story 36's shared "Acquired" checkbox value/setter - owned by the
   // parent (CardSelectionModal) for the same reason as `variation` above:
   // it's shared with the search view's own checkbox rather than being an
-  // RHF-managed field of this form.
-  acquired: boolean;
-  onAcquiredChange: (value: boolean) => void;
+  // RHF-managed field of this form. Omitted entirely (rather than always
+  // required) so story 45's binder-less watchlist card-creation modal can
+  // reuse this form without an acquired concept - the checkbox itself is
+  // hidden whenever `onAcquiredChange` isn't supplied.
+  acquired?: boolean;
+  onAcquiredChange?: (value: boolean) => void;
 }
 
 // The card-selection modal's manual-entry form fields (story 12: "Add a
@@ -165,7 +168,9 @@ export function ManualCardForm({
             disabled={disabled}
           />
         </Field>
-        {/* Story 36's shared "Acquired" checkbox. A checkbox reads
+        {/* Story 36's shared "Acquired" checkbox - omitted entirely (see
+            `onAcquiredChange`'s own comment above) for story 45's
+            binder-less watchlist card-creation modal. A checkbox reads
             naturally with its label beside it (matching every other
             checkbox in this app, e.g. `LayoutToolbar`'s visibility
             toggles) rather than above it like the text fields, so this
@@ -173,30 +178,32 @@ export function ManualCardForm({
             spacer line matches `Field`'s caption row's height so the
             checkbox still lines up with its row-mates' input boxes below
             their own labels. */}
-        <div className="flex w-28 shrink-0 flex-col gap-1">
-          <span aria-hidden="true" className="text-caption select-none text-transparent">
-            &nbsp;
-          </span>
-          <label
-            htmlFor="custom-card-acquired"
-            className={`flex h-[42px] items-center gap-2 ${
-              disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
-            }`}
-          >
-            <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-              <input
-                id="custom-card-acquired"
-                type="checkbox"
-                checked={acquired}
-                disabled={disabled}
-                onChange={(event) => onAcquiredChange(event.target.checked)}
-                className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-              />
-              <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+        {onAcquiredChange && (
+          <div className="flex w-28 shrink-0 flex-col gap-1">
+            <span aria-hidden="true" className="text-caption select-none text-transparent">
+              &nbsp;
             </span>
-            <span>Acquired</span>
-          </label>
-        </div>
+            <label
+              htmlFor="custom-card-acquired"
+              className={`flex h-[42px] items-center gap-2 ${
+                disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'
+              }`}
+            >
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                <input
+                  id="custom-card-acquired"
+                  type="checkbox"
+                  checked={acquired ?? false}
+                  disabled={disabled}
+                  onChange={(event) => onAcquiredChange(event.target.checked)}
+                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                />
+                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+              </span>
+              <span>Acquired</span>
+            </label>
+          </div>
+        )}
       </div>
 
       <Field label="Image" htmlFor="custom-card-image" error={fileError}>

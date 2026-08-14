@@ -297,3 +297,15 @@ export const POKEMONTCG_PRICE_FETCH_CONCURRENCY = 5;
 // list shows, imported wherever that list is computed rather than
 // hardcoding the count at the call site.
 export const DEFAULT_TOP_PRICED_CARDS_COUNT = 6;
+
+// Story 45: "What I'm Looking For" PDF export. The backend's fixed page 1
+// layout (5 cards per row, capped at 50% row-to-row overlap - see
+// `watchlistPdf.ts`) can fit at most 8 rows on one US Letter portrait page
+// without a row's cards running off the bottom margin, so this is the
+// hard ceiling on how many entries one export can ever include (5 * 8).
+// The What I'm Looking For table shows a divider below the 40th visible
+// row so the cutoff is visible before exporting, and both the export
+// button (client-side truncation of what it sends) and the backend route
+// (server-side truncation of what it accepts, in case a client ever sends
+// more) enforce the same limit.
+export const WATCHLIST_PDF_MAX_ENTRIES = 40;

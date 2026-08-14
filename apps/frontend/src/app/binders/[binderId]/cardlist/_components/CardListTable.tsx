@@ -6,7 +6,15 @@ import {
   CUSTOM_CARD_NUMBER_MAX_LENGTH,
   CUSTOM_CARD_SET_MAX_LENGTH,
 } from '@binder-project-planner/shared';
-import { ArrowDown, ArrowUp, ArrowUpDown, Circle, CircleCheck, Pencil } from 'lucide-react';
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Bookmark,
+  Circle,
+  CircleCheck,
+  Pencil,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import { resolveCardImageUrl, type Card, type UpdateCardDetailsRequest } from '@/lib/api';
@@ -250,6 +258,9 @@ export function CardListTable({
   onEditCardDetails,
   pendingCardDetailsEditIds,
   onEditingRowChange,
+  onAddToWatchlist,
+  onBulkAddToWatchlist,
+  isBulkAddingToWatchlist,
 }: {
   // Every binder card, used only to compute each column's full
   // distinct-value list for its filter dropdown - never rendered
@@ -290,7 +301,14 @@ export function CardListTable({
   // disable its "Fetch card prices" button for the same reason the price
   // review disables this table's own Edit buttons below - editing a row
   // and reviewing prices shouldn't ever overlap.
-  onEditingRowChange?: (isEditingRow: boolean) => void;
+  onEditingRowChange?: (isEditingRow: boolean) => void; // Story 45's Card List row action: adds this card to the shared What
+  // I'm Looking For list (idempotent on the backend, so this table never
+  // needs to know whether the card is already listed).
+  onAddToWatchlist: (cardId: string) => void;
+  // The header's bulk variant: adds every currently visible (search/sort/
+  // filter-derived) card to the watchlist in one request.
+  onBulkAddToWatchlist: (cardIds: string[]) => void;
+  isBulkAddingToWatchlist: boolean;
 }) {
   const controlsDisabled = priceReview !== null;
 
@@ -433,9 +451,35 @@ export function CardListTable({
             </>
           )}
           {/* Story 49's trailing Edit/Save/Cancel actions column - no
-              sort/filter of its own. */}
-          <th className="py-2 pl-4 font-regular">
+              sort/filter of its own, aside from this header-level bulk
+              "Add to What I'm Looking For" control (every currently
+              displayed card at once), placed above each row's own
+              individual version of the same action below. */}
+          <th className="py-2 pl-4 text-right font-regular">
             <span className="sr-only">Row actions</span>
+            {/* Matches each row's own `flex justify-end gap-2` actions
+                group (Bookmark + Edit, both `size-9`) below, including a
+                same-sized invisible spacer standing in for the Edit
+                button's column when it's present, so this header's
+                Bookmark button lines up directly over each row's -
+                without it, being the only item here would instead hug
+                the column's right edge, right where Edit sits. */}
+            <div className="flex justify-end gap-2">
+              <Tooltip label="Add every displayed card to What I'm Looking For">
+                <button
+                  type="button"
+                  disabled={
+                    controlsDisabled || isBulkAddingToWatchlist || visibleCards.length === 0
+                  }
+                  onClick={() => onBulkAddToWatchlist(visibleCards.map((card) => card.id))}
+                  aria-label="Add every displayed card to What I'm Looking For"
+                  className="flex size-9 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <Bookmark className="size-4" aria-hidden="true" />
+                </button>
+              </Tooltip>
+              {!isBinderLocked && <div className="size-9" aria-hidden="true" />}
+            </div>
           </th>
         </tr>
       </thead>
@@ -682,22 +726,39 @@ export function CardListTable({
                     </button>
                   </div>
                 ) : (
-                  !isBinderLocked && (
-                    <Tooltip label="Edit card">
+                  <div className="flex justify-end gap-2">
+                    {/* Story 45: available regardless of the binder's lock
+                        state, since adding to the watchlist doesn't mutate
+                        this binder at all - unlike Edit below, which is
+                        hidden while locked. */}
+                    <Tooltip label="Add to What I'm Looking For">
                       <button
                         type="button"
-                        disabled={
-                          priceReview !== null ||
-                          (editingCardId !== null && editingCardId !== card.id)
-                        }
-                        onClick={() => startEditingCard(card)}
-                        aria-label={`Edit ${card.name}`}
+                        disabled={priceReview !== null}
+                        onClick={() => onAddToWatchlist(card.id)}
+                        aria-label={`Add ${card.name} to What I'm Looking For`}
                         className="flex size-9 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
                       >
-                        <Pencil className="size-4" aria-hidden="true" />
+                        <Bookmark className="size-4" aria-hidden="true" />
                       </button>
                     </Tooltip>
-                  )
+                    {!isBinderLocked && (
+                      <Tooltip label="Edit card">
+                        <button
+                          type="button"
+                          disabled={
+                            priceReview !== null ||
+                            (editingCardId !== null && editingCardId !== card.id)
+                          }
+                          onClick={() => startEditingCard(card)}
+                          aria-label={`Edit ${card.name}`}
+                          className="flex size-9 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Pencil className="size-4" aria-hidden="true" />
+                        </button>
+                      </Tooltip>
+                    )}
+                  </div>
                 )}
               </td>
             </tr>

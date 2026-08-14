@@ -1,0 +1,30 @@
+CREATE TABLE `watchlist_entries` (
+	`id` text PRIMARY KEY NOT NULL,
+	`cardId` text,
+	`name` text,
+	`setName` text,
+	`localNumber` text,
+	`source` text,
+	`providerCardId` text,
+	`providerSetId` text,
+	`variation` text,
+	`imageAssetId` text,
+	`priceCents` integer,
+	`isManualPrice` integer DEFAULT false NOT NULL,
+	`priceUpdatedAt` text,
+	`createdAt` text NOT NULL,
+	`updatedAt` text NOT NULL,
+	FOREIGN KEY (`cardId`) REFERENCES `cards`(`id`) ON UPDATE no action ON DELETE cascade,
+	FOREIGN KEY (`imageAssetId`) REFERENCES `card_image_assets`(`id`) ON UPDATE no action ON DELETE no action,
+	CONSTRAINT "watchlist_entry_standalone_or_referenced" CHECK(("watchlist_entries"."cardId" IS NULL AND "watchlist_entries"."name" IS NOT NULL AND "watchlist_entries"."imageAssetId" IS NOT NULL AND "watchlist_entries"."source" IS NOT NULL) OR ("watchlist_entries"."cardId" IS NOT NULL AND "watchlist_entries"."name" IS NULL AND "watchlist_entries"."imageAssetId" IS NULL AND "watchlist_entries"."source" IS NULL)),
+	CONSTRAINT "watchlist_entry_name_length" CHECK("watchlist_entries"."name" IS NULL OR length("watchlist_entries"."name") <= 100),
+	CONSTRAINT "watchlist_entry_set_name_length" CHECK("watchlist_entries"."setName" IS NULL OR length("watchlist_entries"."setName") <= 100),
+	CONSTRAINT "watchlist_entry_local_number_length" CHECK("watchlist_entries"."localNumber" IS NULL OR length("watchlist_entries"."localNumber") <= 50),
+	CONSTRAINT "watchlist_entry_variation_length" CHECK("watchlist_entries"."variation" IS NULL OR length("watchlist_entries"."variation") <= 50),
+	CONSTRAINT "watchlist_entry_source_valid" CHECK("watchlist_entries"."source" IS NULL OR "watchlist_entries"."source" IN ('tcgdex', 'custom')),
+	CONSTRAINT "watchlist_entry_tcgdex_identity_required" CHECK("watchlist_entries"."source" != 'tcgdex' OR ("watchlist_entries"."providerCardId" IS NOT NULL AND "watchlist_entries"."providerSetId" IS NOT NULL)),
+	CONSTRAINT "watchlist_entry_custom_identity_absent" CHECK("watchlist_entries"."source" != 'custom' OR ("watchlist_entries"."providerCardId" IS NULL AND "watchlist_entries"."providerSetId" IS NULL)),
+	CONSTRAINT "watchlist_entry_price_positive" CHECK("watchlist_entries"."priceCents" IS NULL OR "watchlist_entries"."priceCents" > 0)
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `watchlist_entries_card_id_unique` ON `watchlist_entries` (`cardId`);

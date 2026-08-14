@@ -428,6 +428,222 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/cards/{cardId}/watchlist-entry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add a binder card to the What I'm Looking For list
+         * @description Creates a new `WatchlistEntry` referencing the path card (story 45's "Add to What I'm Looking For" Card List row action), or returns the existing entry unchanged if this exact card is already on the list - an exact-match check on `cardId`, not a name/set/ number heuristic, so this never creates a duplicate reference.
+         */
+        post: operations["addCardToWatchlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cards/watchlist-entries/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add multiple binder cards to the What I'm Looking For list at once
+         * @description Bulk variant of `POST /cards/{cardId}/watchlist-entry` (story 45): adds each submitted card id to the What I'm Looking For list by reference, independently and idempotently - a card id already on the list is a no-op (its existing entry is returned unchanged) rather than creating a duplicate reference, matching the single-card endpoint's own behavior. One card id that doesn't currently identify a card fails only that item, preserved in the response in the request's own `cardIds` order, rather than failing the whole batch.
+         */
+        post: operations["bulkAddCardsToWatchlist"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist-entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List every What I'm Looking For entry
+         * @description Returns every entry on the shared "What I'm Looking For" list (story 45), both standalone entries and ones referencing an existing binder card. A referenced entry's display/edit fields (name, price, etc.) are hydrated from its joined `cards` row; a standalone entry's fields come from its own columns. Ordered by creation timestamp descending, then id ascending, mirroring the Card List's own unplaced-cards tiebreaker - the frontend applies its own active column sort or manual drag order on top of this.
+         */
+        get: operations["listWatchlistEntries"];
+        put?: never;
+        /**
+         * Add a manually-entered custom card directly to the What I'm Looking For list
+         * @description Creates a standalone (not linked to any binder) `custom`-sourced entry via `multipart/form-data` (story 45), mirroring `POST /binders/{binderId}/cards`'s manual-entry request shape minus placement/acquisition, which have no meaning for a binder-less entry.
+         */
+        post: operations["createWatchlistEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist-entries/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Add one or more independent TCGdex cards directly to the What I'm Looking For list
+         * @description Creates one or more standalone `tcgdex`-sourced entries from an array of normalized catalog search results (story 45), mirroring `POST /binders/{binderId}/cards/bulk`'s per-item independent- outcome pattern minus placement/acquisition. Requires a client- generated `Idempotency-Key` header; retrying the same key replays the original outcome instead of creating additional entries, for the shared 24-hour mutation-idempotency retention period.
+         */
+        post: operations["createWatchlistEntriesBulk"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist-entries/{watchlistEntryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlistEntryId: components["parameters"]["watchlistEntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove an entry from the What I'm Looking For list
+         * @description Removes the entry from the What I'm Looking For list only (story 45). For a standalone entry, this is a complete deletion - nothing else references its row, so its owned image asset is also removed if this was its last reference, mirroring `DELETE /cards/{cardId}`. For a referenced entry, only this reference is removed; the underlying card (and its binder Card List entry) is untouched. Deleting an already-absent entry also returns `204 No Content`.
+         */
+        delete: operations["deleteWatchlistEntry"];
+        options?: never;
+        head?: never;
+        /**
+         * Edit a standalone What I'm Looking For entry's own fields
+         * @description Replaces a standalone entry's name, set, number, variation, price, and optionally its image in one request (story 45), mirroring `PATCH /cards/{cardId}/details`. Only valid for a standalone entry (`cardId` null) - a referenced entry's fields are instead edited through its own card via the existing card endpoints, since they write through to the same underlying `Card` row.
+         */
+        patch: operations["updateWatchlistEntry"];
+        trace?: never;
+    };
+    "/watchlist-entries/{watchlistEntryId}/mark-acquired": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlistEntryId: components["parameters"]["watchlistEntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a referenced entry's card as acquired and remove it from the list
+         * @description Only valid for an entry referencing a binder card (`cardId` set): sets that card's `acquired` field to `true` and removes the `WatchlistEntry` row in one transaction (story 45), so a partial failure can't leave one change applied without the other.
+         */
+        post: operations["markWatchlistEntryAcquired"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist-entries/{watchlistEntryId}/image": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlistEntryId: components["parameters"]["watchlistEntryId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * Stream a standalone entry's image
+         * @description Resolves a standalone entry's own image asset and streams its local file, mirroring `GET /cards/{cardId}/image`. Only valid for a standalone entry - a referenced entry's `imageUrl` instead points at its card's own `/cards/{cardId}/image` endpoint.
+         */
+        get: operations["getWatchlistEntryImage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist-entries/exports/pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export the What I'm Looking For list as a print-ready PDF
+         * @description Generates a fixed 2-page, US Letter **portrait** print/export PDF (story 45) containing only the submitted entry ids, in the exact order submitted - the client supplies its currently filtered/ searched entries in their manually-dragged order (when set) or active column-sort order otherwise, mirroring the Card List PDF export's (story 37) `cardIds` contract. Page 1 shows every included entry's card image, shrinking (and, once shrinking alone isn't enough, overlapping adjacent rows by up to half a card's height) as needed so every entry fits on this single page without adding further image pages; page 2 repeats the exact same grid positions with each entry's name and price as text instead of an image. The backend finishes generation in a request-scoped temporary file before sending response headers, then streams the completed file; a missing, unreadable, or unsupported local image fails the complete export with Problem Details rather than omitting the entry or generating a partial file.
+         */
+        post: operations["exportWatchlistPdf"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist-entries/prices/fetch": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Fetch pokemontcg.io price data for a set of What I'm Looking For entries
+         * @description Mirrors `POST /binders/{binderId}/cards/prices/fetch` (story 38), generalized to work across entries that may reference cards from many different binders, or no binder at all - each entry's effective set/number identity (from its joined card, or its own columns when standalone) is resolved before the same pokemontcg.io lookup runs. Nothing is persisted by this endpoint.
+         */
+        post: operations["fetchWatchlistEntryPrices"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/watchlist-entries/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Save reviewed prices for What I'm Looking For entries
+         * @description Mirrors `PATCH /binders/{binderId}/cards/prices` (story 38), generalized across entries from many binders or none: a referenced entry's update is written to its underlying card (visible back on that card's own binder Card List); a standalone entry's update is written to its own columns. Each submitted price is applied independently, so a failure on one entry rolls back only that entry rather than the whole batch.
+         */
+        patch: operations["updateWatchlistEntryPrices"];
+        trace?: never;
+    };
     "/binders/{binderId}/art": {
         parameters: {
             query?: never;
@@ -1263,6 +1479,140 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description One entry on the shared "What I'm Looking For" list (story 45). When `cardId` is set, every other display/edit field below is hydrated from that card's own row (name, price, etc. are the card's current values, not a separate copy); when `cardId` is null, they come from this entry's own standalone columns. There's no `acquired` field - the list's table omits the Acquisition column entirely, and `cardId` alone determines whether the "mark as acquired" action is available for a row. */
+        WatchlistEntry: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * Format: uuid
+             * @description Set only when this entry references an existing binder card rather than being standalone.
+             */
+            cardId: string | null;
+            name: string;
+            setName: string | null;
+            localNumber: string | null;
+            /** @enum {string} */
+            source: "tcgdex" | "custom";
+            providerCardId: string | null;
+            providerSetId: string | null;
+            variation: string | null;
+            /**
+             * Format: uri-reference
+             * @description For a referenced entry, the card's own `/cards/{cardId}/image` URL; for a standalone entry, this entry's own `/watchlist-entries/{watchlistEntryId}/image` URL.
+             */
+            imageUrl: string;
+            /** @description US dollars, to two decimal places. */
+            price: number | null;
+            isManualPrice: boolean;
+            /** Format: date-time */
+            priceUpdatedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /** @description `POST /watchlist-entries`'s request body (story 45, `multipart/form-data`): creates a standalone `custom`-sourced entry, mirroring `CreateCustomCardRequest` minus placement and acquisition, which have no meaning for a binder-less entry. */
+        CreateWatchlistEntryRequest: {
+            /** @description Trimmed and required after trimming on the backend. */
+            name: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            setName?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            localNumber?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            variation?: string;
+            /**
+             * Format: binary
+             * @description Required. Must be a JPEG, PNG, or WebP file; the backend validates the file's signature rather than trusting its name or multipart MIME type.
+             */
+            image: string;
+        };
+        /** @description `PATCH /watchlist-entries/{watchlistEntryId}`'s request body (story 45, `multipart/form-data`): replaces a standalone entry's name, set, number, variation, price, and optionally its image in one request, mirroring `UpdateCardDetailsRequest`. */
+        UpdateWatchlistEntryRequest: {
+            /** @description Trimmed and required after trimming on the backend. */
+            name: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            setName?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            localNumber?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            variation?: string;
+            /** @description US dollars, to two decimal places. Omitted (rather than sent as an empty value) clears the entry's saved price, storing null. */
+            price?: number;
+            /**
+             * Format: binary
+             * @description Optional. When supplied, must be a JPEG, PNG, or WebP file (the backend validates the file's signature); when omitted, the entry's existing image is left unchanged.
+             */
+            image?: string;
+        };
+        /** @description `POST /watchlist-entries/bulk`'s request body (story 45): the checked subset of a TCGdex catalog search, in search-result order, plus one optional shared variation applied to every created entry - mirroring `BulkCreateCardsRequest` minus placement and acquisition, which have no meaning for a binder-less entry. */
+        BulkCreateWatchlistEntriesRequest: {
+            cards: components["schemas"]["TcgDexCatalogCard"][];
+            variation?: string | null;
+        };
+        /** @description One submitted card's independent creation outcome (story 45), preserving the submitted array's order regardless of processing completion order, mirroring `BulkCardOutcome`. */
+        BulkWatchlistEntryOutcome: {
+            /** @enum {string} */
+            status: "created" | "failed";
+            /** @description Present only when `status` is `created`. */
+            entry?: components["schemas"]["WatchlistEntry"];
+            /** @description Present only when `status` is `failed`. */
+            problem?: components["schemas"]["ProblemDetails"];
+        };
+        /** @description `POST /cards/watchlist-entries/bulk`'s request body (story 45) - the bulk variant of `POST /cards/{cardId}/watchlist-entry`. */
+        BulkAddCardsToWatchlistRequest: {
+            /** @description The ids of the binder cards to add to the What I'm Looking For list by reference. */
+            cardIds: string[];
+        };
+        /** @description One submitted card id's independent add-by-reference outcome (story 45), preserving the request's `cardIds` order regardless of processing completion order, mirroring `BulkWatchlistEntryOutcome`. */
+        BulkAddCardsToWatchlistOutcome: {
+            /** Format: uuid */
+            cardId: string;
+            /** @enum {string} */
+            status: "added" | "failed";
+            /** @description Present only when `status` is `added` - either a newly created entry, or the card's existing entry if it was already listed. */
+            entry?: components["schemas"]["WatchlistEntry"];
+            /** @description Present only when `status` is `failed` (e.g. the id doesn't currently identify a card). */
+            problem?: components["schemas"]["ProblemDetails"];
+        };
+        /** @description `POST /watchlist-entries/exports/pdf`'s request body (story 45) - the What I'm Looking For list's currently filtered/searched entry ids, in the manually-dragged order when one is set, or the table's active column-sort order otherwise, mirroring `ExportCardsPdfRequest`'s `cardIds` contract. */
+        ExportWatchlistPdfRequest: {
+            /** @description The ids of the entries to include in the generated PDF, in the order they should be rendered. Every id must currently identify an entry; the array must not be empty. */
+            watchlistEntryIds: string[];
+        };
+        /** @description `POST /watchlist-entries/prices/fetch`'s request body (story 45), mirroring `CardPriceFetchRequest`. */
+        WatchlistEntryPriceFetchRequest: {
+            watchlistEntryIds: string[];
+        };
+        /** @description One requested entry's price-fetch outcome (story 45), preserving the request's `watchlistEntryIds` order, mirroring `CardPriceFetchResult`. */
+        WatchlistEntryPriceFetchResult: {
+            /** Format: uuid */
+            watchlistEntryId: string;
+            variants: components["schemas"]["CardPriceVariant"][];
+            /** Format: uri */
+            tcgplayerUrl: string | null;
+        };
+        /** @description One reviewed row of `PATCH /watchlist-entries/prices`'s request body (story 45), mirroring `CardPriceUpdate`. */
+        WatchlistEntryPriceUpdate: {
+            /** Format: uuid */
+            watchlistEntryId: string;
+            /** @description US dollars, to two decimal places. */
+            price: number;
+            isManualPrice: boolean;
+        };
+        /** @description `PATCH /watchlist-entries/prices`'s request body (story 45): commits every reviewed row's new-price value at once, mirroring `UpdateCardPricesRequest`. */
+        UpdateWatchlistEntryPricesRequest: {
+            prices: components["schemas"]["WatchlistEntryPriceUpdate"][];
+        };
+        /** @description One submitted price's independent save outcome (story 45), mirroring `CardPriceUpdateOutcome`. */
+        WatchlistEntryPriceUpdateOutcome: {
+            /** @enum {string} */
+            status: "updated" | "failed";
+            /** @description Present only when `status` is `updated`. */
+            entry?: components["schemas"]["WatchlistEntry"];
+            /** @description Present only when `status` is `failed`. */
+            problem?: components["schemas"]["ProblemDetails"];
+        };
         /** @description Creates multi-slot art via `multipart/form-data` (story 25). New art always starts in the unplaced-art section (all-null placement); the backend computes a SHA-256 digest of the uploaded image while streaming it to temporary storage so identical uploads share one art image asset, and uses `sharp` to inspect pixel dimensions and generate an EXIF-auto-oriented rendering derivative when needed. */
         CreateArtRequest: {
             /** @description Trimmed and required after trimming on the backend. */
@@ -1542,6 +1892,7 @@ export interface components {
         binderCostEntryId: string;
         printingCostEntryId: string;
         holographicPaperCostEntryId: string;
+        watchlistEntryId: string;
     };
     requestBodies: never;
     headers: never;
@@ -2620,6 +2971,477 @@ export interface operations {
             };
             /** @description No card, image-asset record, or local file exists. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    addCardToWatchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry now on the list for this card - either newly created or, if this card was already referenced, its existing entry returned unchanged. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistEntry"];
+                };
+            };
+            /** @description The cardId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No card exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    bulkAddCardsToWatchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkAddCardsToWatchlistRequest"];
+            };
+        };
+        responses: {
+            /** @description Every submitted card id was successfully added (or already listed). */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkAddCardsToWatchlistOutcome"][];
+                };
+            };
+            /** @description At least one submitted card id failed (see each outcome's own status). */
+            207: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkAddCardsToWatchlistOutcome"][];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    listWatchlistEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Every What I'm Looking For entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistEntry"][];
+                };
+            };
+        };
+    };
+    createWatchlistEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["CreateWatchlistEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The entry was created. */
+            201: {
+                headers: {
+                    /** @description The path of the newly created entry resource. */
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistEntry"];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The uploaded file's signature did not match a supported image format (mirroring story 12's rule). */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    createWatchlistEntriesBulk: {
+        parameters: {
+            query?: never;
+            header: {
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkCreateWatchlistEntriesRequest"];
+            };
+        };
+        responses: {
+            /** @description Every submitted entry was created successfully. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkWatchlistEntryOutcome"][];
+                };
+            };
+            /** @description One or more submitted entries failed to be created, including a batch in which every entry failed. The response body still contains an outcome entry for every submitted item. */
+            207: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BulkWatchlistEntryOutcome"][];
+                };
+            };
+            /** @description The Idempotency-Key header is missing, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    deleteWatchlistEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlistEntryId: components["parameters"]["watchlistEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry was removed, or no entry existed with the given id. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The watchlistEntryId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateWatchlistEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlistEntryId: components["parameters"]["watchlistEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["UpdateWatchlistEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description The complete persisted representation of the updated entry. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistEntry"];
+                };
+            };
+            /** @description The watchlistEntryId path parameter is not a well-formed UUID, the request body did not match the documented schema, or the entry references a binder card rather than being standalone. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No entry exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The uploaded replacement image's signature did not match a supported image format (story 12's rule, reapplied here). */
+            415: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    markWatchlistEntryAcquired: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlistEntryId: components["parameters"]["watchlistEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The card was marked acquired and the entry was removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The watchlistEntryId path parameter is not a well-formed UUID, or the entry is standalone (not linked to a binder card). */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No entry exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    getWatchlistEntryImage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                watchlistEntryId: components["parameters"]["watchlistEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry's image bytes. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "image/jpeg": unknown;
+                    "image/png": unknown;
+                    "image/webp": unknown;
+                };
+            };
+            /** @description The watchlistEntryId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No entry, image-asset record, or local file exists, or the entry is a reference rather than standalone. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    exportWatchlistPdf: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportWatchlistPdfRequest"];
+            };
+        };
+        responses: {
+            /** @description The generated What I'm Looking For PDF. */
+            200: {
+                headers: {
+                    /** @description `attachment` with a fixed suggested download filename. */
+                    "Content-Disposition"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description The request body did not match the documented schema, `watchlistEntryIds` was empty, or an id in `watchlistEntryIds` does not currently identify an entry. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description PDF generation failed - for example, a selected entry's local image file is missing, unreadable, or not a supported format. No temporary file is left behind. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    fetchWatchlistEntryPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WatchlistEntryPriceFetchRequest"];
+            };
+        };
+        responses: {
+            /** @description Per-entry price data, in the same order as the request's watchlistEntryIds. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistEntryPriceFetchResult"][];
+                };
+            };
+            /** @description The request body did not match the documented schema, or one or more watchlistEntryIds don't identify an existing entry. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateWatchlistEntryPrices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchlistEntryPricesRequest"];
+            };
+        };
+        responses: {
+            /** @description Every submitted price was saved successfully. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistEntryPriceUpdateOutcome"][];
+                };
+            };
+            /** @description One or more submitted prices failed to save, including a batch in which every price failed. The response body still contains an outcome entry for every submitted price. */
+            207: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WatchlistEntryPriceUpdateOutcome"][];
+                };
+            };
+            /** @description The request body did not match the documented schema. */
+            400: {
                 headers: {
                     [name: string]: unknown;
                 };

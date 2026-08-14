@@ -12,3 +12,4 @@ export * from './art';
 export * from './imports';
 export * from './financeSettings';
 export * from './costEntries';
+export * from './watchlistEntries';

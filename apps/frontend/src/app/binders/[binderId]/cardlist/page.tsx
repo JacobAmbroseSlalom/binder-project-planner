@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from 'react';
 
-import { LoadingIndicator } from '@/shared/feedback';
+import { addCardToWatchlist, bulkAddCardsToWatchlist } from '@/lib/api';
+import { LoadingIndicator, useSaveStatusToast, useToastContext } from '@/shared/feedback';
 import { useSetNavigationGuardMessage } from '@/shared/navigation';
 
 import { useBinderRouteContext } from '../BinderRouteContext';
@@ -61,6 +62,11 @@ export default function BinderCardListPage() {
   // reason `CardListTable` already disables its own Edit buttons while a
   // price review is active: the two flows shouldn't ever overlap.
   const [isEditingCardRow, setIsEditingCardRow] = useState(false);
+  // Story 45's Card List header bulk action: disables the header's bulk
+  // "Add to What I'm Looking For" button while its own request is in
+  // flight, mirroring `isBulkAcquisitionPending`'s own single-in-flight-
+  // request convention.
+  const [isBulkAddingToWatchlist, setIsBulkAddingToWatchlist] = useState(false);
   // Each column's filter starts with every one of its distinct values
   // selected (no cards excluded) - recomputed only when the binder's own
   // card set changes size (a card added/removed), not on every render.
@@ -79,6 +85,9 @@ export default function BinderCardListPage() {
     setReviewPrice,
     savePriceReview,
   } = useCardPriceReview({ binderId: binder.id, cards, setCards });
+
+  const { start } = useSaveStatusToast();
+  const { markFailed } = useToastContext();
 
   // Registers the in-app "navigate away" guard for the whole lifetime of
   // an active price review (both while fetching and while the user is
@@ -164,6 +173,42 @@ export default function BinderCardListPage() {
     setReviewPrice(cardId, parsed === null || Number.isNaN(parsed) ? null : parsed, 'manual');
   }
 
+  // Story 45's "Add to What I'm Looking For" row action: fire-and-forget
+  // (the backend's own idempotency means this table never needs to check
+  // for a duplicate first), reporting only a failure through the shared
+  // toast since there's no optimistic state on this page to roll back.
+  function handleAddToWatchlist(cardId: string) {
+    const toast = start(`add-card-to-watchlist-${cardId}`);
+    addCardToWatchlist(cardId)
+      .then(() => toast.markSaved())
+      .catch((error) => toast.markFailed(error));
+  }
+
+  // The header's bulk variant of the row action above: adds every
+  // currently displayed (search/sort/filter-derived) card at once through
+  // `bulkAddCardsToWatchlist`, then reports one toast for the whole batch
+  // - mirrors `useCardPriceReview`'s own partial-failure detail message,
+  // since there's no per-row optimistic state on this page to roll back
+  // individually if only some cards fail.
+  function handleBulkAddToWatchlist(cardIds: string[]) {
+    setIsBulkAddingToWatchlist(true);
+    const toast = start('bulk-add-cards-to-watchlist');
+    bulkAddCardsToWatchlist(cardIds)
+      .then((outcomes) => {
+        const failedCount = outcomes.filter((outcome) => outcome.status === 'failed').length;
+        if (failedCount === 0) {
+          toast.markSaved();
+        } else {
+          const successCount = outcomes.length - failedCount;
+          markFailed(toast.operationId, {
+            detail: `Added ${successCount} card${successCount === 1 ? '' : 's'} to What I'm Looking For; ${failedCount} card${failedCount === 1 ? '' : 's'} failed to add.`,
+          });
+        }
+      })
+      .catch((error) => toast.markFailed(error))
+      .finally(() => setIsBulkAddingToWatchlist(false));
+  }
+
   return (
     <div className="flex flex-col gap-2 px-8 pb-8">
       <CardListTotals
@@ -242,6 +287,9 @@ export default function BinderCardListPage() {
         onEditCardDetails={editCardDetails}
         pendingCardDetailsEditIds={pendingCardDetailsEditIds}
         onEditingRowChange={setIsEditingCardRow}
+        onAddToWatchlist={handleAddToWatchlist}
+        onBulkAddToWatchlist={handleBulkAddToWatchlist}
+        isBulkAddingToWatchlist={isBulkAddingToWatchlist}
         priceReview={
           isPriceReviewActive
             ? {

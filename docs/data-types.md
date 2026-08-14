@@ -94,6 +94,33 @@ the remaining covered slots are derived from the art's slot width and height.
 **Constraints:** At most one card may occupy a binder and placement-coordinate triple.
 Card deletion cascades dependent variation, acquisition, and pricing data.
 
+### WatchlistEntry
+
+| Property         | Type                                        | Required | Notes                                                                                                                                                                   |
+| ---------------- | ------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`             | UUID                                        | Yes      | Backend-generated watchlist entry identifier.                                                                                                                           |
+| `cardId`         | UUID or `null`                              | Yes      | Set only when this entry references an existing (unacquired) binder card rather than being standalone (Story 45).                                                       |
+| `name`           | string                                      | Yes      | For a referenced entry, mirrors the card's own `name`; for a standalone entry, stored on this entry directly (same trimming/length rules as `Card.name`).               |
+| `setName`        | string or `null`                            | Yes      | Mirrors `Card.setName`'s rules, either sourced from the referenced card or stored on this entry directly.                                                               |
+| `localNumber`    | string or `null`                            | Yes      | Mirrors `Card.localNumber`'s rules, either sourced from the referenced card or stored on this entry directly.                                                           |
+| `source`         | enum                                        | Yes      | `tcgdex` or `custom`, mirroring `Card.source`.                                                                                                                          |
+| `providerCardId` | string or `null`                            | Yes      | Mirrors `Card.providerCardId`; `null` for `custom`.                                                                                                                     |
+| `providerSetId`  | string or `null`                            | Yes      | Mirrors `Card.providerSetId`; `null` for `custom`.                                                                                                                      |
+| `variation`      | string or `null`                            | Yes      | Mirrors `Card.variation`'s rules.                                                                                                                                       |
+| `imageUrl`       | URL string                                  | API only | For a referenced entry, the card's own `/cards/{cardId}/image` URL; for a standalone entry, this entry's own `/watchlist-entries/{watchlistEntryId}/image` URL.         |
+| `price`          | positive currency (integer cents) or `null` | Yes      | For a referenced entry, mirrors the card's own `price`; for a standalone entry, its own saved price. Updated only through `PATCH /watchlist-entries/prices` (Story 45). |
+| `isManualPrice`  | boolean                                     | Yes      | Mirrors `Card.isManualPrice`'s rules.                                                                                                                                   |
+| `priceUpdatedAt` | UTC timestamp or `null`                     | Yes      | Mirrors `Card.priceUpdatedAt`'s rules.                                                                                                                                  |
+| `createdAt`      | UTC timestamp                               | Yes      | Used for the list's default creation-descending, then id ordering.                                                                                                      |
+| `updatedAt`      | UTC timestamp                               | Yes      | Backend-managed.                                                                                                                                                        |
+
+**Constraints:** No two entries may reference the same `cardId` (adding an
+already-listed card is idempotent, returning the existing entry). Deleting a referenced
+entry never deletes or modifies the underlying card; deleting a standalone entry deletes
+it and its own image asset. This list has no `binderId` — it is not scoped to any single
+binder. The client-only manual drag order and "which column is sorted" state are never
+persisted here (see [Client-Only State](#client-only-state)).
+
 ### MultiSlotArt
 
 | Property                               | Type                          | Required     | Notes                                                                                                                                             |
@@ -385,6 +412,59 @@ that resets the search query, sort, and every column filter back to their defaul
 | --------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `cardIds` | `string[]` | The client's currently filtered and sorted card IDs, in display order; the backend renders exactly these cards, in this order, without recomputing search, sort, or filter state. |
 
+### WatchlistEntryListState (Story 45)
+
+Client-only, derived entirely from the already-loaded `entries` array fetched once by
+the What I'm Looking For page (there is no route-scoped context supplying it, unlike
+`CardListState` above); layered underneath the client-only `WatchlistManualOrder` (see
+[Client-Only State](#client-only-state)) rather than replacing it.
+
+| Property        | Type                                                                                      | Notes                                                                                                                                                      |
+| --------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `searchQuery`   | string                                                                                    | Mirrors `CardListState.searchQuery`'s matching rules.                                                                                                      |
+| `sortOption`    | enum: `name`, `set`, `number`, `variation`, `price`, `priceUpdatedAt`, `setAndNumber`     | Defaults to `setAndNumber`. No `acquisition` option, since this list has no Acquisition column.                                                            |
+| `sortDirection` | enum: `ascending`, `descending`                                                           | Mirrors `CardListState.sortDirection`'s toggle behavior. Selecting any column's sort control also clears the client-only manual drag order back to `null`. |
+| `columnFilters` | one value-set per column: `name`, `set`, `number`, `variation`, `price`, `priceUpdatedAt` | Mirrors `CardListState.columnFilters`'s rules, minus `acquisition`.                                                                                        |
+
+### CreateWatchlistEntryRequest and BulkCreateWatchlistEntriesRequest
+
+Both create a standalone (`cardId: null`) entry; `POST /cards/{cardId}/watchlist-entry`
+(a referenced entry) instead takes no body.
+
+| Object                              | Properties                                                                                                                                                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CreateWatchlistEntryRequest`       | Multipart form data: `name`, optional `setName`, optional `localNumber`, optional `variation`, and one required image file. Mirrors the custom-card multipart variant of `POST /binders/{binderId}/cards`, minus placement and acquisition. |
+| `BulkCreateWatchlistEntriesRequest` | Array of the user-selected `TcgDexCatalogCard` values (in search-result order), optional shared `variation`, and client-generated UUID idempotency key. Mirrors `BulkCreateCardsRequest`, minus placement and acquisition.                  |
+| `BulkWatchlistEntryOutcome`         | One result per submitted entry, in submitted order; successful results include the created `WatchlistEntry`, and failed results include that entry's Problem Details data. Mirrors `BulkCardOutcome`.                                       |
+
+### BulkAddCardsToWatchlistRequest and BulkAddCardsToWatchlistOutcome
+
+The bulk variant of `POST /cards/{cardId}/watchlist-entry`: adds several existing binder
+cards to the watchlist by reference in one request.
+
+| Object                           | Properties                                                                                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `BulkAddCardsToWatchlistRequest` | `cardIds: string[]` — the binder card ids to add by reference; each is processed independently and idempotently, matching the single-card endpoint's own no-duplicate-reference behavior.                      |
+| `BulkAddCardsToWatchlistOutcome` | One result per submitted `cardId`, in submitted order; successful results (`added`) include the entry (newly created, or the card's existing entry if already listed), failed results include Problem Details. |
+
+### ExportWatchlistPdfRequest (Story 45)
+
+| Property            | Type       | Notes                                                                                                                                                                                                       |
+| ------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `watchlistEntryIds` | `string[]` | The client's currently filtered/searched entry ids, in the manually-dragged order when one is set, or the table's active column-sort order otherwise. Mirrors `CardsPdfExportRequest`'s `cardIds` contract. |
+
+### WatchlistEntryPriceFetchRequest, WatchlistEntryPriceFetchResult, and WatchlistEntryPriceUpdate
+
+Mirror the binder Card List tab's own (currently undocumented) price-review request/
+response shapes, keyed by `watchlistEntryId` instead of `cardId`.
+
+| Object                             | Properties                                                                                                                                                       |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `WatchlistEntryPriceFetchRequest`  | `watchlistEntryIds: string[]` — the currently filtered/displayed entries only.                                                                                   |
+| `WatchlistEntryPriceFetchResult`   | One result per requested id, in requested order: available pokemontcg.io price variants (each with a market and low price, or both `null`) and a TCGplayer link. |
+| `WatchlistEntryPriceUpdate`        | `watchlistEntryId`, new `price`, and `isManualPrice`, committed all at once by `PATCH /watchlist-entries/prices`'s "Save all" action.                            |
+| `WatchlistEntryPriceUpdateOutcome` | One result per submitted price, in submitted order; successful results include the updated `WatchlistEntry`, and failed results include Problem Details data.    |
+
 ### HealthResponse
 
 | Property      | Type    | Notes                                                                                                 |
@@ -490,6 +570,17 @@ across binders and reloads.
 
 This state is local to the mounted layout tab. It resets after leaving or refreshing the
 layout and is not persisted to the URL, browser storage, binder context, or backend.
+
+### WatchlistManualOrder
+
+| Property      | Type                 | Notes                                                                                                                                                                                                                         |
+| ------------- | -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `manualOrder` | `string[]` or `null` | Ordered list of `WatchlistEntry.id` values (Story 45); `null` until the user drags a row for the first time, meaning "use the active column sort instead". Cleared back to `null` whenever a column sort control is selected. |
+
+Local to the mounted What I'm Looking For page's React state only — never sent to or
+persisted by the backend, never stored in the URL or browser storage, and reset on
+navigation away/refresh (per that story's own "never persisted to the backend"
+requirement).
 
 ### LayoutMovementHistory
 

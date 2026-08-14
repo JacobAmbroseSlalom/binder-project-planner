@@ -127,6 +127,13 @@
       "when": 1786729183281,
       "tag": "0017_binder_tags",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1786734274822,
+      "tag": "0018_watchlist_entries",
+      "breakpoints": true
     }
   ]
 }

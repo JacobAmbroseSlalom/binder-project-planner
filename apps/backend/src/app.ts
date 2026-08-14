@@ -16,6 +16,7 @@ import { createCostEntriesRouter } from './routes/costEntries.js';
 import { createDataTransferRouter } from './routes/dataTransfer.js';
 import { createFinanceSettingsRouter } from './routes/financeSettings.js';
 import { createMaintenanceRouter } from './routes/maintenance.js';
+import { createWatchlistEntriesRouter } from './routes/watchlistEntries.js';
 import { createDigestDiskStorage } from './uploads/digestDiskStorage.js';
 
 interface CreateAppOptions {
@@ -99,6 +100,7 @@ export function createApp({
   app.use(createArtRouter(database, imagesDirectory));
   app.use(createFinanceSettingsRouter(database));
   app.use(createCostEntriesRouter(database));
+  app.use(createWatchlistEntriesRouter(database, imagesDirectory, pokemonTcgApiKey));
   app.use(createMaintenanceRouter(database, imagesDirectory));
   app.use(createDataTransferRouter(database, imagesDirectory));
 

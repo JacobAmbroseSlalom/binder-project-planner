@@ -1,5 +1,3 @@
-import type { Card } from '@/lib/api';
-
 // One group's summed saved-price total (story 38), shared by the Card
 // List tab's totals row and the "View Financials" tab's Cards section -
 // both need the same "sum every card's saved `price`, excluding cards
@@ -16,8 +14,12 @@ export interface CardPriceTotal {
   missingPriceCount: number;
 }
 
-// Computes `cards`' saved-price total and missing-price count in one pass.
-export function computeCardPriceTotal(cards: readonly Card[]): CardPriceTotal {
+// Computes a group's saved-price total and missing-price count in one
+// pass. Typed against just the `price` field (rather than the full `Card`
+// shape) so story 45's What I'm Looking For totals row can reuse this same
+// calculation over `WatchlistEntry[]`, which has no other field in common
+// with `Card`.
+export function computeCardPriceTotal(cards: readonly { price: number | null }[]): CardPriceTotal {
   let sum = 0;
   let missingPriceCount = 0;
 

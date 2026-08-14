@@ -449,6 +449,91 @@ export const cards = sqliteTable(
   ],
 );
 
+// Story 45's "What I'm Looking For" list: every entry lives in this one
+// table regardless of kind, so the page reads and orders a single table
+// rather than merging two. A row is in exactly one of two modes,
+// enforced by `watchlist_entry_standalone_or_referenced` below:
+//   - Referenced (`cardId` set): the row is a pointer to an existing
+//     binder `Card`. Every one of this table's own standalone-only
+//     columns stays null - the list hydrates the entry's display/edit
+//     fields (name, price, etc.) from the joined `cards` row instead, so
+//     editing either place writes through to that same underlying row.
+//   - Standalone (`cardId` null): the row owns its own copy of the subset
+//     of `Card`'s fields that still make sense with no binder/placement/
+//     acquisition - `name` through `priceUpdatedAt` below.
+// `onDelete: 'cascade'` on `cardId` mirrors this table's "the reference is
+// just a pointer" semantics: if a binder's own Card List deletes the
+// referenced card directly, the now-dangling watchlist reference is
+// removed along with it rather than left pointing at nothing (removing a
+// watchlist entry never touches the card, but the reverse - the card
+// being removed from under the reference - has to remove the reference).
+export const watchlistEntries = sqliteTable(
+  'watchlist_entries',
+  {
+    id: text().primaryKey(),
+    cardId: text().references(() => cards.id, { onDelete: 'cascade' }),
+    // Standalone-only fields (populated only when `cardId` is null),
+    // mirroring the same subset of `cards`' own columns.
+    name: text(),
+    setName: text(),
+    localNumber: text(),
+    source: text(),
+    providerCardId: text(),
+    providerSetId: text(),
+    variation: text(),
+    imageAssetId: text().references(() => cardImageAssets.id),
+    priceCents: integer(),
+    isManualPrice: integer({ mode: 'boolean' }).notNull().default(false),
+    priceUpdatedAt: text(),
+    createdAt: text().notNull(),
+    updatedAt: text().notNull(),
+  },
+  (table) => [
+    // "Add to What I'm Looking For" only creates a new row when no
+    // existing row already references that exact card - an exact-match
+    // unique constraint rather than an application-level heuristic.
+    // Inert for standalone rows: SQLite never treats two NULLs as equal,
+    // so any number of them can coexist.
+    uniqueIndex('watchlist_entries_card_id_unique').on(table.cardId),
+    check(
+      'watchlist_entry_standalone_or_referenced',
+      sql`(${table.cardId} IS NULL AND ${table.name} IS NOT NULL AND ${table.imageAssetId} IS NOT NULL AND ${table.source} IS NOT NULL) OR (${table.cardId} IS NOT NULL AND ${table.name} IS NULL AND ${table.imageAssetId} IS NULL AND ${table.source} IS NULL)`,
+    ),
+    check(
+      'watchlist_entry_name_length',
+      sql`${table.name} IS NULL OR length(${table.name}) <= 100`,
+    ),
+    check(
+      'watchlist_entry_set_name_length',
+      sql`${table.setName} IS NULL OR length(${table.setName}) <= 100`,
+    ),
+    check(
+      'watchlist_entry_local_number_length',
+      sql`${table.localNumber} IS NULL OR length(${table.localNumber}) <= 50`,
+    ),
+    check(
+      'watchlist_entry_variation_length',
+      sql`${table.variation} IS NULL OR length(${table.variation}) <= 50`,
+    ),
+    check(
+      'watchlist_entry_source_valid',
+      sql`${table.source} IS NULL OR ${table.source} IN ('tcgdex', 'custom')`,
+    ),
+    check(
+      'watchlist_entry_tcgdex_identity_required',
+      sql`${table.source} != 'tcgdex' OR (${table.providerCardId} IS NOT NULL AND ${table.providerSetId} IS NOT NULL)`,
+    ),
+    check(
+      'watchlist_entry_custom_identity_absent',
+      sql`${table.source} != 'custom' OR (${table.providerCardId} IS NULL AND ${table.providerSetId} IS NULL)`,
+    ),
+    check(
+      'watchlist_entry_price_positive',
+      sql`${table.priceCents} IS NULL OR ${table.priceCents} > 0`,
+    ),
+  ],
+);
+
 // A shared, immutable local image asset for multi-slot art (story 25).
 // Kept as its own table (rather than reusing `cardImageAssets`) for
 // simplicity; the "reuse the global asset when identical bytes already

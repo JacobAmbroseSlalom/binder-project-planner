@@ -50,6 +50,8 @@ import {
   type CardSearchLanguage,
 } from '../integrations/tcgdex.js';
 
+import { mapWithConcurrencyLimit } from './concurrency.js';
+
 // One normalized TCGdex catalog result within a bulk create-cards request
 // (stories 17/18, `POST /binders/{binderId}/cards/bulk`) - the sole
 // TCGdex-card creation path; there is no single-card JSON variant of
@@ -264,8 +266,9 @@ function serializeCard(row: CardRow) {
 
 // better-sqlite3 surfaces unique-constraint violations as a `SqliteError`
 // with `.code === 'SQLITE_CONSTRAINT_UNIQUE'`; matches the pattern already
-// used by routes/binders.ts.
-function isUniqueConstraintError(error: unknown): boolean {
+// used by routes/binders.ts. Exported for reuse by routes/watchlistEntries.ts
+// (story 45), which shares this same image-asset dedupe pattern.
+export function isUniqueConstraintError(error: unknown): boolean {
   return (
     error instanceof Error &&
     'code' in error &&
@@ -401,7 +404,8 @@ function sanitizeOriginalFilename(originalFilename: string): string {
 // Thrown by `resolveCustomImageAsset` when the uploaded file's magic bytes
 // don't match a supported image format; the route handler maps this to a
 // `415 Unsupported Media Type` Problem Details response (story 12).
-class UnsupportedImageFormatError extends Error {
+// Exported for reuse by routes/watchlistEntries.ts (story 45).
+export class UnsupportedImageFormatError extends Error {
   constructor() {
     super('The uploaded file is not a supported image format (JPEG, PNG, or WebP).');
     this.name = 'UnsupportedImageFormatError';
@@ -417,8 +421,9 @@ class MoveConflictError extends Error {}
 // Deletes any files multer already streamed to temporary storage for this
 // request (story 12) - used on every custom-card validation failure that
 // occurs before `resolveCustomImageAsset` takes ownership of the file, so a
-// rejected request never leaves an orphaned temporary file behind.
-function removeTemporaryUploads(files: Express.Multer.File[]): void {
+// rejected request never leaves an orphaned temporary file behind. Exported
+// for reuse by routes/watchlistEntries.ts (story 45).
+export function removeTemporaryUploads(files: Express.Multer.File[]): void {
   for (const file of files) {
     if (existsSync(file.path)) {
       unlinkSync(file.path);
@@ -426,7 +431,8 @@ function removeTemporaryUploads(files: Express.Multer.File[]): void {
   }
 }
 
-interface ResolvedImageAsset {
+// Exported for reuse by routes/watchlistEntries.ts (story 45).
+export interface ResolvedImageAsset {
   assetId: string;
   // Set only when this request downloaded and installed a brand-new file
   // for this asset (i.e. it wasn't already shared by another card), so a
@@ -442,7 +448,8 @@ interface ResolvedImageAsset {
 // database race is discarded in favor of the winner's asset. Only the
 // identity/image fields a TCGdex card's shared asset actually keys on are
 // needed here (used by the bulk create-cards endpoint, stories 17/18).
-async function resolveTcgDexImageAsset(
+// Exported for reuse by routes/watchlistEntries.ts (story 45).
+export async function resolveTcgDexImageAsset(
   database: DatabaseConnection['database'],
   imagesDirectory: string,
   body: { providerCardId: string; providerSetId: string; imageUrl: string },
@@ -512,7 +519,8 @@ async function resolveTcgDexImageAsset(
 // TCGdex provider card ID. `uploadedFile.path` is always consumed by this
 // function - either deleted (a duplicate) or renamed into place - so the
 // caller never needs to remove it itself once this function is called.
-function resolveCustomImageAsset(
+// Exported for reuse by routes/watchlistEntries.ts (story 45).
+export function resolveCustomImageAsset(
   database: DatabaseConnection['database'],
   imagesDirectory: string,
   uploadedFile: Express.Multer.File,
@@ -1152,32 +1160,6 @@ export function createCardsRouter(
   // Scoped to this router's module-level closure - fine for a local
   // single-process application with no horizontal scaling.
   const activeBulkRequestBinderIds = new Set<string>();
-
-  // Runs `task` for every item in `items` with at most `limit` tasks in
-  // flight at once, resolving with results in the same order as `items`
-  // regardless of completion order (planning.md: "Bulk outcome entries
-  // preserve submitted array order regardless of processing completion
-  // order"). A small worker-pool loop over a shared index cursor rather
-  // than an external concurrency-limiting dependency.
-  async function mapWithConcurrencyLimit<T, R>(
-    items: T[],
-    limit: number,
-    task: (item: T, index: number) => Promise<R>,
-  ): Promise<R[]> {
-    const results: R[] = new Array(items.length);
-    let nextIndex = 0;
-
-    async function worker(): Promise<void> {
-      for (;;) {
-        const index = nextIndex++;
-        if (index >= items.length) return;
-        results[index] = await task(items[index]!, index);
-      }
-    }
-
-    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
-    return results;
-  }
 
   // One submitted card's independent creation outcome (stories 17/18),
   // matching the OpenAPI `BulkCardOutcome` schema.
