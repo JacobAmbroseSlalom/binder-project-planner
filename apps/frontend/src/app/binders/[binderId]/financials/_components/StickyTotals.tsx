@@ -1,4 +1,7 @@
+import { Settings } from 'lucide-react';
+
 import { type FinanceSettings } from '@/lib/api';
+import { Tooltip } from '@/shared/feedback';
 
 import { computeWithTax, formatCurrency } from '../_lib/financeCalculations';
 
@@ -38,18 +41,23 @@ function TotalStat({
 // with no user-facing way to change it) applied on top of
 // "Total (excl. Cards)". The rate is shown directly in the stat's label
 // rather than as an editable field.
+//
+// Story 44 adds the single gear icon opening the "Manage cost entries"
+// modal, placed at the end of the bar.
 export function StickyTotals({
   physicalCostsTotal,
   timeCostsTotal,
   cardsTotal,
   totalHours,
   financeSettings,
+  onManageCostEntries,
 }: {
   physicalCostsTotal: number;
   timeCostsTotal: number;
   cardsTotal: number;
   totalHours: number;
   financeSettings: FinanceSettings;
+  onManageCostEntries: () => void;
 }) {
   const totalExcludingCards = physicalCostsTotal + timeCostsTotal;
   const overallTotal = totalExcludingCards + cardsTotal;
@@ -73,6 +81,18 @@ export function StickyTotals({
         />
         <TotalStat label="Overall total" value={formatCurrency(overallTotal)} />
         <TotalStat label="Total hours" value={totalHours.toFixed(2)} />
+        <div className="flex items-center">
+          <Tooltip label="Manage cost entries">
+            <button
+              type="button"
+              aria-label="Manage cost entries"
+              onClick={onManageCostEntries}
+              className="cursor-pointer rounded-standard p-2 hover:brightness-110"
+            >
+              <Settings className="size-5" aria-hidden="true" />
+            </button>
+          </Tooltip>
+        </div>
       </div>
     </div>
   );

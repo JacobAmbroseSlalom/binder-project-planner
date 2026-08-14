@@ -1504,6 +1504,24 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteBinderCostEntry
+      summary: Permanently delete a Binder cost entry
+      description: >-
+        Story 44: permanently deletes the shared entry regardless of
+        whether any binder currently selects it, nulling
+        selectedBinderCostEntryId on every affected binder in the same
+        transaction as the delete. Deleting an already-absent entry also
+        returns 204 No Content.
+      responses:
+        '204':
+          description: The entry was deleted, or no entry existed with the given id.
+        '400':
+          description: The binderCostEntryId path parameter is not a well-formed UUID.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /printing-cost-entries:
     get:
       operationId: listPrintingCostEntries
@@ -1580,6 +1598,21 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         '404':
           description: No Printing cost entry exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deletePrintingCostEntry
+      summary: Permanently delete a Printing cost entry
+      description: >-
+        Story 44: mirrors deleteBinderCostEntry, nulling
+        selectedPrintingCostEntryId instead.
+      responses:
+        '204':
+          description: The entry was deleted, or no entry existed with the given id.
+        '400':
+          description: The printingCostEntryId path parameter is not a well-formed UUID.
           content:
             application/problem+json:
               schema:
@@ -1665,6 +1698,23 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
         '404':
           description: No Holographic Paper cost entry exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    delete:
+      operationId: deleteHolographicPaperCostEntry
+      summary: Permanently delete a Holographic Paper cost entry
+      description: >-
+        Story 44: mirrors deleteBinderCostEntry, nulling
+        selectedHolographicPaperCostEntryId instead.
+      responses:
+        '204':
+          description: The entry was deleted, or no entry existed with the given id.
+        '400':
+          description: >-
+            The holographicPaperCostEntryId path parameter is not a
+            well-formed UUID.
           content:
             application/problem+json:
               schema:
@@ -3708,6 +3758,7 @@ components:
         - width
         - height
         - pages
+        - binderCount
         - createdAt
         - updatedAt
       properties:
@@ -3732,6 +3783,13 @@ components:
           type: integer
           exclusiveMinimum: 0
           description: Stored binder-page count this entry applies to.
+        binderCount:
+          type: integer
+          minimum: 0
+          description: >-
+            Count of binders currently selecting this entry as
+            selectedBinderCostEntryId (story 44); not persisted on the
+            entry itself.
         createdAt:
           type: string
           format: date-time
@@ -3794,6 +3852,7 @@ components:
         - id
         - name
         - pricePerPage
+        - binderCount
         - createdAt
         - updatedAt
       properties:
@@ -3804,6 +3863,13 @@ components:
           $ref: '#/components/schemas/CostEntryName'
         pricePerPage:
           $ref: '#/components/schemas/CostEntryPrice'
+        binderCount:
+          type: integer
+          minimum: 0
+          description: >-
+            Count of binders currently selecting this entry as
+            selectedPrintingCostEntryId (story 44); not persisted on the
+            entry itself.
         createdAt:
           type: string
           format: date-time
@@ -3842,6 +3908,7 @@ components:
         - name
         - price
         - pagesIncluded
+        - binderCount
         - createdAt
         - updatedAt
       properties:
@@ -3856,6 +3923,13 @@ components:
           type: integer
           exclusiveMinimum: 0
           description: Number of pages one pack at this price covers.
+        binderCount:
+          type: integer
+          minimum: 0
+          description: >-
+            Count of binders currently selecting this entry as
+            selectedHolographicPaperCostEntryId (story 44); not persisted
+            on the entry itself.
         createdAt:
           type: string
           format: date-time

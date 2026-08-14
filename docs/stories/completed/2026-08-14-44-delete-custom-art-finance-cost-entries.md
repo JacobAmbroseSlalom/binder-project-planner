@@ -1,6 +1,6 @@
 # 44. Delete custom art finance cost entries
 
-**Status:** Not started
+**Status:** Done (2026-08-14 14:57 EDT)
 
 #### Acceptance criteria
 

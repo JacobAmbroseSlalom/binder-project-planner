@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import {
+  deleteBinderCostEntry,
+  deleteHolographicPaperCostEntry,
+  deletePrintingCostEntry,
   getArtPrintPageCount,
   getFinanceSettings,
   listBinderCostEntries,
@@ -17,6 +20,7 @@ import {
   LoadingIndicator,
   toProblemDetailsInfo,
   useDelayedLoading,
+  useSaveStatusToast,
   useToastContext,
 } from '@/shared/feedback';
 
@@ -29,6 +33,7 @@ import {
   TIME_COST_CATEGORIES,
 } from './_lib/financeCalculations';
 import { computeCardPriceTotal } from '@/shared/finance/computeCardPriceTotal';
+import { ManageCostEntriesModal } from './_components/ManageCostEntriesModal';
 import { PhysicalCostsSection } from './_components/PhysicalCostsSection';
 import { StickyTotals } from './_components/StickyTotals';
 import { TimeCostsSection } from './_components/TimeCostsSection';
@@ -58,10 +63,14 @@ interface FinancialsData {
 export default function BinderFinancialsPage() {
   const { binder, cards, updateBinder } = useBinderRouteContext();
   const { markFailed, dismiss } = useToastContext();
+  const { start } = useSaveStatusToast();
 
   const [status, setStatus] = useState<LoadStatus>('loading');
   const [data, setData] = useState<FinancialsData | null>(null);
   const [retryToken, setRetryToken] = useState(0);
+  // Story 44: whether the "Manage cost entries" modal (opened from the
+  // sticky totals area's gear icon) is currently open.
+  const [isManageCostEntriesModalOpen, setIsManageCostEntriesModalOpen] = useState(false);
 
   const showLoading = useDelayedLoading(status === 'loading');
 
@@ -110,6 +119,98 @@ export default function BinderFinancialsPage() {
       controller.abort();
     };
   }, [binder.id, retryToken, markFailed, dismiss]);
+
+  // Story 44's 3 delete handlers, one per catalog: each optimistically
+  // removes the entry from the modal's list immediately (matching the
+  // existing home-page binder-delete pattern, story 21), then confirms
+  // with the backend. A failure restores the full pre-delete list -
+  // simple and correct here since it reproduces the entry's exact prior
+  // (already-alphabetical) position, matching this story's own "restores
+  // it to its prior position" requirement. On success, if this binder's
+  // own current selection pointed at the now-deleted entry, it's cleared
+  // locally too - the backend already nulled it server-side for every
+  // binder, but that only reaches this already-loaded binder by updating
+  // the route context directly rather than refetching it.
+  async function handleDeleteBinderCostEntry(binderCostEntryId: string) {
+    const previousEntries = data?.binderCostEntries;
+    if (!previousEntries) return;
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            binderCostEntries: prev.binderCostEntries.filter(
+              (entry) => entry.id !== binderCostEntryId,
+            ),
+          }
+        : prev,
+    );
+
+    const toast = start(`delete-binder-cost-entry-${binderCostEntryId}`);
+    try {
+      await deleteBinderCostEntry(binderCostEntryId);
+      toast.markSaved();
+      if (binder.selectedBinderCostEntryId === binderCostEntryId) {
+        updateBinder({ ...binder, selectedBinderCostEntryId: null });
+      }
+    } catch (error) {
+      setData((prev) => (prev ? { ...prev, binderCostEntries: previousEntries } : prev));
+      toast.markFailed(error);
+    }
+  }
+
+  async function handleDeletePrintingCostEntry(printingCostEntryId: string) {
+    const previousEntries = data?.printingCostEntries;
+    if (!previousEntries) return;
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            printingCostEntries: prev.printingCostEntries.filter(
+              (entry) => entry.id !== printingCostEntryId,
+            ),
+          }
+        : prev,
+    );
+
+    const toast = start(`delete-printing-cost-entry-${printingCostEntryId}`);
+    try {
+      await deletePrintingCostEntry(printingCostEntryId);
+      toast.markSaved();
+      if (binder.selectedPrintingCostEntryId === printingCostEntryId) {
+        updateBinder({ ...binder, selectedPrintingCostEntryId: null });
+      }
+    } catch (error) {
+      setData((prev) => (prev ? { ...prev, printingCostEntries: previousEntries } : prev));
+      toast.markFailed(error);
+    }
+  }
+
+  async function handleDeleteHolographicPaperCostEntry(holographicPaperCostEntryId: string) {
+    const previousEntries = data?.holographicPaperCostEntries;
+    if (!previousEntries) return;
+    setData((prev) =>
+      prev
+        ? {
+            ...prev,
+            holographicPaperCostEntries: prev.holographicPaperCostEntries.filter(
+              (entry) => entry.id !== holographicPaperCostEntryId,
+            ),
+          }
+        : prev,
+    );
+
+    const toast = start(`delete-holographic-paper-cost-entry-${holographicPaperCostEntryId}`);
+    try {
+      await deleteHolographicPaperCostEntry(holographicPaperCostEntryId);
+      toast.markSaved();
+      if (binder.selectedHolographicPaperCostEntryId === holographicPaperCostEntryId) {
+        updateBinder({ ...binder, selectedHolographicPaperCostEntryId: null });
+      }
+    } catch (error) {
+      setData((prev) => (prev ? { ...prev, holographicPaperCostEntries: previousEntries } : prev));
+      toast.markFailed(error);
+    }
+  }
 
   if (status === 'loading') {
     return showLoading ? <LoadingIndicator label="Loading financials…" size="10" /> : null;
@@ -191,6 +292,7 @@ export default function BinderFinancialsPage() {
         cardsTotal={cardsTotal}
         totalHours={totalHours}
         financeSettings={financeSettings}
+        onManageCostEntries={() => setIsManageCostEntriesModalOpen(true)}
       />
       <PhysicalCostsSection
         binder={binder}
@@ -274,6 +376,17 @@ export default function BinderFinancialsPage() {
           <CardsFinanceSection cards={cards} />
         </div>
       </div>
+      {isManageCostEntriesModalOpen && (
+        <ManageCostEntriesModal
+          binderCostEntries={binderCostEntries}
+          printingCostEntries={printingCostEntries}
+          holographicPaperCostEntries={holographicPaperCostEntries}
+          onDeleteBinderCostEntry={handleDeleteBinderCostEntry}
+          onDeletePrintingCostEntry={handleDeletePrintingCostEntry}
+          onDeleteHolographicPaperCostEntry={handleDeleteHolographicPaperCostEntry}
+          onClose={() => setIsManageCostEntriesModalOpen(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { COST_ENTRY_NAME_MAX_LENGTH } from '@binder-project-planner/shared';
 import { randomUUID } from 'node:crypto';
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, isNotNull, sql } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
 import {
   binderCostEntries,
+  binders,
   holographicPaperCostEntries,
   printingCostEntries,
 } from '../database/schema.js';
@@ -57,7 +58,7 @@ interface HolographicPaperCostEntryRow {
   updatedAt: string;
 }
 
-function toBinderCostEntryResponse(row: BinderCostEntryRow) {
+function toBinderCostEntryResponse(row: BinderCostEntryRow, binderCount: number) {
   return {
     id: row.id,
     name: row.name,
@@ -65,30 +66,113 @@ function toBinderCostEntryResponse(row: BinderCostEntryRow) {
     width: row.width,
     height: row.height,
     pages: row.pages,
+    binderCount,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-function toPrintingCostEntryResponse(row: PrintingCostEntryRow) {
+function toPrintingCostEntryResponse(row: PrintingCostEntryRow, binderCount: number) {
   return {
     id: row.id,
     name: row.name,
     pricePerPage: fromCents(row.pricePerPageCents),
+    binderCount,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-function toHolographicPaperCostEntryResponse(row: HolographicPaperCostEntryRow) {
+function toHolographicPaperCostEntryResponse(
+  row: HolographicPaperCostEntryRow,
+  binderCount: number,
+) {
   return {
     id: row.id,
     name: row.name,
     price: fromCents(row.priceCents),
     pagesIncluded: row.pagesIncluded,
+    binderCount,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+// Story 44: the count of binders currently selecting one catalog entry, for
+// the "Manage cost entries" modal's per-row impact indicator. A single
+// grouped query (rather than one query per entry) computes every entry's
+// count at once for the list endpoints; a targeted single-id query covers
+// the create/update endpoints, which only ever need one entry's count.
+function countBindersByBinderCostEntry(
+  database: DatabaseConnection['database'],
+): Map<string, number> {
+  const rows = database
+    .select({ id: binders.selectedBinderCostEntryId, count: sql<number>`count(*)` })
+    .from(binders)
+    .where(isNotNull(binders.selectedBinderCostEntryId))
+    .groupBy(binders.selectedBinderCostEntryId)
+    .all() as { id: string; count: number }[];
+  return new Map(rows.map((row) => [row.id, row.count]));
+}
+
+function countBindersSelectingBinderCostEntry(
+  database: DatabaseConnection['database'],
+  binderCostEntryId: string,
+): number {
+  const row = database
+    .select({ count: sql<number>`count(*)` })
+    .from(binders)
+    .where(eq(binders.selectedBinderCostEntryId, binderCostEntryId))
+    .get() as { count: number };
+  return row.count;
+}
+
+function countBindersByPrintingCostEntry(
+  database: DatabaseConnection['database'],
+): Map<string, number> {
+  const rows = database
+    .select({ id: binders.selectedPrintingCostEntryId, count: sql<number>`count(*)` })
+    .from(binders)
+    .where(isNotNull(binders.selectedPrintingCostEntryId))
+    .groupBy(binders.selectedPrintingCostEntryId)
+    .all() as { id: string; count: number }[];
+  return new Map(rows.map((row) => [row.id, row.count]));
+}
+
+function countBindersSelectingPrintingCostEntry(
+  database: DatabaseConnection['database'],
+  printingCostEntryId: string,
+): number {
+  const row = database
+    .select({ count: sql<number>`count(*)` })
+    .from(binders)
+    .where(eq(binders.selectedPrintingCostEntryId, printingCostEntryId))
+    .get() as { count: number };
+  return row.count;
+}
+
+function countBindersByHolographicPaperCostEntry(
+  database: DatabaseConnection['database'],
+): Map<string, number> {
+  const rows = database
+    .select({ id: binders.selectedHolographicPaperCostEntryId, count: sql<number>`count(*)` })
+    .from(binders)
+    .where(isNotNull(binders.selectedHolographicPaperCostEntryId))
+    .groupBy(binders.selectedHolographicPaperCostEntryId)
+    .all() as { id: string; count: number }[];
+  return new Map(rows.map((row) => [row.id, row.count]));
+}
+
+function countBindersSelectingHolographicPaperCostEntry(
+  database: DatabaseConnection['database'],
+  holographicPaperCostEntryId: string,
+): number {
+  const row = database
+    .select({ count: sql<number>`count(*)` })
+    .from(binders)
+    .where(eq(binders.selectedHolographicPaperCostEntryId, holographicPaperCostEntryId))
+    .get() as { count: number };
+  return row.count;
 }
 
 interface CreateBinderCostEntryRequestBody {
@@ -149,7 +233,10 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
       .from(binderCostEntries)
       .orderBy(asc(sql`lower(${binderCostEntries.name})`))
       .all() as BinderCostEntryRow[];
-    response.status(200).json(rows.map(toBinderCostEntryResponse));
+    const counts = countBindersByBinderCostEntry(database);
+    response
+      .status(200)
+      .json(rows.map((row) => toBinderCostEntryResponse(row, counts.get(row.id) ?? 0)));
   });
 
   router.post('/binder-cost-entries', (request, response) => {
@@ -182,7 +269,7 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
     response
       .status(201)
       .location(`/binder-cost-entries/${row.id}`)
-      .json(toBinderCostEntryResponse(row));
+      .json(toBinderCostEntryResponse(row, 0));
   });
 
   router.patch('/binder-cost-entries/:binderCostEntryId', (request, response) => {
@@ -229,7 +316,42 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
       .returning()
       .get() as BinderCostEntryRow;
 
-    response.status(200).json(toBinderCostEntryResponse(updated));
+    response
+      .status(200)
+      .json(
+        toBinderCostEntryResponse(
+          updated,
+          countBindersSelectingBinderCostEntry(database, binderCostEntryId),
+        ),
+      );
+  });
+
+  // Story 44: permanently deletes a shared Binder cost entry regardless of
+  // whether any binder currently selects it, nulling
+  // `selectedBinderCostEntryId` (and bumping `updatedAt`, matching every
+  // other field-clearing update in this codebase) on every affected binder
+  // in the same transaction as the delete itself.
+  router.delete('/binder-cost-entries/:binderCostEntryId', (request, response) => {
+    const { binderCostEntryId } = request.params;
+
+    database.transaction((tx) => {
+      const existing = tx
+        .select({ id: binderCostEntries.id })
+        .from(binderCostEntries)
+        .where(eq(binderCostEntries.id, binderCostEntryId))
+        .get();
+      // Deleting an already-absent entry is still a successful no-op,
+      // matching every other delete endpoint in this app.
+      if (!existing) return;
+
+      tx.update(binders)
+        .set({ selectedBinderCostEntryId: null, updatedAt: new Date().toISOString() })
+        .where(eq(binders.selectedBinderCostEntryId, binderCostEntryId))
+        .run();
+      tx.delete(binderCostEntries).where(eq(binderCostEntries.id, binderCostEntryId)).run();
+    });
+
+    response.status(204).send();
   });
 
   // -- Printing cost entries -------------------------------------------
@@ -240,7 +362,10 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
       .from(printingCostEntries)
       .orderBy(asc(sql`lower(${printingCostEntries.name})`))
       .all() as PrintingCostEntryRow[];
-    response.status(200).json(rows.map(toPrintingCostEntryResponse));
+    const counts = countBindersByPrintingCostEntry(database);
+    response
+      .status(200)
+      .json(rows.map((row) => toPrintingCostEntryResponse(row, counts.get(row.id) ?? 0)));
   });
 
   router.post('/printing-cost-entries', (request, response) => {
@@ -270,7 +395,7 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
     response
       .status(201)
       .location(`/printing-cost-entries/${row.id}`)
-      .json(toPrintingCostEntryResponse(row));
+      .json(toPrintingCostEntryResponse(row, 0));
   });
 
   router.patch('/printing-cost-entries/:printingCostEntryId', (request, response) => {
@@ -318,7 +443,37 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
       .returning()
       .get() as PrintingCostEntryRow;
 
-    response.status(200).json(toPrintingCostEntryResponse(updated));
+    response
+      .status(200)
+      .json(
+        toPrintingCostEntryResponse(
+          updated,
+          countBindersSelectingPrintingCostEntry(database, printingCostEntryId),
+        ),
+      );
+  });
+
+  // Story 44: mirrors the Binder catalog's delete endpoint above, nulling
+  // `selectedPrintingCostEntryId` instead.
+  router.delete('/printing-cost-entries/:printingCostEntryId', (request, response) => {
+    const { printingCostEntryId } = request.params;
+
+    database.transaction((tx) => {
+      const existing = tx
+        .select({ id: printingCostEntries.id })
+        .from(printingCostEntries)
+        .where(eq(printingCostEntries.id, printingCostEntryId))
+        .get();
+      if (!existing) return;
+
+      tx.update(binders)
+        .set({ selectedPrintingCostEntryId: null, updatedAt: new Date().toISOString() })
+        .where(eq(binders.selectedPrintingCostEntryId, printingCostEntryId))
+        .run();
+      tx.delete(printingCostEntries).where(eq(printingCostEntries.id, printingCostEntryId)).run();
+    });
+
+    response.status(204).send();
   });
 
   // -- Holographic paper cost entries -----------------------------------
@@ -329,7 +484,10 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
       .from(holographicPaperCostEntries)
       .orderBy(asc(sql`lower(${holographicPaperCostEntries.name})`))
       .all() as HolographicPaperCostEntryRow[];
-    response.status(200).json(rows.map(toHolographicPaperCostEntryResponse));
+    const counts = countBindersByHolographicPaperCostEntry(database);
+    response
+      .status(200)
+      .json(rows.map((row) => toHolographicPaperCostEntryResponse(row, counts.get(row.id) ?? 0)));
   });
 
   router.post('/holographic-paper-cost-entries', (request, response) => {
@@ -360,7 +518,7 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
     response
       .status(201)
       .location(`/holographic-paper-cost-entries/${row.id}`)
-      .json(toHolographicPaperCostEntryResponse(row));
+      .json(toHolographicPaperCostEntryResponse(row, 0));
   });
 
   router.patch(
@@ -411,7 +569,45 @@ export function createCostEntriesRouter(database: DatabaseConnection['database']
         .returning()
         .get() as HolographicPaperCostEntryRow;
 
-      response.status(200).json(toHolographicPaperCostEntryResponse(updated));
+      response
+        .status(200)
+        .json(
+          toHolographicPaperCostEntryResponse(
+            updated,
+            countBindersSelectingHolographicPaperCostEntry(database, holographicPaperCostEntryId),
+          ),
+        );
+    },
+  );
+
+  // Story 44: mirrors the Binder catalog's delete endpoint above, nulling
+  // `selectedHolographicPaperCostEntryId` instead.
+  router.delete(
+    '/holographic-paper-cost-entries/:holographicPaperCostEntryId',
+    (request, response) => {
+      const { holographicPaperCostEntryId } = request.params;
+
+      database.transaction((tx) => {
+        const existing = tx
+          .select({ id: holographicPaperCostEntries.id })
+          .from(holographicPaperCostEntries)
+          .where(eq(holographicPaperCostEntries.id, holographicPaperCostEntryId))
+          .get();
+        if (!existing) return;
+
+        tx.update(binders)
+          .set({
+            selectedHolographicPaperCostEntryId: null,
+            updatedAt: new Date().toISOString(),
+          })
+          .where(eq(binders.selectedHolographicPaperCostEntryId, holographicPaperCostEntryId))
+          .run();
+        tx.delete(holographicPaperCostEntries)
+          .where(eq(holographicPaperCostEntries.id, holographicPaperCostEntryId))
+          .run();
+      });
+
+      response.status(204).send();
     },
   );
 

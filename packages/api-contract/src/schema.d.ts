@@ -603,7 +603,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Permanently delete a Binder cost entry
+         * @description Story 44: permanently deletes the shared entry regardless of whether any binder currently selects it, nulling selectedBinderCostEntryId on every affected binder in the same transaction as the delete. Deleting an already-absent entry also returns 204 No Content.
+         */
+        delete: operations["deleteBinderCostEntry"];
         options?: never;
         head?: never;
         /**
@@ -646,7 +650,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Permanently delete a Printing cost entry
+         * @description Story 44: mirrors deleteBinderCostEntry, nulling selectedPrintingCostEntryId instead.
+         */
+        delete: operations["deletePrintingCostEntry"];
         options?: never;
         head?: never;
         /**
@@ -689,7 +697,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Permanently delete a Holographic Paper cost entry
+         * @description Story 44: mirrors deleteBinderCostEntry, nulling selectedHolographicPaperCostEntryId instead.
+         */
+        delete: operations["deleteHolographicPaperCostEntry"];
         options?: never;
         head?: never;
         /**
@@ -1451,6 +1463,8 @@ export interface components {
             height: number;
             /** @description Stored binder-page count this entry applies to. */
             pages: number;
+            /** @description Count of binders currently selecting this entry as selectedBinderCostEntryId (story 44); not persisted on the entry itself. */
+            binderCount: number;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1477,6 +1491,8 @@ export interface components {
             id: string;
             name: components["schemas"]["CostEntryName"];
             pricePerPage: components["schemas"]["CostEntryPrice"];
+            /** @description Count of binders currently selecting this entry as selectedPrintingCostEntryId (story 44); not persisted on the entry itself. */
+            binderCount: number;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1499,6 +1515,8 @@ export interface components {
             price: components["schemas"]["CostEntryPrice"];
             /** @description Number of pages one pack at this price covers. */
             pagesIncluded: number;
+            /** @description Count of binders currently selecting this entry as selectedHolographicPaperCostEntryId (story 44); not persisted on the entry itself. */
+            binderCount: number;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -3032,6 +3050,35 @@ export interface operations {
             };
         };
     };
+    deleteBinderCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                binderCostEntryId: components["parameters"]["binderCostEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry was deleted, or no entry existed with the given id. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The binderCostEntryId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     updateBinderCostEntry: {
         parameters: {
             query?: never;
@@ -3131,6 +3178,35 @@ export interface operations {
             };
         };
     };
+    deletePrintingCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                printingCostEntryId: components["parameters"]["printingCostEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry was deleted, or no entry existed with the given id. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The printingCostEntryId path parameter is not a well-formed UUID. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
     updatePrintingCostEntry: {
         parameters: {
             query?: never;
@@ -3220,6 +3296,35 @@ export interface operations {
                 };
             };
             /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    deleteHolographicPaperCostEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                holographicPaperCostEntryId: components["parameters"]["holographicPaperCostEntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The entry was deleted, or no entry existed with the given id. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The holographicPaperCostEntryId path parameter is not a well-formed UUID. */
             400: {
                 headers: {
                     [name: string]: unknown;

@@ -46,6 +46,7 @@ This index maps every story file to its current bucket.
 | 40    | Add summary stats on Binder Layout Page                                | [docs/stories/completed/2026-08-03-40-add-summary-stats-on-binder-layout-page.md](completed/2026-08-03-40-add-summary-stats-on-binder-layout-page.md)                                                               |
 | 41    | Filter card search by TCG Pocket inclusion and language                | [docs/stories/completed/2026-08-01-41-filter-card-search-by-tcg-pocket-inclusion-and-language.md](completed/2026-08-01-41-filter-card-search-by-tcg-pocket-inclusion-and-language.md)                               |
 | 42    | Preview binder layout and multi-slot art while editing binder settings | [docs/stories/completed/2026-08-03-42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md](completed/2026-08-03-42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md) |
+| 44    | Delete custom art finance cost entries                                 | [docs/stories/completed/2026-08-14-44-delete-custom-art-finance-cost-entries.md](completed/2026-08-14-44-delete-custom-art-finance-cost-entries.md)                                                                 |
 | 46    | Bulk acquire cards                                                     | [docs/stories/completed/2026-08-12-46-bulk-acquire-cards.md](completed/2026-08-12-46-bulk-acquire-cards.md)                                                                                                         |
 | 49    | Edit a card's info from the Card List                                  | [docs/stories/completed/2026-08-14-49-edit-a-cards-info-from-the-card-list.md](completed/2026-08-14-49-edit-a-cards-info-from-the-card-list.md)                                                                     |
 | 50    | Enhance the View Financials Cards section                              | [docs/stories/completed/2026-08-13-50-enhance-view-financials-cards-section.md](completed/2026-08-13-50-enhance-view-financials-cards-section.md)                                                                   |
@@ -53,11 +54,10 @@ This index maps every story file to its current bucket.
 
 ## Ready For Dev
 
-| Story | Title                                  | File                                                                                                                                  |
-| ----- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| 32    | Lock a binder                          | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                                                   |
-| 44    | Delete custom art finance cost entries | [docs/stories/ready-for-dev/44-delete-custom-art-finance-cost-entries.md](ready-for-dev/44-delete-custom-art-finance-cost-entries.md) |
-| 45    | What I'm looking for section           | [docs/stories/ready-for-dev/45-what-im-looking-for-section.md](ready-for-dev/45-what-im-looking-for-section.md)                       |
+| Story | Title                        | File                                                                                                            |
+| ----- | ---------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| 32    | Lock a binder                | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                             |
+| 45    | What I'm looking for section | [docs/stories/ready-for-dev/45-what-im-looking-for-section.md](ready-for-dev/45-what-im-looking-for-section.md) |
 
 ## Needs Refinement
 

@@ -38,7 +38,7 @@ function OldestRefreshStat({ cards }: { cards: readonly Card[] }) {
   const oldest = computeOldestPriceRefresh(cards);
   return (
     <div className="flex flex-col items-center justify-end gap-1 text-center">
-      <span className="text-caption text-neutral-500">Prices oldest refresh</span>
+      <span className="text-caption text-neutral-500">Oldest refreshed date</span>
       <span className="text-subheading font-bold">
         {oldest ? new Date(oldest).toLocaleDateString() : '--'}
       </span>

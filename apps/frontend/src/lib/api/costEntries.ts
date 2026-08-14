@@ -57,6 +57,18 @@ export async function updateBinderCostEntry(
   return data;
 }
 
+// Story 44: permanently deletes a shared Binder cost entry regardless of
+// whether any binder currently selects it.
+export async function deleteBinderCostEntry(binderCostEntryId: string): Promise<void> {
+  const { error } = await apiClient.DELETE('/binder-cost-entries/{binderCostEntryId}', {
+    params: { path: { binderCostEntryId } },
+  });
+
+  if (error) {
+    throw error;
+  }
+}
+
 // --- Printing cost entries ---
 
 export async function listPrintingCostEntries(signal?: AbortSignal): Promise<PrintingCostEntry[]> {
@@ -95,6 +107,17 @@ export async function updatePrintingCostEntry(
   }
 
   return data;
+}
+
+// Story 44: mirrors deleteBinderCostEntry above.
+export async function deletePrintingCostEntry(printingCostEntryId: string): Promise<void> {
+  const { error } = await apiClient.DELETE('/printing-cost-entries/{printingCostEntryId}', {
+    params: { path: { printingCostEntryId } },
+  });
+
+  if (error) {
+    throw error;
+  }
 }
 
 // --- Holographic Paper cost entries ---
@@ -142,4 +165,18 @@ export async function updateHolographicPaperCostEntry(
   }
 
   return data;
+}
+
+// Story 44: mirrors deleteBinderCostEntry above.
+export async function deleteHolographicPaperCostEntry(
+  holographicPaperCostEntryId: string,
+): Promise<void> {
+  const { error } = await apiClient.DELETE(
+    '/holographic-paper-cost-entries/{holographicPaperCostEntryId}',
+    { params: { path: { holographicPaperCostEntryId } } },
+  );
+
+  if (error) {
+    throw error;
+  }
 }
