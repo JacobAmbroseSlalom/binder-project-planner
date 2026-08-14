@@ -55,10 +55,13 @@ This index maps every story file to its current bucket.
 | 39    | Add Binder Search and Sort functions   | [docs/stories/ready-for-dev/39-add-binder-search-and-sort-functions.md](ready-for-dev/39-add-binder-search-and-sort-functions.md)     |
 | 44    | Delete custom art finance cost entries | [docs/stories/ready-for-dev/44-delete-custom-art-finance-cost-entries.md](ready-for-dev/44-delete-custom-art-finance-cost-entries.md) |
 | 45    | What I'm looking for section           | [docs/stories/ready-for-dev/45-what-im-looking-for-section.md](ready-for-dev/45-what-im-looking-for-section.md)                       |
+| 49    | Edit a card's info from the Card List  | [docs/stories/ready-for-dev/49-edit-a-cards-info-from-the-card-list.md](ready-for-dev/49-edit-a-cards-info-from-the-card-list.md)     |
+| 50    | Enhance the View Financials Cards section | [docs/stories/ready-for-dev/50-enhance-view-financials-cards-section.md](ready-for-dev/50-enhance-view-financials-cards-section.md) |
 
 ## Needs Refinement
 
 | Story | Title                                               | File                                                                                                                                                                  |
-| ----- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ----- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 43    | Add a card from other API sources                   | [docs/stories/needs-refinement/43-add-a-card-from-other-api-sources.md](needs-refinement/43-add-a-card-from-other-api-sources.md)                                     |
 | 47    | Package and export the application as an executable | [docs/stories/needs-refinement/47-package-and-export-the-application-as-an-executable.md](needs-refinement/47-package-and-export-the-application-as-an-executable.md) |
+| 48    | House cleaning                                       | [docs/stories/needs-refinement/48-house-cleaning.md](needs-refinement/48-house-cleaning.md)                                                                           |
