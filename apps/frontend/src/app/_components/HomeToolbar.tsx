@@ -1,7 +1,7 @@
 'use client';
 
 import { DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE } from '@binder-project-planner/shared';
-import { Check, Download, Upload } from 'lucide-react';
+import { ArrowUpDown, Check, Download, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 
@@ -14,7 +14,7 @@ import {
 } from '@/shared/feedback';
 import { useLocalStorageBoolean } from '@/shared/hooks/useLocalStorageBoolean';
 
-import { COMPLETION_METRICS_VISIBLE_STORAGE_KEY } from './BinderList';
+import { COMPLETION_METRICS_VISIBLE_STORAGE_KEY, type BinderSortOption } from './BinderList';
 import { ImportConfirmDialog } from './ImportConfirmDialog';
 
 // Fixed toast ids so a retried export/import replaces its own toast rather
@@ -22,12 +22,26 @@ import { ImportConfirmDialog } from './ImportConfirmDialog';
 const EXPORT_TOAST_ID = 'export-data';
 const IMPORT_TOAST_ID = 'import-data';
 
-// The home page's single-line controls row (stories 22, 4, 33): the
-// completion-metrics toggle on the left, the "Create new binder" button
-// centered on the page, and the Export/Import actions on the right. A
-// 3-column grid keeps the create button centered on the page regardless of
-// the widths of the side groups.
-export function HomeToolbar() {
+// The home page's single-line controls row (stories 22, 4, 33, 39): the
+// search box, sort toggle, and completion-metrics toggle on the left (in
+// that order, per story 39), the "Create new binder" button centered on the
+// page, and the Export/Import actions on the right. A 3-column grid keeps
+// the create button centered on the page regardless of the widths of the
+// side groups.
+export function HomeToolbar({
+  searchQuery,
+  onSearchChange,
+  sortOption,
+  onToggleSort,
+}: {
+  // Story 39's search box value and sort toggle state, lifted to the home
+  // page so this toolbar and `BinderList` (which actually filters/sorts)
+  // stay in sync without either persisting anything.
+  searchQuery: string;
+  onSearchChange: (value: string) => void;
+  sortOption: BinderSortOption;
+  onToggleSort: () => void;
+}) {
   const { start } = useSaveStatusToast();
   const { markFailed } = useToastContext();
 
@@ -118,6 +132,38 @@ export function HomeToolbar() {
   return (
     <div className="flex w-full flex-col items-center gap-2">
       <div className="flex flex-wrap items-center justify-center gap-4">
+        {/* Story 39's search box - a plain case-insensitive substring match
+            on binder name, filtered client-side by `BinderList`. */}
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(event) => onSearchChange(event.target.value)}
+          placeholder="Search binders"
+          aria-label="Search binders"
+          className="rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
+        />
+
+        {/* Story 39's sort toggle: a single button switching between the two
+            orderings, labeled with the ordering selecting it would switch
+            to (matching this codebase's other toggle-button conventions). */}
+        <button
+          type="button"
+          onClick={onToggleSort}
+          aria-label={`Sort by ${sortOption === 'lastActive' ? 'name' : 'last active'}`}
+          className="flex cursor-pointer items-center gap-2 rounded-standard bg-neutral-800 px-4 py-2 font-bold hover:brightness-110"
+        >
+          <ArrowUpDown className="size-4" aria-hidden="true" />
+          Sort: {sortOption === 'lastActive' ? 'Last Active' : 'Name'}
+        </button>
+
+        {/* Story 4's create button. */}
+        <Link
+          href="/binders/new"
+          className="rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110"
+        >
+          Create new binder
+        </Link>
+
         {/* Story 22's completion-metrics toggle. */}
         <label htmlFor="completion-metrics-toggle" className="flex items-center gap-2">
           <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
@@ -132,14 +178,6 @@ export function HomeToolbar() {
           </span>
           <span className="text-caption text-neutral-500">Show completion metrics</span>
         </label>
-
-        {/* Story 4's create button. */}
-        <Link
-          href="/binders/new"
-          className="rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110"
-        >
-          Create new binder
-        </Link>
 
         {/* Story 33's export/import actions. */}
         <div className="flex gap-3">

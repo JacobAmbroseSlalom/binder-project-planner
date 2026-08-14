@@ -1,6 +1,6 @@
 # 39. Add Binder Search and Sort functions
 
-**Status:** Not started
+**Status:** Done (2026-08-14 01:20 EDT)
 
 #### Acceptance criteria
 

@@ -6,7 +6,7 @@ import {
 } from '@binder-project-planner/shared';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 import {
   deleteBinder,
@@ -35,6 +35,13 @@ import { BinderPreview } from './preview/BinderPreview';
 // the same preference (they stay in sync via `useLocalStorageBoolean`).
 export const COMPLETION_METRICS_VISIBLE_STORAGE_KEY = 'binder-completion-metrics-visible';
 
+// Story 39's home-page sort toggle's two states: "Last Active" is
+// `GET /binders`'s own existing newest-first (`updatedAt` descending)
+// ordering, so it needs no client-side re-sort at all; "Name" is a
+// client-side re-sort, ascending and case-insensitive. Exported so the
+// toolbar's toggle button and the page's lifted state share the same type.
+export type BinderSortOption = 'lastActive' | 'name';
+
 // The three states the binder list can be in (story 5). Tracking this as one
 // enum, rather than separate booleans, keeps "loading" and "failed" from
 // ever being true simultaneously and makes the empty-state gating below
@@ -50,8 +57,18 @@ const LIST_BINDERS_TOAST_ID = 'list-binders';
 
 // The home page's binder list (story 5): fetches the binder-summary
 // collection on mount and renders its loading/empty/success/error states,
-// using the shared loading component (story 6).
-export function BinderList() {
+// using the shared loading component (story 6). Story 39 adds a
+// client-side search/sort over the already-fetched list, driven by state
+// lifted to the home page (so the toolbar's search box/sort toggle and
+// this list stay in sync without either fetching or persisting anything
+// extra).
+export function BinderList({
+  searchQuery,
+  sortOption,
+}: {
+  searchQuery: string;
+  sortOption: BinderSortOption;
+}) {
   const router = useRouter();
   const [status, setStatus] = useState<BinderListStatus>('loading');
   const [binders, setBinders] = useState<BinderSummary[]>([]);
@@ -83,6 +100,26 @@ export function BinderList() {
     COMPLETION_METRICS_VISIBLE_STORAGE_KEY,
     DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE,
   );
+
+  // Story 39's search/sort, applied client-side over the already-fetched
+  // `binders`: a case-insensitive substring match on name, then either the
+  // fetched (newest-first) order as-is or a client-side ascending,
+  // case-insensitive re-sort by name. Recomputed only when the underlying
+  // data or the search/sort state actually changes, rather than on every
+  // render.
+  const visibleBinders = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+    const matching = normalizedQuery
+      ? binders.filter((binder) => binder.name.toLowerCase().includes(normalizedQuery))
+      : binders;
+
+    if (sortOption === 'name') {
+      return [...matching].sort((a, b) => a.name.localeCompare(b.name));
+    }
+    // "Last Active": `GET /binders`'s own newest-first order is already
+    // exactly this ordering, so no re-sort is needed.
+    return matching;
+  }, [binders, searchQuery, sortOption]);
 
   useEffect(() => {
     // Aborts this fetch if the effect cleans up (unmount, or a future
@@ -247,9 +284,15 @@ export function BinderList() {
           No binders yet. Create one to get started.
         </p>
       )}
-      {status === 'success' && binders.length > 0 && (
+      {/* Story 39: a distinct empty state for "search matched nothing",
+          separate from "no binders exist at all" above - only shown once
+          there's at least one real binder to search over. */}
+      {status === 'success' && binders.length > 0 && visibleBinders.length === 0 && (
+        <p className="text-center text-body text-neutral-500">No binders match your search.</p>
+      )}
+      {status === 'success' && visibleBinders.length > 0 && (
         <ul className="flex flex-wrap justify-center gap-12">
-          {binders.map((binder) => {
+          {visibleBinders.map((binder) => {
             const isPendingCopy = pendingCopyIds.has(binder.id);
             const isPendingLockToggle = pendingLockToggleIds.has(binder.id);
             // Story 32: every action for this binder is disabled while its
