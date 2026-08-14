@@ -11,10 +11,15 @@ import { formatCurrency } from '@/shared/finance/formatCurrency';
 export type WatchlistColumnKey =
   'name' | 'set' | 'number' | 'variation' | 'price' | 'priceUpdatedAt';
 
-// One more option than `WatchlistColumnKey` has entries: `setAndNumber` is
-// the default combined sort with no single clickable column header,
-// mirroring `CardListSortOption`.
-export type WatchlistSortOption = WatchlistColumnKey | 'setAndNumber';
+// One more option than `WatchlistColumnKey` has entries: `persistedOrder`
+// is the default sort, following each entry's own persisted `sortOrder`
+// (story 52's drag-and-drop position) rather than a single clickable
+// column header - mirroring `CardListSortOption`'s own combined-default
+// pattern (this option previously sorted by set+number before story 52
+// persisted a dedicated drag order; the literal was renamed along with
+// its meaning to avoid the stale implication that it still means
+// set+number sorting).
+export type WatchlistSortOption = WatchlistColumnKey | 'persistedOrder';
 
 export type WatchlistSortDirection = 'ascending' | 'descending';
 
@@ -223,10 +228,11 @@ function compareByColumn(
 }
 
 // The full comparator driving the page's active column sort: dispatches
-// to `compareByColumn` for the 5 single-column options, handles the
-// `setAndNumber` combined default (always ascending), then falls back to
-// `createdAt` ascending as a stable tiebreaker, mirroring `compareCards`
-// (minus its `acquisition` branch, which has no equivalent here).
+// to `compareByColumn` for the 6 single-column options, handles the
+// `persistedOrder` default (each entry's own persisted `sortOrder`, story
+// 52), then falls back to `createdAt` ascending as a stable tiebreaker,
+// mirroring `compareCards` (minus its `acquisition` branch, which has no
+// equivalent here).
 export function compareWatchlistEntries(
   a: WatchlistEntry,
   b: WatchlistEntry,
@@ -235,9 +241,8 @@ export function compareWatchlistEntries(
 ): number {
   let cmp: number;
 
-  if (sortOption === 'setAndNumber') {
-    cmp = compareByColumn(a, b, 'set', 'ascending');
-    if (cmp === 0) cmp = compareByColumn(a, b, 'number', 'ascending');
+  if (sortOption === 'persistedOrder') {
+    cmp = a.sortOrder - b.sortOrder;
   } else {
     cmp = compareByColumn(a, b, sortOption, sortDirection);
   }
@@ -245,6 +250,22 @@ export function compareWatchlistEntries(
   if (cmp !== 0) return cmp;
   if (a.createdAt !== b.createdAt) return a.createdAt < b.createdAt ? -1 : 1;
   return 0;
+}
+
+// Whether any column filter currently excludes at least one distinct
+// value (story 52): the persisted drag order and PDF export divider are
+// only meaningful, and only draggable, against the *full* unfiltered
+// list - once a filter narrows the visible entries, reordering is
+// disabled and a plain, non-interactive cutoff line is shown instead
+// (matching story 45's existing "filtered entries only" export rule).
+export function hasActiveWatchlistColumnFilters(
+  entries: readonly WatchlistEntry[],
+  columnFilters: WatchlistColumnFilters,
+): boolean {
+  return (Object.keys(columnFilters) as WatchlistColumnKey[]).some((column) => {
+    const distinctValueCount = getDistinctWatchlistColumnValues(entries, column).length;
+    return columnFilters[column].size < distinctValueCount;
+  });
 }
 
 // The single entry point the watchlist page calls: applies search, then

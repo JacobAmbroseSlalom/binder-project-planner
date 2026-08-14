@@ -15,7 +15,9 @@ been placed vs. still needs a home.
 - Frontend styling: Tailwind CSS
 - Frontend virtualization: TanStack Virtual
 - Frontend icons: Lucide React
-- Frontend drag and drop: dnd-kit
+- Frontend drag and drop: dnd-kit (`@dnd-kit/core`, `@dnd-kit/sortable`,
+  `@dnd-kit/utilities`) — `@dnd-kit/sortable` added for story 52's animated What I'm
+  Looking For row reordering
 - Frontend image editing: Konva with React Konva
 - Backend: Node.js (Express)
 - Backend image processing: Sharp

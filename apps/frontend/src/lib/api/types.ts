@@ -51,6 +51,7 @@ export type CardPriceUpdate = components['schemas']['CardPriceUpdate'];
 export type CardPriceUpdateOutcome = components['schemas']['CardPriceUpdateOutcome'];
 // Story 45's "What I'm Looking For" section.
 export type WatchlistEntry = components['schemas']['WatchlistEntry'];
+export type WatchlistEntryList = components['schemas']['WatchlistEntryList'];
 export type BulkCreateWatchlistEntriesRequest =
   components['schemas']['BulkCreateWatchlistEntriesRequest'];
 export type BulkWatchlistEntryOutcome = components['schemas']['BulkWatchlistEntryOutcome'];
@@ -61,3 +62,8 @@ export type WatchlistEntryPriceFetchResult =
 export type WatchlistEntryPriceUpdate = components['schemas']['WatchlistEntryPriceUpdate'];
 export type WatchlistEntryPriceUpdateOutcome =
   components['schemas']['WatchlistEntryPriceUpdateOutcome'];
+// Story 52: persisted watchlist order + PDF export divider.
+export type UpdateWatchlistEntryOrderRequest =
+  components['schemas']['UpdateWatchlistEntryOrderRequest'];
+export type UpdateWatchlistEntryOrderResponse =
+  components['schemas']['UpdateWatchlistEntryOrderResponse'];

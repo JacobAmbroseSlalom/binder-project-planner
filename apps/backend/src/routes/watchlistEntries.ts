@@ -13,11 +13,11 @@ import {
   POKEMONTCG_PRICE_FETCH_CONCURRENCY,
   WATCHLIST_PDF_MAX_ENTRIES,
 } from '@binder-project-planner/shared';
-import { asc, desc, eq, inArray } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import { Router } from 'express';
 
 import type { DatabaseConnection } from '../database/client.js';
-import { cardImageAssets, cards, watchlistEntries } from '../database/schema.js';
+import { appMetadata, cardImageAssets, cards, watchlistEntries } from '../database/schema.js';
 import { fromCents, toCents } from '../finance/currency.js';
 import {
   findIdempotentOutcome,
@@ -137,6 +137,21 @@ function problem(status: number, title: string, detail: string) {
   return { type: 'about:blank', title, status, detail };
 }
 
+// Story 52's key for the persisted "how many entries currently sit above
+// the PDF export divider" value, stored as a single row in the generic
+// `app_metadata` key/value table (its first real use) rather than a new
+// dedicated singleton table, since it's just one global integer.
+const PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY = 'watchlistPdfExportCutoffCount';
+
+// The validated, OpenAPI-typed shape of `PATCH /watchlist-entries/
+// order`'s request body (story 52): a full replacement of every entry's
+// `sortOrder` (as a plain ordered id array, renumbered 0..n-1) plus the
+// new divider position, applied together in one request/transaction.
+interface UpdateWatchlistEntryOrderRequestBody {
+  orderedEntryIds: string[];
+  pdfExportCutoffCount: number;
+}
+
 // Serializes one persisted watchlist-entry row as the OpenAPI
 // `WatchlistEntry` response shape (story 45). When `card` is supplied
 // (the entry references an existing binder card), every display/edit
@@ -149,6 +164,7 @@ function serializeWatchlistEntry(entry: WatchlistEntryRow, card: HydratingCardRo
   return {
     id: entry.id,
     cardId: entry.cardId,
+    sortOrder: entry.sortOrder,
     name: fields.name!,
     setName: fields.setName,
     localNumber: fields.localNumber,
@@ -189,29 +205,207 @@ export function createWatchlistEntriesRouter(
     return new Map(cardRows.map((card) => [card.id, card]));
   }
 
+  // The current total row count in `watchlist_entries`, used both to
+  // assign a newly created entry's `sortOrder` (always appended at the
+  // end) and as the upper bound when clamping the persisted PDF export
+  // cutoff (story 52).
+  function countWatchlistEntries(): number {
+    const row = database
+      .select({ count: sql<number>`count(*)` })
+      .from(watchlistEntries)
+      .get() as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  // Reads the persisted PDF export cutoff straight from `app_metadata`,
+  // or `null` if no value has ever been written yet (story 52) - the
+  // divider hasn't been dragged, so there's nothing to clamp/derive from
+  // other than the caller's own default.
+  function readStoredPdfExportCutoffCount(): number | null {
+    const row = database
+      .select({ value: appMetadata.value })
+      .from(appMetadata)
+      .where(eq(appMetadata.key, PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY))
+      .get();
+    return row ? Number.parseInt(row.value, 10) : null;
+  }
+
+  // Story 52's divider position: the persisted `pdfExportCutoffCount`
+  // (how many entries currently sit above the PDF export divider), read
+  // fresh on every request rather than cached. Defaults to
+  // `min(WATCHLIST_PDF_MAX_ENTRIES, totalEntryCount)` (the divider's
+  // documented starting position) when nothing has ever been explicitly
+  // persisted, and is always clamped to the list's *current* size and to
+  // `WATCHLIST_PDF_MAX_ENTRIES` so a stored value never points past the
+  // end of a list that has since shrunk, or exceeds the export's own hard
+  // cap.
+  function computePdfExportCutoffCount(totalEntryCount: number): number {
+    const stored = readStoredPdfExportCutoffCount();
+    const effective = stored ?? Math.min(WATCHLIST_PDF_MAX_ENTRIES, totalEntryCount);
+    return Math.min(effective, WATCHLIST_PDF_MAX_ENTRIES, totalEntryCount);
+  }
+
+  // Upserts the persisted PDF export cutoff (story 52). `app_metadata` is
+  // a plain key/value table with no prior read/write helpers in this
+  // codebase, so this is a plain select-then-insert-or-update rather than
+  // an ORM upsert helper, matching this file's existing style elsewhere.
+  function writePdfExportCutoffCount(value: number): void {
+    const existing = database
+      .select({ key: appMetadata.key })
+      .from(appMetadata)
+      .where(eq(appMetadata.key, PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY))
+      .get();
+    if (existing) {
+      database
+        .update(appMetadata)
+        .set({ value: String(value) })
+        .where(eq(appMetadata.key, PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY))
+        .run();
+    } else {
+      database
+        .insert(appMetadata)
+        .values({ key: PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY, value: String(value) })
+        .run();
+    }
+  }
+
+  // Called right after inserting `createdCount` new entries (1 for the
+  // single-entry create endpoints, or however many succeeded for a bulk
+  // one), story 52. If the divider was already sitting at the true end of
+  // the list (no entries below it) and there's still room under
+  // `WATCHLIST_PDF_MAX_ENTRIES`, extends it to also cover as many of the
+  // newly appended entries as fit - otherwise (the user has moved the
+  // divider up, or the list is already at the cap) leaves it unchanged,
+  // so new entries land below it instead.
+  function extendPdfExportCutoffForNewEntries(
+    previousTotalEntryCount: number,
+    createdCount: number,
+  ): void {
+    if (createdCount === 0) return;
+    const previousCutoff = computePdfExportCutoffCount(previousTotalEntryCount);
+    if (previousCutoff !== previousTotalEntryCount) return;
+    const nextCutoff = Math.min(previousCutoff + createdCount, WATCHLIST_PDF_MAX_ENTRIES);
+    if (nextCutoff !== previousCutoff) {
+      writePdfExportCutoffCount(nextCutoff);
+    }
+  }
+
   // Story 45's main list endpoint: every entry on the shared list, both
   // standalone and referenced, hydrated from their joined card where
-  // applicable. Ordered newest-first, mirroring the Card List's own
-  // unplaced-cards tiebreaker (story 15) - the frontend applies its own
-  // active column sort or manual drag order on top of this.
+  // applicable. Ordered by each entry's persisted `sortOrder` (story
+  // 52's drag-and-drop position) - the frontend applies its own active
+  // column sort on top of this, or falls back to this order when no
+  // column sort is active. The response also carries the persisted PDF
+  // export divider position alongside the entries, since it's one global
+  // value rather than a per-entry field.
   router.get('/watchlist-entries', (_request, response) => {
     const entryRows = database
       .select()
       .from(watchlistEntries)
-      .orderBy(desc(watchlistEntries.createdAt), asc(watchlistEntries.id))
+      .orderBy(asc(watchlistEntries.sortOrder))
       .all();
     const cardsById = loadCardsByIdForEntries(entryRows);
 
-    response
-      .status(200)
-      .json(
-        entryRows.map((entry) =>
-          serializeWatchlistEntry(
-            entry,
-            entry.cardId ? (cardsById.get(entry.cardId) ?? null) : null,
+    response.status(200).json({
+      entries: entryRows.map((entry) =>
+        serializeWatchlistEntry(entry, entry.cardId ? (cardsById.get(entry.cardId) ?? null) : null),
+      ),
+      pdfExportCutoffCount: computePdfExportCutoffCount(entryRows.length),
+    });
+  });
+
+  // Story 52's single reorder endpoint: replaces every entry's persisted
+  // `sortOrder` from the submitted array's own order (renumbered 0..n-1)
+  // and updates the persisted PDF export divider position, together in
+  // one transaction - covers both a plain entry drag (only
+  // `orderedEntryIds` changes) and a divider drag (only
+  // `pdfExportCutoffCount` changes) with a single request shape, since the
+  // frontend always has both values in hand after any drag-end.
+  router.patch('/watchlist-entries/order', (request, response) => {
+    const body = request.body as UpdateWatchlistEntryOrderRequestBody;
+    const { orderedEntryIds, pdfExportCutoffCount } = body;
+
+    const existingIds = database
+      .select({ id: watchlistEntries.id })
+      .from(watchlistEntries)
+      .all()
+      .map((row) => row.id);
+    const existingIdSet = new Set(existingIds);
+    const orderedIdSet = new Set(orderedEntryIds);
+
+    // `orderedEntryIds` must be exactly a reordering of every current
+    // entry id - same length, no duplicates, no unknown/missing ids -
+    // otherwise this request can't be a valid full-order replacement.
+    const isExactReordering =
+      orderedEntryIds.length === existingIds.length &&
+      orderedIdSet.size === orderedEntryIds.length &&
+      orderedEntryIds.every((id) => existingIdSet.has(id));
+    if (!isExactReordering) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          problem(
+            400,
+            'Bad Request',
+            'orderedEntryIds must contain every current watchlist entry id exactly once.',
           ),
-        ),
-      );
+        );
+      return;
+    }
+
+    const maxPdfExportCutoffCount = Math.min(WATCHLIST_PDF_MAX_ENTRIES, orderedEntryIds.length);
+    if (
+      !Number.isInteger(pdfExportCutoffCount) ||
+      pdfExportCutoffCount < 0 ||
+      pdfExportCutoffCount > maxPdfExportCutoffCount
+    ) {
+      response
+        .status(400)
+        .type('application/problem+json')
+        .json(
+          problem(
+            400,
+            'Bad Request',
+            `pdfExportCutoffCount must be an integer between 0 and ${maxPdfExportCutoffCount}.`,
+          ),
+        );
+      return;
+    }
+
+    database.transaction((tx) => {
+      orderedEntryIds.forEach((id, index) => {
+        tx.update(watchlistEntries)
+          .set({ sortOrder: index })
+          .where(eq(watchlistEntries.id, id))
+          .run();
+      });
+
+      // Inlined rather than reusing `writePdfExportCutoffCount` - that
+      // helper always runs against the router's own top-level `database`,
+      // never this callback's `tx`, so the read-then-write below stays
+      // inside this same transaction instead.
+      const existingMetadataRow = tx
+        .select({ key: appMetadata.key })
+        .from(appMetadata)
+        .where(eq(appMetadata.key, PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY))
+        .get();
+      if (existingMetadataRow) {
+        tx.update(appMetadata)
+          .set({ value: String(pdfExportCutoffCount) })
+          .where(eq(appMetadata.key, PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY))
+          .run();
+      } else {
+        tx.insert(appMetadata)
+          .values({
+            key: PDF_EXPORT_CUTOFF_COUNT_METADATA_KEY,
+            value: String(pdfExportCutoffCount),
+          })
+          .run();
+      }
+    });
+
+    response.status(200).json({ pdfExportCutoffCount });
   });
 
   // Story 45's "Add to What I'm Looking For" Card List row action: creates
@@ -241,10 +435,14 @@ export function createWatchlistEntriesRouter(
       return;
     }
 
+    const previousTotalEntryCount = countWatchlistEntries();
     const now = new Date().toISOString();
     const entry: WatchlistEntryRow = {
       id: randomUUID(),
       cardId,
+      // Story 52: newly created entries are always appended at the end of
+      // the persisted drag order.
+      sortOrder: previousTotalEntryCount,
       name: null,
       setName: null,
       localNumber: null,
@@ -279,6 +477,7 @@ export function createWatchlistEntriesRouter(
       throw error;
     }
 
+    extendPdfExportCutoffForNewEntries(previousTotalEntryCount, 1);
     response.status(200).json(serializeWatchlistEntry(entry, card));
   });
 
@@ -291,6 +490,17 @@ export function createWatchlistEntriesRouter(
   // of which items succeeded or failed.
   router.post('/cards/watchlist-entries/bulk', (request, response) => {
     const { cardIds } = request.body as { cardIds: string[] };
+
+    // Story 52: entries newly created within this batch are appended at
+    // the end of the persisted drag order in their submitted-array order;
+    // `nextSortOrder` tracks the running end-of-list position across the
+    // loop, and `newlyCreatedCount` (distinct from the outcome count,
+    // since an already-listed card's outcome is also `status: 'added'`)
+    // tracks how many actually inserted a new row, for extending the PDF
+    // export cutoff afterward.
+    const initialTotalEntryCount = countWatchlistEntries();
+    let nextSortOrder = initialTotalEntryCount;
+    let newlyCreatedCount = 0;
 
     const outcomes: BulkAddCardsToWatchlistOutcome[] = cardIds.map((cardId) => {
       const card = database.select().from(cards).where(eq(cards.id, cardId)).get();
@@ -315,6 +525,7 @@ export function createWatchlistEntriesRouter(
       const entry: WatchlistEntryRow = {
         id: randomUUID(),
         cardId,
+        sortOrder: nextSortOrder,
         name: null,
         setName: null,
         localNumber: null,
@@ -351,8 +562,12 @@ export function createWatchlistEntriesRouter(
         throw error;
       }
 
+      nextSortOrder += 1;
+      newlyCreatedCount += 1;
       return { cardId, status: 'added', entry: serializeWatchlistEntry(entry, card) };
     });
+
+    extendPdfExportCutoffForNewEntries(initialTotalEntryCount, newlyCreatedCount);
 
     const responseStatus = outcomes.some((outcome) => outcome.status === 'failed') ? 207 : 201;
     response.status(responseStatus).json(outcomes);
@@ -472,10 +687,12 @@ export function createWatchlistEntriesRouter(
       throw error;
     }
 
+    const previousTotalEntryCount = countWatchlistEntries();
     const now = new Date().toISOString();
     const entry: WatchlistEntryRow = {
       id: randomUUID(),
       cardId: null,
+      sortOrder: previousTotalEntryCount,
       name,
       setName,
       localNumber,
@@ -504,6 +721,7 @@ export function createWatchlistEntriesRouter(
       throw error;
     }
 
+    extendPdfExportCutoffForNewEntries(previousTotalEntryCount, 1);
     response
       .status(201)
       .location(`/watchlist-entries/${entry.id}`)
@@ -556,10 +774,18 @@ export function createWatchlistEntriesRouter(
     // bounded by its own internal timeout.
     const neverAbortedSignal = new AbortController().signal;
 
+    // Story 52: sortOrder is assigned from each item's position in the
+    // *submitted* `body.cards` array (not completion order, which varies
+    // with `mapWithConcurrencyLimit`'s concurrency), so the outcome is
+    // deterministic regardless of which network requests finish first. A
+    // failed item's index is simply skipped, leaving a harmless gap in
+    // the value space rather than a used sortOrder.
+    const initialTotalEntryCount = countWatchlistEntries();
+
     const outcomes = await mapWithConcurrencyLimit(
       body.cards,
       BULK_CARD_CREATE_CONCURRENCY,
-      async (item): Promise<BulkWatchlistEntryOutcome> => {
+      async (item, index): Promise<BulkWatchlistEntryOutcome> => {
         let asset: ResolvedImageAsset;
         try {
           asset = await resolveTcgDexImageAsset(
@@ -580,6 +806,7 @@ export function createWatchlistEntriesRouter(
         const entry: WatchlistEntryRow = {
           id: randomUUID(),
           cardId: null,
+          sortOrder: initialTotalEntryCount + index,
           name: item.name,
           setName: item.setName,
           localNumber: item.localNumber,
@@ -607,6 +834,11 @@ export function createWatchlistEntriesRouter(
 
         return { status: 'created', entry: serializeWatchlistEntry(entry, null) };
       },
+    );
+
+    extendPdfExportCutoffForNewEntries(
+      initialTotalEntryCount,
+      outcomes.filter((outcome) => outcome.status === 'created').length,
     );
 
     const responseStatus = outcomes.some((outcome) => outcome.status === 'failed') ? 207 : 201;

@@ -1,6 +1,6 @@
 # 52. Persist What I'm Looking For order and add a movable PDF export divider
 
-**Status:** Not started
+**Status:** Done (2026-08-14 18:11 EDT)
 
 > **Note:** This story revises two decisions Story 45 ("What I'm looking for section")
 > already confirmed and shipped:
@@ -59,7 +59,7 @@
   and unwritten by any route).
 - Reordering (moving an entry or the divider) is a single `PATCH /watchlist-entries/order`
   request sending the complete new arrangement — `{ orderedEntryIds: string[],
-  pdfExportCutoffCount: number }` — on every drag-drop. The backend renumbers every
+pdfExportCutoffCount: number }` — on every drag-drop. The backend renumbers every
   entry's `sortOrder` to match and updates `pdfExportCutoffCount` in one transaction.
   At this list's realistic scale (a personal collection, not thousands of entries)
   a full-order replace on each drop is simpler than discrete move endpoints and has
@@ -77,7 +77,7 @@
 - Adding a new entry appends it at the end of `sortOrder`. Whether it lands above or
   below the divider depends on the divider's current position: if the divider was
   already sitting at the true end of the list (`pdfExportCutoffCount ===
-  totalEntryCount`, i.e. every existing entry was above it) and adding one more entry
+totalEntryCount`, i.e. every existing entry was above it) and adding one more entry
   wouldn't exceed `WATCHLIST_PDF_MAX_ENTRIES`, the new entry is inserted above the
   divider too (`pdfExportCutoffCount` increments by 1, keeping the divider trailing
   at the end). Otherwise — the user has manually moved the divider up so entries

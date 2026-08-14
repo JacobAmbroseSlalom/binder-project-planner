@@ -1,13 +1,27 @@
 'use client';
 
-import { DndContext, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core';
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
   CARD_DRAG_ACTIVATION_DISTANCE_PX,
   WATCHLIST_PDF_MAX_ENTRIES,
 } from '@binder-project-planner/shared';
 import { ArrowDown, ArrowUp, ArrowUpDown, CircleCheck, GripVertical, Trash2 } from 'lucide-react';
-import { Fragment } from 'react';
-import { PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { Fragment, useMemo } from 'react';
 
 import { resolveCardImageUrl, type WatchlistEntry } from '@/lib/api';
 import { ImagePreview, Tooltip } from '@/shared/feedback';
@@ -116,21 +130,36 @@ function SortableColumnHeader({
   );
 }
 
-// One row's drag handle (story 45's manual reordering): a small grip icon,
-// draggable via `@dnd-kit/core`'s bare `useDraggable` (this project's
-// existing dependency - no `@dnd-kit/sortable` addition, per the story's
-// technical requirements) - the drop target is the enclosing `<tr>` itself
-// (see `WatchlistEntryRow` below), so hovering anywhere over another row
-// while dragging (not just its own handle) registers as a valid drop.
-function DragHandle({ entryId, disabled }: { entryId: string; disabled?: boolean }) {
-  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
-    id: entryId,
-    disabled,
-  });
+// Story 52's PDF export divider row's sentinel id - never a real entry's
+// id, so it's safely distinguishable within the combined drag-and-drop
+// row order alongside every entry id.
+const PDF_EXPORT_DIVIDER_ROW_ID = '__pdf_export_divider__';
+
+// One row's drag handle (story 45's manual reordering, now animated via
+// `@dnd-kit/sortable`): a small grip icon. Purely presentational - the
+// enclosing row (`WatchlistEntryRow`/`DividerRow` below) owns the single
+// `useSortable` call for the whole row (row = drag source + drop target +
+// sortable list item), and passes its `attributes`/`listeners` down here
+// so only this handle (not the whole row) starts a drag, while
+// `setActivatorNodeRef` tells dnd-kit which element to focus for keyboard
+// dragging.
+function DragHandle({
+  disabled,
+  isDragging,
+  attributes,
+  listeners,
+  setActivatorNodeRef,
+}: {
+  disabled?: boolean;
+  isDragging: boolean;
+  attributes: DraggableAttributes;
+  listeners: DraggableSyntheticListeners;
+  setActivatorNodeRef: (element: HTMLElement | null) => void;
+}) {
   return (
     <Tooltip label="Drag to reorder">
       <button
-        ref={setNodeRef}
+        ref={setActivatorNodeRef}
         type="button"
         disabled={disabled}
         aria-label="Drag to reorder"
@@ -143,6 +172,48 @@ function DragHandle({ entryId, disabled }: { entryId: string; disabled?: boolean
         <GripVertical className="size-4" aria-hidden="true" />
       </button>
     </Tooltip>
+  );
+}
+
+// Story 52's PDF export divider, a real sortable row (rather than a
+// fixed, informational-only line) - only rendered while `canReorder` is
+// true (no active column sort/search/filter), since its position only has
+// meaning against the full, persisted-order list. Uses `useSortable` (not
+// bare `useDraggable`/`useDroppable`) so it participates in the same
+// animated repositioning as every entry row when something is dragged
+// past it.
+function DividerRow({ columnCount }: { columnCount: number }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: PDF_EXPORT_DIVIDER_ROW_ID });
+
+  return (
+    // `CSS.Translate` (not `CSS.Transform`) deliberately drops the scale
+    // component dnd-kit would otherwise compute from this row's rect vs.
+    // the dragged row's rect - this divider row's single full-width
+    // `colSpan` cell has a very different shape than a normal entry row,
+    // so a scale transform here visibly stretched/skewed it.
+    <tr ref={setNodeRef} style={{ transform: CSS.Translate.toString(transform), transition }}>
+      <td colSpan={columnCount} className="p-0">
+        <div
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          className={`flex cursor-grab items-center gap-2 border-t-2 border-secondary bg-neutral-900/50 px-2 py-1.5 text-caption text-secondary ${
+            isDragging ? 'opacity-50' : ''
+          }`}
+        >
+          <GripVertical className="size-4 shrink-0" aria-hidden="true" />
+          Only cards above this line are included in the PDF export
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -164,6 +235,8 @@ export function WatchlistEntryTable({
   onSortColumnClick,
   columnFilters,
   onColumnFilterChange,
+  canReorder,
+  pdfExportCutoffCount,
   onReorder,
   priceReview,
   onRemove,
@@ -174,18 +247,28 @@ export function WatchlistEntryTable({
   // Every entry, used only to compute each column's full distinct-value
   // list for its filter dropdown - never rendered directly.
   allEntries: readonly WatchlistEntry[];
-  // The already search/sort/filter-derived (and possibly manually
-  // reordered) entries to render as rows.
+  // The already search/sort/filter-derived entries to render as rows -
+  // when `canReorder` is true, this is always the full list in its
+  // persisted `sortOrder` (no search/filter/column-sort narrows or
+  // reorders it in that state).
   visibleEntries: readonly WatchlistEntry[];
   sortOption: WatchlistSortOption;
   sortDirection: WatchlistSortDirection;
   onSortColumnClick: (column: WatchlistColumnKey) => void;
   columnFilters: WatchlistColumnFilters;
   onColumnFilterChange: (column: WatchlistColumnKey, next: Set<string>) => void;
-  // Story 45's manual drag-and-drop reorder: called with the dragged
-  // entry's id and the id of the row it was dropped onto - the page owns
-  // translating this into its own client-only ordered-id-list state.
-  onReorder: (draggedEntryId: string, targetEntryId: string) => void;
+  // Story 52: dragging (of entries or the PDF export divider) is only
+  // meaningful, and only enabled, while no column sort or active
+  // search/filter is narrowing or reordering the visible list.
+  canReorder: boolean;
+  // How many entries (from the top of `visibleEntries`, when `canReorder`
+  // is true) currently sit above the PDF export divider - already clamped
+  // to `visibleEntries.length` by the caller.
+  pdfExportCutoffCount: number;
+  // Story 52's single reorder callback: called with the complete new
+  // entry-id order and the new divider position together, on every
+  // drag-end - the page owns persisting both in one request.
+  onReorder: (orderedEntryIds: string[], pdfExportCutoffCount: number) => void;
   priceReview: WatchlistPriceReviewTableProps | null;
   onRemove: (entryId: string) => void;
   pendingRemoveIds: ReadonlySet<string>;
@@ -200,10 +283,41 @@ export function WatchlistEntryTable({
     }),
   );
 
+  // Story 52: while `canReorder`, the divider is a real row within the
+  // same combined drag-and-drop order as every entry - computed by
+  // splicing its sentinel id into `visibleEntries`' own id order at
+  // `pdfExportCutoffCount`. `null` while dragging is disabled, since the
+  // divider isn't rendered as a draggable row at all in that state.
+  const combinedRowIds = useMemo(() => {
+    if (!canReorder) return null;
+    const ids = visibleEntries.map((entry) => entry.id);
+    ids.splice(pdfExportCutoffCount, 0, PDF_EXPORT_DIVIDER_ROW_ID);
+    return ids;
+  }, [canReorder, visibleEntries, pdfExportCutoffCount]);
+
   function handleDragEnd(event: DragEndEvent) {
+    if (!combinedRowIds) return;
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    onReorder(active.id as string, over.id as string);
+
+    const activeIndex = combinedRowIds.indexOf(active.id as string);
+    const overIndex = combinedRowIds.indexOf(over.id as string);
+    if (activeIndex === -1 || overIndex === -1) return;
+
+    const next = arrayMove(combinedRowIds, activeIndex, overIndex);
+
+    // The divider's own index within `next` numerically equals how many
+    // entries now precede it (every other element is an entry id) - so
+    // this is `pdfExportCutoffCount` before any cap is applied. Clamped to
+    // `WATCHLIST_PDF_MAX_ENTRIES` so dragging an entry above the divider
+    // can never push more than 40 entries above it (per the story's own
+    // acceptance criterion), rather than rejecting the drag outright.
+    const nextCutoffCount = Math.min(
+      next.indexOf(PDF_EXPORT_DIVIDER_ROW_ID),
+      WATCHLIST_PDF_MAX_ENTRIES,
+    );
+    const orderedEntryIds = next.filter((id) => id !== PDF_EXPORT_DIVIDER_ROW_ID);
+    onReorder(orderedEntryIds, nextCutoffCount);
   }
 
   const sortableHeaderProps = {
@@ -263,51 +377,75 @@ export function WatchlistEntryTable({
               </td>
             </tr>
           )}
-          {visibleEntries.map((entry, index) => (
-            <Fragment key={entry.id}>
-              {/* Story 45's PDF export cutoff (`WATCHLIST_PDF_MAX_ENTRIES`):
-                  the backend's fixed page 1 layout can't fit more than 40
-                  cards on one page, so only the entries above this divider
-                  are ever sent to the export button - shown here (as a
-                  plain line, with the explanation in a native hover title
-                  rather than the shared `Tooltip`, since this is a passive
-                  divider rather than an actionable icon button) so the
-                  cutoff is visible before the user exports. */}
-              {index === WATCHLIST_PDF_MAX_ENTRIES && (
-                <tr aria-hidden="true">
-                  <td colSpan={getTotalColumnCount(priceReview !== null)} className="p-0">
-                    <div
-                      title="Only cards above this line are included in the PDF export"
-                      className="border-t-2 border-secondary"
-                    />
-                  </td>
-                </tr>
-              )}
-              <WatchlistEntryRow
-                entry={entry}
-                controlsDisabled={controlsDisabled}
-                priceReview={priceReview}
-                onRemove={onRemove}
-                isRemovePending={pendingRemoveIds.has(entry.id)}
-                onMarkAcquiredAndRemove={onMarkAcquiredAndRemove}
-                isMarkAcquiredPending={pendingMarkAcquiredIds.has(entry.id)}
-              />
-            </Fragment>
-          ))}
+          {/* `SortableContext`'s own `items` list drives each row's animated
+              repositioning (`useSortable` compares a row's previous vs. new
+              index within this list to compute its slide transform) - it
+              always gets a valid, complete id list (falling back to the
+              plain visible-entries order when `canReorder` is false and no
+              divider row is rendered), even though no drag can actually
+              start in that state (`dragDisabled` disables every row's own
+              `useSortable` call). */}
+          <SortableContext
+            items={combinedRowIds ?? visibleEntries.map((entry) => entry.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {visibleEntries.map((entry, index) => (
+              <Fragment key={entry.id}>
+                {/* Story 45's PDF export cutoff (`WATCHLIST_PDF_MAX_ENTRIES`):
+                    while dragging is disabled (a column sort or active
+                    search/filter is applied, story 52), this stays a plain,
+                    non-draggable indicator against the currently-visible
+                    order - not the same movable, persisted divider row
+                    rendered below when `canReorder` is true. */}
+                {!canReorder && index === WATCHLIST_PDF_MAX_ENTRIES && (
+                  <tr aria-hidden="true">
+                    <td colSpan={getTotalColumnCount(priceReview !== null)} className="p-0">
+                      <div
+                        title="Only cards above this line are included in the PDF export"
+                        className="border-t-2 border-secondary"
+                      />
+                    </td>
+                  </tr>
+                )}
+                {/* Story 52's movable PDF export divider row: rendered right
+                    before the entry that currently follows it in the
+                    persisted order, only while `canReorder` is true. */}
+                {canReorder && index === pdfExportCutoffCount && (
+                  <DividerRow columnCount={getTotalColumnCount(priceReview !== null)} />
+                )}
+                <WatchlistEntryRow
+                  entry={entry}
+                  controlsDisabled={controlsDisabled}
+                  dragDisabled={controlsDisabled || !canReorder}
+                  priceReview={priceReview}
+                  onRemove={onRemove}
+                  isRemovePending={pendingRemoveIds.has(entry.id)}
+                  onMarkAcquiredAndRemove={onMarkAcquiredAndRemove}
+                  isMarkAcquiredPending={pendingMarkAcquiredIds.has(entry.id)}
+                />
+              </Fragment>
+            ))}
+            {/* The divider row can also trail every entry (its default
+                position, or after being dragged to the very end). */}
+            {canReorder && pdfExportCutoffCount >= visibleEntries.length && (
+              <DividerRow columnCount={getTotalColumnCount(priceReview !== null)} />
+            )}
+          </SortableContext>
         </tbody>
       </table>
     </DndContext>
   );
 }
 
-// One entry's row, split out from the table above so its own
-// `useDroppable` drop-target hook (the row is the reorder drop target;
-// `DragHandle` above is the drag source) can be called once per row rather
-// than inside a `.map()` callback, mirroring this codebase's existing
-// precedent (e.g. `UnplacedCard`/`BinderSlot`).
+// One entry's row, split out from the table above so its own `useSortable`
+// hook (the row is the drag source, drop target, and sortable list item
+// all at once, animated via `@dnd-kit/sortable`) can be called once per
+// row rather than inside a `.map()` callback, mirroring this codebase's
+// existing precedent (e.g. `UnplacedCard`/`BinderSlot`).
 function WatchlistEntryRow({
   entry,
   controlsDisabled,
+  dragDisabled,
   priceReview,
   onRemove,
   isRemovePending,
@@ -316,13 +454,27 @@ function WatchlistEntryRow({
 }: {
   entry: WatchlistEntry;
   controlsDisabled: boolean;
+  // Story 52: separate from `controlsDisabled` - dragging is also
+  // disabled whenever `canReorder` is false (a column sort or active
+  // search/filter is applied), independent of the price-review state that
+  // `controlsDisabled` alone covers, while Remove/Mark-as-acquired-and-
+  // remove stay available either way.
+  dragDisabled: boolean;
   priceReview: WatchlistPriceReviewTableProps | null;
   onRemove: (entryId: string) => void;
   isRemovePending: boolean;
   onMarkAcquiredAndRemove: (entryId: string) => void;
   isMarkAcquiredPending: boolean;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: entry.id });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: entry.id, disabled: dragDisabled });
   const reviewRow = priceReview?.rows.get(entry.id) ?? null;
   const isReferenced = entry.cardId !== null;
   const isRowPending = isRemovePending || isMarkAcquiredPending;
@@ -330,10 +482,29 @@ function WatchlistEntryRow({
   return (
     <tr
       ref={setNodeRef}
-      className={`border-b border-neutral-800 ${isOver ? 'bg-neutral-800' : ''}`}
+      // `CSS.Translate` (not `CSS.Transform`) deliberately drops the scale
+      // component dnd-kit would otherwise compute from this row's rect vs.
+      // the dragged row's rect - rows here can have very differently
+      // shaped rects (e.g. against the full-width divider row above), so a
+      // scale transform visibly stretched/skewed whichever row it applied
+      // to.
+      style={{ transform: CSS.Translate.toString(transform), transition }}
+      // The dragged row itself lifts above its siblings (`relative z-10`)
+      // and dims slightly while every other row animates into its new
+      // slot beneath it - the sliding animation itself comes from the
+      // `transform`/`transition` style above, driven by `useSortable`.
+      className={`border-b border-neutral-800 ${
+        isDragging ? 'relative z-10 bg-neutral-800 opacity-90' : ''
+      }`}
     >
       <td className="py-2 pr-2 text-center">
-        <DragHandle entryId={entry.id} disabled={controlsDisabled} />
+        <DragHandle
+          disabled={dragDisabled}
+          isDragging={isDragging}
+          attributes={attributes}
+          listeners={listeners}
+          setActivatorNodeRef={setActivatorNodeRef}
+        />
       </td>
       <td className="py-2 pr-2">
         <ImagePreview src={resolveCardImageUrl(entry.imageUrl)} alt={entry.name}>

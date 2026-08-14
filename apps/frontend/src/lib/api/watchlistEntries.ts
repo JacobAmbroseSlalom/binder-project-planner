@@ -4,7 +4,9 @@ import type {
   BulkCreateWatchlistEntriesRequest,
   BulkWatchlistEntryOutcome,
   TcgDexCatalogCard,
+  UpdateWatchlistEntryOrderResponse,
   WatchlistEntry,
+  WatchlistEntryList,
   WatchlistEntryPriceFetchResult,
   WatchlistEntryPriceUpdate,
   WatchlistEntryPriceUpdateOutcome,
@@ -20,10 +22,12 @@ import type {
 // Fetches every entry on the shared list through `GET /watchlist-entries`
 // - both standalone entries and ones referencing an existing binder card,
 // already hydrated by the backend from whichever source (its own columns,
-// or its joined card) applies. Ordered by creation descending, then id -
-// the page applies its own active column sort or manual drag order on top
-// of this.
-export async function listWatchlistEntries(signal?: AbortSignal): Promise<WatchlistEntry[]> {
+// or its joined card) applies. Ordered by each entry's persisted
+// `sortOrder` (story 52); the page applies its own active column sort on
+// top of this, or falls back to this order when no column sort is active.
+// `pdfExportCutoffCount` is the persisted PDF export divider position,
+// returned alongside the entries since it's a single global value.
+export async function listWatchlistEntries(signal?: AbortSignal): Promise<WatchlistEntryList> {
   const { data, error } = await apiClient.GET('/watchlist-entries', { signal });
 
   if (error) {
@@ -189,6 +193,26 @@ export async function updateWatchlistEntryPrices(
 ): Promise<WatchlistEntryPriceUpdateOutcome[]> {
   const { data, error } = await apiClient.PATCH('/watchlist-entries/prices', {
     body: { prices },
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
+// Persists the list's drag order and PDF export divider position in one
+// request through `PATCH /watchlist-entries/order` (story 52) - a full
+// replacement of every entry's `sortOrder` from `orderedEntryIds`'s own
+// order, plus the new divider position, applied together so a plain entry
+// drag and a divider drag share one request shape.
+export async function updateWatchlistEntryOrder(
+  orderedEntryIds: string[],
+  pdfExportCutoffCount: number,
+): Promise<UpdateWatchlistEntryOrderResponse> {
+  const { data, error } = await apiClient.PATCH('/watchlist-entries/order', {
+    body: { orderedEntryIds, pdfExportCutoffCount },
   });
 
   if (error) {

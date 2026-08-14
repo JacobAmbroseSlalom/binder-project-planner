@@ -472,6 +472,12 @@ export const watchlistEntries = sqliteTable(
   {
     id: text().primaryKey(),
     cardId: text().references(() => cards.id, { onDelete: 'cascade' }),
+    // Story 52: the entry's position in the user's own persisted
+    // drag-and-drop order. A reorder renumbers every entry's `sortOrder`
+    // sequentially (`0..n-1`) in one request rather than a gap-based
+    // scheme - this list is a personal collection, not expected to reach
+    // a size where full renumbering is a performance concern.
+    sortOrder: integer().notNull(),
     // Standalone-only fields (populated only when `cardId` is null),
     // mirroring the same subset of `cards`' own columns.
     name: text(),

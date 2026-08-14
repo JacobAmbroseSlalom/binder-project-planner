@@ -479,7 +479,7 @@ export interface paths {
         };
         /**
          * List every What I'm Looking For entry
-         * @description Returns every entry on the shared "What I'm Looking For" list (story 45), both standalone entries and ones referencing an existing binder card. A referenced entry's display/edit fields (name, price, etc.) are hydrated from its joined `cards` row; a standalone entry's fields come from its own columns. Ordered by creation timestamp descending, then id ascending, mirroring the Card List's own unplaced-cards tiebreaker - the frontend applies its own active column sort or manual drag order on top of this.
+         * @description Returns every entry on the shared "What I'm Looking For" list (story 45), both standalone entries and ones referencing an existing binder card. A referenced entry's display/edit fields (name, price, etc.) are hydrated from its joined `cards` row; a standalone entry's fields come from its own columns. Ordered by each entry's persisted `sortOrder` (story 52's drag-and-drop position) - the frontend applies its own active column sort on top of this, or falls back to this order when no column sort is active. `pdfExportCutoffCount` is the persisted PDF export divider position (story 52), returned alongside the entries since it's a single global value rather than a per-entry field.
          */
         get: operations["listWatchlistEntries"];
         put?: never;
@@ -642,6 +642,26 @@ export interface paths {
          * @description Mirrors `PATCH /binders/{binderId}/cards/prices` (story 38), generalized across entries from many binders or none: a referenced entry's update is written to its underlying card (visible back on that card's own binder Card List); a standalone entry's update is written to its own columns. Each submitted price is applied independently, so a failure on one entry rolls back only that entry rather than the whole batch.
          */
         patch: operations["updateWatchlistEntryPrices"];
+        trace?: never;
+    };
+    "/watchlist-entries/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Persist the What I'm Looking For list's drag order and PDF export divider
+         * @description Story 52's single reorder endpoint: replaces every entry's persisted `sortOrder` from the submitted array's own order (renumbered 0..n-1) and updates the persisted PDF export divider position, together in one transaction. Covers both a plain entry drag (only `orderedEntryIds` changes) and a divider drag (only `pdfExportCutoffCount` changes) with a single request shape - every drag-end always has both values in hand.
+         */
+        patch: operations["updateWatchlistEntryOrder"];
         trace?: never;
     };
     "/binders/{binderId}/art": {
@@ -1479,6 +1499,12 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        /** @description `GET /watchlist-entries`'s response body (story 52): every entry plus the persisted PDF export divider position, together since the latter is a single global value rather than a per-entry field. */
+        WatchlistEntryList: {
+            entries: components["schemas"]["WatchlistEntry"][];
+            /** @description How many entries (in persisted `sortOrder`) currently sit above the PDF export divider. */
+            pdfExportCutoffCount: number;
+        };
         /** @description One entry on the shared "What I'm Looking For" list (story 45). When `cardId` is set, every other display/edit field below is hydrated from that card's own row (name, price, etc. are the card's current values, not a separate copy); when `cardId` is null, they come from this entry's own standalone columns. There's no `acquired` field - the list's table omits the Acquisition column entirely, and `cardId` alone determines whether the "mark as acquired" action is available for a row. */
         WatchlistEntry: {
             /** Format: uuid */
@@ -1488,6 +1514,8 @@ export interface components {
              * @description Set only when this entry references an existing binder card rather than being standalone.
              */
             cardId: string | null;
+            /** @description This entry's persisted position in the list's own drag-and- drop order (story 52). A reorder renumbers every entry's `sortOrder` sequentially (0..n-1); used as the default entry order when no column sort is active. */
+            sortOrder: number;
             name: string;
             setName: string | null;
             localNumber: string | null;
@@ -1612,6 +1640,17 @@ export interface components {
             entry?: components["schemas"]["WatchlistEntry"];
             /** @description Present only when `status` is `failed`. */
             problem?: components["schemas"]["ProblemDetails"];
+        };
+        /** @description `PATCH /watchlist-entries/order`'s request body (story 52): a full replacement of every entry's `sortOrder` (as a plain ordered id array, renumbered 0..n-1 server-side) plus the new PDF export divider position, applied together in one transaction. */
+        UpdateWatchlistEntryOrderRequest: {
+            /** @description Every current watchlist entry id, exactly once, in the new persisted order. */
+            orderedEntryIds: string[];
+            /** @description How many entries (from the start of `orderedEntryIds`) should sit above the PDF export divider. */
+            pdfExportCutoffCount: number;
+        };
+        /** @description `PATCH /watchlist-entries/order`'s response body (story 52). */
+        UpdateWatchlistEntryOrderResponse: {
+            pdfExportCutoffCount: number;
         };
         /** @description Creates multi-slot art via `multipart/form-data` (story 25). New art always starts in the unplaced-art section (all-null placement); the backend computes a SHA-256 digest of the uploaded image while streaming it to temporary storage so identical uploads share one art image asset, and uses `sharp` to inspect pixel dimensions and generate an EXIF-auto-oriented rendering derivative when needed. */
         CreateArtRequest: {
@@ -3077,7 +3116,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["WatchlistEntry"][];
+                    "application/json": components["schemas"]["WatchlistEntryList"];
                 };
             };
         };
@@ -3441,6 +3480,39 @@ export interface operations {
                 };
             };
             /** @description The request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateWatchlistEntryOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWatchlistEntryOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description The persisted order and divider position were updated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UpdateWatchlistEntryOrderResponse"];
+                };
+            };
+            /** @description `orderedEntryIds` was not exactly a reordering of every current entry id, or `pdfExportCutoffCount` was out of range. */
             400: {
                 headers: {
                     [name: string]: unknown;

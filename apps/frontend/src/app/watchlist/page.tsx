@@ -10,6 +10,7 @@ import {
   deleteWatchlistEntry,
   listWatchlistEntries,
   markWatchlistEntryAcquired,
+  updateWatchlistEntryOrder,
   type TcgDexCatalogCard,
   type WatchlistEntry,
 } from '@/lib/api';
@@ -30,6 +31,7 @@ import { WatchlistTotals } from './_components/WatchlistTotals';
 import {
   createDefaultWatchlistColumnFilters,
   deriveVisibleWatchlistEntries,
+  hasActiveWatchlistColumnFilters,
   type WatchlistColumnFilters,
   type WatchlistColumnKey,
   type WatchlistSortDirection,
@@ -37,7 +39,7 @@ import {
 } from './_lib/watchlistEntryDerivation';
 import { useWatchlistPriceReview } from './useWatchlistPriceReview';
 
-const DEFAULT_SORT_OPTION: WatchlistSortOption = 'setAndNumber';
+const DEFAULT_SORT_OPTION: WatchlistSortOption = 'persistedOrder';
 const DEFAULT_SORT_DIRECTION: WatchlistSortDirection = 'ascending';
 
 // Mirrors the Card List tab's own `UNSAVED_PRICE_REVIEW_MESSAGE`.
@@ -47,10 +49,11 @@ const UNSAVED_PRICE_REVIEW_MESSAGE = 'You have unsaved price changes. Leave with
 // user wants to acquire, either standalone entries or ones referencing an
 // existing (unacquired) binder card. Unlike the binder Card List tab, this
 // page owns its own data fetch (there's no route-scoped context to supply
-// it) and its own client-only manual drag order, layered on top of the
-// active search/sort/filter derivation and cleared whenever a column sort
-// is applied (per the story's "selecting a column's sort control discards
-// the manual order").
+// it). Story 52 persists the list's drag order and PDF export divider
+// server-side (replacing Story 45's client-only, lost-on-reload manual
+// order) - dragging is only enabled while the default sort is active and
+// no search/filter narrows the visible list, since the persisted order
+// only has meaning against the full list.
 export default function WatchlistPage() {
   useSetAppHeaderTitle("What I'm Looking For");
 
@@ -68,11 +71,13 @@ export default function WatchlistPage() {
   const [columnFilters, setColumnFilters] = useState<WatchlistColumnFilters>(() =>
     createDefaultWatchlistColumnFilters(entries),
   );
-  // The user's own manual drag order (story 45), as an ordered list of
-  // entry ids - `null` until the first drag, meaning "no manual order yet,
-  // use the active column sort". Cleared back to `null` whenever a column
-  // sort control is used, per the story's requirement.
-  const [manualOrder, setManualOrder] = useState<string[] | null>(null);
+  // Story 52's persisted PDF export divider position - how many entries
+  // (in persisted `sortOrder`) currently sit above it. Never decremented
+  // when an entry is removed (matching the backend's own rule); only
+  // clamped down to the current `entries.length` where it's read/used
+  // below, so it never points past the end of a list that has since
+  // shrunk.
+  const [pdfExportCutoffCount, setPdfExportCutoffCount] = useState(0);
 
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isBulkAddPending, setIsBulkAddPending] = useState(false);
@@ -113,8 +118,9 @@ export default function WatchlistPage() {
 
     listWatchlistEntries(controller.signal)
       .then((result) => {
-        setEntries(result);
-        setColumnFilters(createDefaultWatchlistColumnFilters(result));
+        setEntries(result.entries);
+        setPdfExportCutoffCount(result.pdfExportCutoffCount);
+        setColumnFilters(createDefaultWatchlistColumnFilters(result.entries));
         setIsLoading(false);
       })
       .catch((error) => {
@@ -126,7 +132,12 @@ export default function WatchlistPage() {
     return () => controller.abort();
   }, []);
 
-  const sortedEntries = useMemo(
+  // Story 52: entries are already ordered by their own persisted
+  // `sortOrder` when the default sort is active (see
+  // `compareWatchlistEntries`'s `persistedOrder` branch), so this is the
+  // page's single source of visible order - no separate client-only
+  // manual-order layer is needed anymore.
+  const visibleEntries = useMemo(
     () =>
       deriveVisibleWatchlistEntries({
         entries,
@@ -138,38 +149,25 @@ export default function WatchlistPage() {
     [entries, searchQuery, columnFilters, sortOption, sortDirection],
   );
 
-  // Layers the manual drag order (if any) on top of the search/sort/filter
-  // derivation above: entries in `manualOrder` come first in that order,
-  // followed by any not-yet-ordered entry (e.g. one just added) in its
-  // post-sort relative order - so a fresh addition never silently vanishes
-  // from view pending its next drag.
-  const visibleEntries = useMemo(() => {
-    if (!manualOrder) return sortedEntries;
-
-    const sortedById = new Map(sortedEntries.map((entry) => [entry.id, entry]));
-    const ordered: WatchlistEntry[] = [];
-    for (const id of manualOrder) {
-      const entry = sortedById.get(id);
-      if (entry) {
-        ordered.push(entry);
-        sortedById.delete(id);
-      }
-    }
-    // Anything left in `sortedById` wasn't in `manualOrder` yet (e.g. a
-    // newly added entry) - appended in the sort's own relative order.
-    for (const entry of sortedEntries) {
-      if (sortedById.has(entry.id)) ordered.push(entry);
-    }
-    return ordered;
-  }, [sortedEntries, manualOrder]);
-
   const isDefaultSort =
     sortOption === DEFAULT_SORT_OPTION && sortDirection === DEFAULT_SORT_DIRECTION;
 
+  // Story 52: dragging (entries or the PDF export divider) is only
+  // enabled while the default sort is active and no search/filter
+  // narrows the visible list - in every other state, `visibleEntries`
+  // isn't the full list in persisted order, so a drag there couldn't be
+  // translated into a valid `sortOrder` renumbering.
+  const hasActiveSearch = searchQuery.trim().length > 0;
+  const canReorder =
+    isDefaultSort && !hasActiveSearch && !hasActiveWatchlistColumnFilters(entries, columnFilters);
+
+  // Clamped down to the current entry count (story 52: deleting an entry
+  // never decrements the persisted value itself, only this read-time
+  // clamp), so the divider never renders or exports past the end of a
+  // list that has since shrunk.
+  const effectivePdfExportCutoffCount = Math.min(pdfExportCutoffCount, entries.length);
+
   function handleSortColumnClick(column: WatchlistColumnKey) {
-    // A column sort discards any manual order, per the story's own
-    // requirement.
-    setManualOrder(null);
     if (sortOption === column) {
       setSortDirection((current) => (current === 'ascending' ? 'descending' : 'ascending'));
     } else {
@@ -183,26 +181,38 @@ export default function WatchlistPage() {
     setSortOption(DEFAULT_SORT_OPTION);
     setSortDirection(DEFAULT_SORT_DIRECTION);
     setColumnFilters(createDefaultWatchlistColumnFilters(entries));
-    setManualOrder(null);
   }
 
   function handleColumnFilterChange(column: WatchlistColumnKey, next: Set<string>) {
     setColumnFilters((current) => ({ ...current, [column]: next }));
   }
 
-  // Seeds `manualOrder` from the currently visible entries' ids on the
-  // very first drag (so every not-yet-dragged row keeps its current
-  // position), then splices the dragged entry to just before/after its
-  // drop target.
-  function handleReorderRow(draggedEntryId: string, targetEntryId: string) {
-    setManualOrder((current) => {
-      const base = current ?? visibleEntries.map((entry) => entry.id);
-      const next = base.filter((id) => id !== draggedEntryId);
-      const targetIndex = next.indexOf(targetEntryId);
-      if (targetIndex === -1) return base;
-      next.splice(targetIndex, 0, draggedEntryId);
-      return next;
-    });
+  // Story 52's single reorder handler: applies the new order/divider
+  // position optimistically (each entry's own `sortOrder` field is
+  // rewritten to match its new index, since `persistedOrder` sorts by
+  // that field directly), then persists both together through
+  // `PATCH /watchlist-entries/order`, rolling back on failure.
+  function handleReorder(orderedEntryIds: string[], nextPdfExportCutoffCount: number) {
+    const previousEntries = entries;
+    const previousCutoffCount = pdfExportCutoffCount;
+
+    const sortOrderById = new Map(orderedEntryIds.map((id, index) => [id, index]));
+    setEntries((current) =>
+      current.map((entry) => ({
+        ...entry,
+        sortOrder: sortOrderById.get(entry.id) ?? entry.sortOrder,
+      })),
+    );
+    setPdfExportCutoffCount(nextPdfExportCutoffCount);
+
+    const toast = start(`reorder-watchlist-entries-${crypto.randomUUID()}`);
+    updateWatchlistEntryOrder(orderedEntryIds, nextPdfExportCutoffCount)
+      .then(() => toast.markSaved())
+      .catch((error) => {
+        setEntries(previousEntries);
+        setPdfExportCutoffCount(previousCutoffCount);
+        toast.markFailed(error);
+      });
   }
 
   function handleFetchWatchlistPrices() {
@@ -223,12 +233,29 @@ export default function WatchlistPage() {
   function removeEntryOptimistically(entryId: string): WatchlistEntry | undefined {
     const removed = entries.find((entry) => entry.id === entryId);
     setEntries((previous) => previous.filter((entry) => entry.id !== entryId));
-    setManualOrder((current) => (current ? current.filter((id) => id !== entryId) : current));
     return removed;
   }
 
   function restoreEntry(entry: WatchlistEntry) {
     setEntries((previous) => [...previous, entry]);
+  }
+
+  // Mirrors the backend's own `extendPdfExportCutoffForNewEntries` (story
+  // 52): if the divider was already sitting at the true end of the list
+  // (`pdfExportCutoffCount === previousTotalEntryCount`) and there's still
+  // room under `WATCHLIST_PDF_MAX_ENTRIES`, extends it to also cover as
+  // many of the newly appended entries as fit - keeping the client's
+  // optimistic divider position in sync with what the backend just did
+  // for the same request, without waiting on a follow-up fetch.
+  function extendPdfExportCutoffForNewEntries(
+    previousTotalEntryCount: number,
+    createdCount: number,
+  ) {
+    if (createdCount === 0) return;
+    setPdfExportCutoffCount((current) => {
+      if (current !== previousTotalEntryCount) return current;
+      return Math.min(current + createdCount, WATCHLIST_PDF_MAX_ENTRIES);
+    });
   }
 
   function handleRemove(entryId: string) {
@@ -309,6 +336,7 @@ export default function WatchlistPage() {
           .map((outcome) => outcome.entry as WatchlistEntry);
         const failedCount = outcomes.length - created.length;
 
+        extendPdfExportCutoffForNewEntries(entries.length, created.length);
         setEntries((previous) => [...previous, ...created]);
 
         if (failedCount === 0) {
@@ -370,6 +398,7 @@ export default function WatchlistPage() {
 
     return createWatchlistEntry({ ...values, image: file })
       .then((entry) => {
+        extendPdfExportCutoffForNewEntries(entries.length, 1);
         setEntries((previous) => [...previous, entry]);
         toast.markSaved();
         return true;
@@ -456,9 +485,11 @@ export default function WatchlistPage() {
           </button>
         </Tooltip>
         <ExportWatchlistPdfButton
-          watchlistEntryIds={visibleEntries
-            .slice(0, WATCHLIST_PDF_MAX_ENTRIES)
-            .map((entry) => entry.id)}
+          watchlistEntryIds={
+            canReorder
+              ? visibleEntries.slice(0, effectivePdfExportCutoffCount).map((entry) => entry.id)
+              : visibleEntries.slice(0, WATCHLIST_PDF_MAX_ENTRIES).map((entry) => entry.id)
+          }
         />
       </div>
 
@@ -478,7 +509,9 @@ export default function WatchlistPage() {
         onSortColumnClick={handleSortColumnClick}
         columnFilters={columnFilters}
         onColumnFilterChange={handleColumnFilterChange}
-        onReorder={handleReorderRow}
+        canReorder={canReorder}
+        pdfExportCutoffCount={effectivePdfExportCutoffCount}
+        onReorder={handleReorder}
         onRemove={handleRemove}
         pendingRemoveIds={pendingRemoveIds}
         onMarkAcquiredAndRemove={handleMarkAcquiredAndRemove}

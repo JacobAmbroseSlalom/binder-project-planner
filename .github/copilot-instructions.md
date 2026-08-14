@@ -16,7 +16,11 @@ file to match what was actually built.
 - **Frontend:** React (Next.js) with TypeScript
 - **Frontend virtualization:** TanStack Virtual (`@tanstack/react-virtual`)
 - **Frontend icons:** Lucide React (`lucide-react`)
-- **Frontend drag and drop:** dnd-kit (`@dnd-kit/core`)
+- **Frontend drag and drop:** dnd-kit (`@dnd-kit/core`, `@dnd-kit/sortable`,
+  `@dnd-kit/utilities`) — `@dnd-kit/sortable`'s `SortableContext`/`useSortable` power
+  animated (FLIP-style) row reordering, added for story 52's What I'm Looking For
+  drag-and-drop
+
 - **Frontend image editing:** Konva (`konva`, `react-konva`)
 - **Backend:** Node.js (Express) with TypeScript
 - **Backend multipart uploads:** multer (`multer`, `@types/multer`), wired through
