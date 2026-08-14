@@ -342,6 +342,28 @@ export interface paths {
         patch: operations["updateCard"];
         trace?: never;
     };
+    "/cards/{cardId}/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Edit a card's name, set, number, variation, price, and image
+         * @description Story 49's Card List row edit action: replaces the path card's name, set, number, variation, and price in one request, and optionally its image, regardless of the card's `source` (`tcgdex` or `custom`). A new image reuses the same digest-deduplicated local image storage as custom-card creation (story 12); the card's previous image asset is deleted if this save was its last remaining reference. If the submitted price differs from the card's previously saved price, `isManualPrice` is set to `true` and `priceUpdatedAt` to the current time; editing any other field leaves both unchanged. Restricted while the card's binder is locked (story 32), matching this file's other card-field edits.
+         */
+        patch: operations["updateCardDetails"];
+        trace?: never;
+    };
     "/cards/{cardId}/duplicate": {
         parameters: {
             query?: never;
@@ -1147,6 +1169,24 @@ export interface components {
              * @description Required. Must be a JPEG, PNG, or WebP file; the backend validates the file's signature rather than trusting its name or multipart MIME type.
              */
             image: string;
+        };
+        /** @description `PATCH /cards/{cardId}/details`'s request body (story 49, `multipart/form-data`): replaces the path card's name, set, number, variation, and price in one request, and optionally its image - applies identically regardless of the card's `source` (`tcgdex` or `custom`); editing these fields never changes `source`, `providerCardId`, or `providerSetId`. If the submitted `price` differs from the card's previously saved price, the backend also sets `isManualPrice` to `true` and `priceUpdatedAt` to the current time as part of this same save; editing any other field leaves both unchanged. */
+        UpdateCardDetailsRequest: {
+            /** @description Trimmed and required after trimming on the backend. */
+            name: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            setName?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            localNumber?: string;
+            /** @description Trimmed on the backend; a blank value is stored as null. */
+            variation?: string;
+            /** @description US dollars, to two decimal places. Omitted (rather than sent as an empty value) clears the card's saved price, storing null. */
+            price?: number;
+            /**
+             * Format: binary
+             * @description Optional. When supplied, must be a JPEG, PNG, or WebP file (the backend validates the file's signature); when omitted, the card's existing image is left unchanged.
+             */
+            image?: string;
         };
         /** @description The complete persisted representation of a binder-owned card. */
         Card: {
@@ -2367,6 +2407,68 @@ export interface operations {
             };
             /** @description An update's expected placement no longer matches the card's persisted placement, or the destination is occupied by a card not included in `updates`. No card positions are changed. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    updateCardDetails: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cardId: components["parameters"]["cardId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["UpdateCardDetailsRequest"];
+            };
+        };
+        responses: {
+            /** @description The complete persisted representation of the updated card. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Card"];
+                };
+            };
+            /** @description The cardId path parameter is not a well-formed UUID, or the request body did not match the documented schema. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description No card exists with the given id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The card's binder is currently locked. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description The uploaded replacement image's signature did not match a supported image format (story 12's rule, reapplied here). */
+            415: {
                 headers: {
                     [name: string]: unknown;
                 };

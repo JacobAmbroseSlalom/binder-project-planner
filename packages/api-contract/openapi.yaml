@@ -945,6 +945,65 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /cards/{cardId}/details:
+    parameters:
+      - $ref: '#/components/parameters/cardId'
+    patch:
+      operationId: updateCardDetails
+      summary: Edit a card's name, set, number, variation, price, and image
+      description: >-
+        Story 49's Card List row edit action: replaces the path card's
+        name, set, number, variation, and price in one request, and
+        optionally its image, regardless of the card's `source` (`tcgdex`
+        or `custom`). A new image reuses the same digest-deduplicated
+        local image storage as custom-card creation (story 12); the
+        card's previous image asset is deleted if this save was its last
+        remaining reference. If the submitted price differs from the
+        card's previously saved price, `isManualPrice` is set to `true`
+        and `priceUpdatedAt` to the current time; editing any other field
+        leaves both unchanged. Restricted while the card's binder is
+        locked (story 32), matching this file's other card-field edits.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UpdateCardDetailsRequest'
+      responses:
+        '200':
+          description: The complete persisted representation of the updated card.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Card'
+        '400':
+          description: >-
+            The cardId path parameter is not a well-formed UUID, or the
+            request body did not match the documented schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: No card exists with the given id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '409':
+          description: The card's binder is currently locked.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '415':
+          description: >-
+            The uploaded replacement image's signature did not match a
+            supported image format (story 12's rule, reapplied here).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /cards/{cardId}/duplicate:
     parameters:
       - $ref: '#/components/parameters/cardId'
@@ -2994,6 +3053,54 @@ components:
             Required. Must be a JPEG, PNG, or WebP file; the backend
             validates the file's signature rather than trusting its name
             or multipart MIME type.
+    UpdateCardDetailsRequest:
+      type: object
+      additionalProperties: false
+      description: >-
+        `PATCH /cards/{cardId}/details`'s request body (story 49,
+        `multipart/form-data`): replaces the path card's name, set,
+        number, variation, and price in one request, and optionally its
+        image - applies identically regardless of the card's `source`
+        (`tcgdex` or `custom`); editing these fields never changes
+        `source`, `providerCardId`, or `providerSetId`. If the submitted
+        `price` differs from the card's previously saved price, the
+        backend also sets `isManualPrice` to `true` and `priceUpdatedAt`
+        to the current time as part of this same save; editing any other
+        field leaves both unchanged.
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Trimmed and required after trimming on the backend.
+        setName:
+          type: string
+          maxLength: 100
+          description: Trimmed on the backend; a blank value is stored as null.
+        localNumber:
+          type: string
+          maxLength: 50
+          description: Trimmed on the backend; a blank value is stored as null.
+        variation:
+          type: string
+          maxLength: 50
+          description: Trimmed on the backend; a blank value is stored as null.
+        price:
+          type: number
+          minimum: 0
+          description: >-
+            US dollars, to two decimal places. Omitted (rather than sent
+            as an empty value) clears the card's saved price, storing
+            null.
+        image:
+          type: string
+          format: binary
+          description: >-
+            Optional. When supplied, must be a JPEG, PNG, or WebP file
+            (the backend validates the file's signature); when omitted,
+            the card's existing image is left unchanged.
     Card:
       type: object
       additionalProperties: false

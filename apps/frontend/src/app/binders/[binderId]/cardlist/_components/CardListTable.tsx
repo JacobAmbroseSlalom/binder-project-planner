@@ -1,12 +1,20 @@
 'use client';
 
-import { ArrowDown, ArrowUp, ArrowUpDown, Circle, CircleCheck } from 'lucide-react';
+import {
+  CUSTOM_CARD_IMAGE_ACCEPT,
+  CUSTOM_CARD_NAME_MAX_LENGTH,
+  CUSTOM_CARD_NUMBER_MAX_LENGTH,
+  CUSTOM_CARD_SET_MAX_LENGTH,
+} from '@binder-project-planner/shared';
+import { ArrowDown, ArrowUp, ArrowUpDown, Circle, CircleCheck, Pencil } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
-import { resolveCardImageUrl, type Card } from '@/lib/api';
+import { resolveCardImageUrl, type Card, type UpdateCardDetailsRequest } from '@/lib/api';
 import { ImagePreview, Tooltip } from '@/shared/feedback';
 import { computeCardPriceChange } from '@/shared/finance/computeCardPriceChange';
 import { formatCurrency } from '@/shared/finance/formatCurrency';
 import { MoneyInput } from '@/shared/finance/MoneyInput';
+import { VariationCombobox } from '@/shared/forms';
 
 import { ColumnFilterDropdown } from './ColumnFilterDropdown';
 import { VariantSelect } from './VariantSelect';
@@ -18,6 +26,46 @@ import {
   type CardListSortOption,
 } from '../_lib/cardListDerivation';
 import type { PriceReviewRow, PriceReviewSource } from '../useCardPriceReview';
+
+// The shared filled-input treatment (styling.instructions.md's "Forms &
+// inputs" section) sized for this table's compact row height, used by
+// story 49's row-edit text fields (name/variation/set/number) - the price
+// field instead reuses the shared `MoneyInput` for its "$" prefix.
+const rowEditInputClassName =
+  'w-full rounded-standard border border-transparent bg-neutral-800 px-2 py-1 placeholder:text-neutral-500 focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-50';
+
+// Story 49's Card List row edit action's in-progress local field values -
+// never persisted until "Save" is selected, mirroring `PriceReviewRow`'s
+// own "client-side until committed" convention. `price` stays a raw
+// string (rather than `number | null`) so the input can hold an
+// in-progress/invalid value while typing, matching the price-review
+// row's own `MoneyInput` usage above.
+interface CardDetailsEditValues {
+  name: string;
+  setName: string;
+  localNumber: string;
+  variation: string;
+  price: string;
+  // `null` until a replacement file is chosen; the object URL is revoked
+  // whenever it's replaced or the edit ends (cancelled or saved).
+  imageFile: File | null;
+  imagePreviewUrl: string | null;
+}
+
+// The edit row's starting values, pre-filled from the card's currently
+// saved fields (blank rather than the placeholder dash used elsewhere,
+// since these are real editable inputs).
+function createCardDetailsEditValues(card: Card): CardDetailsEditValues {
+  return {
+    name: card.name,
+    setName: card.setName ?? '',
+    localNumber: card.localNumber ?? '',
+    variation: card.variation ?? '',
+    price: card.price !== null ? card.price.toString() : '',
+    imageFile: null,
+    imagePreviewUrl: null,
+  };
+}
 
 // Each sortable column's display label, keyed by `CardListColumnKey` -
 // `SortableColumnHeader` below looks up a column's own label from here
@@ -34,10 +82,11 @@ const COLUMN_LABELS: Record<CardListColumnKey, string> = {
 
 // Total column count, for the empty-results row's `colSpan`: the 7
 // sortable columns (`COLUMN_LABELS`, which now includes Price/Price
-// updated) plus the thumbnail column, plus, only while the price-review
-// state is active, its 6 expanded review columns.
+// updated) plus the thumbnail column plus story 49's trailing Actions
+// column, plus, only while the price-review state is active, its 6
+// expanded review columns.
 function getTotalColumnCount(isPriceReviewActive: boolean): number {
-  const baseColumnCount = Object.keys(COLUMN_LABELS).length + 1;
+  const baseColumnCount = Object.keys(COLUMN_LABELS).length + 2;
   return isPriceReviewActive ? baseColumnCount + 6 : baseColumnCount;
 }
 
@@ -197,6 +246,10 @@ export function CardListTable({
   onToggleAllAcquisition,
   isBulkAcquisitionPending,
   priceReview,
+  isBinderLocked,
+  onEditCardDetails,
+  pendingCardDetailsEditIds,
+  onEditingRowChange,
 }: {
   // Every binder card, used only to compute each column's full
   // distinct-value list for its filter dropdown - never rendered
@@ -223,8 +276,114 @@ export function CardListTable({
   // search/sort/filter controls and switches the table into its expanded
   // review-column rendering.
   priceReview: PriceReviewTableProps | null;
+  // Story 49: hides every row's "Edit" action while the binder is locked,
+  // mirroring this codebase's existing precedent (e.g. `PlacedArtTile`)
+  // of hiding rather than merely disabling a restricted action.
+  isBinderLocked: boolean;
+  // Saves a row's edited details through `PATCH /cards/{cardId}/details`.
+  // Returns its request promise so this table can keep the row in its
+  // editing state (rather than closing early) on failure.
+  onEditCardDetails: (cardId: string, values: UpdateCardDetailsRequest) => Promise<Card>;
+  pendingCardDetailsEditIds: ReadonlySet<string>;
+  // Notified whenever a row's inline edit starts or stops (including
+  // while its save request is still in flight), so the Card List tab can
+  // disable its "Fetch card prices" button for the same reason the price
+  // review disables this table's own Edit buttons below - editing a row
+  // and reviewing prices shouldn't ever overlap.
+  onEditingRowChange?: (isEditingRow: boolean) => void;
 }) {
   const controlsDisabled = priceReview !== null;
+
+  // Story 49's Card List row edit action's state: at most one row editable
+  // at a time, its in-progress field values kept separately from `cards`
+  // until "Save" actually succeeds (mirroring the price-review row state's
+  // own "client-side until committed" convention).
+  const [editingCardId, setEditingCardId] = useState<string | null>(null);
+  const [editValues, setEditValues] = useState<CardDetailsEditValues | null>(null);
+  const [editNameError, setEditNameError] = useState<string | null>(null);
+
+  // Reports the row-editing state to the parent every time it changes
+  // (including on mount), rather than only from the handlers below, so
+  // the parent's own state always matches this table's regardless of
+  // which handler last changed it.
+  useEffect(() => {
+    onEditingRowChange?.(editingCardId !== null);
+  }, [editingCardId, onEditingRowChange]);
+
+  function startEditingCard(card: Card) {
+    setEditingCardId(card.id);
+    setEditValues(createCardDetailsEditValues(card));
+    setEditNameError(null);
+  }
+
+  // "Cancel": discards every edited value in the row without a backend
+  // request, per the story's acceptance criteria.
+  function cancelEditingCard() {
+    if (editValues?.imagePreviewUrl) URL.revokeObjectURL(editValues.imagePreviewUrl);
+    setEditingCardId(null);
+    setEditValues(null);
+    setEditNameError(null);
+  }
+
+  // Replaces the row's selected image file, revoking the previous preview
+  // object URL (if any) so choosing a different file, or clearing the
+  // selection, never leaks the prior one.
+  function changeEditingCardImage(file: File | null) {
+    setEditValues((previous) => {
+      if (!previous) return previous;
+      if (previous.imagePreviewUrl) URL.revokeObjectURL(previous.imagePreviewUrl);
+      return {
+        ...previous,
+        imageFile: file,
+        imagePreviewUrl: file ? URL.createObjectURL(file) : null,
+      };
+    });
+  }
+
+  // "Save": validates the row's required `name` field (the OpenAPI
+  // schema's own `minLength: 1` only guards the raw untrimmed value, so a
+  // whitespace-only name still needs this check, matching every other
+  // custom-card-field validation in this codebase), then commits every
+  // edited field in one request. A blank price clears the card's saved
+  // price entirely (see `updateCardDetails`'s own contract). On success,
+  // the row returns to its normal display state; on failure, it stays in
+  // its editing state (with the entered values preserved) so the user can
+  // retry or adjust them - the error itself surfaces via the shared
+  // save-status toast `onEditCardDetails` already starts.
+  function saveEditingCard(card: Card) {
+    if (!editValues) return;
+
+    const trimmedName = editValues.name.trim();
+    if (!trimmedName) {
+      setEditNameError('Name is required.');
+      return;
+    }
+    if (trimmedName.length > CUSTOM_CARD_NAME_MAX_LENGTH) {
+      setEditNameError(`Name must be ${CUSTOM_CARD_NAME_MAX_LENGTH} characters or fewer.`);
+      return;
+    }
+    setEditNameError(null);
+
+    const parsedPrice = editValues.price.trim() === '' ? null : Number.parseFloat(editValues.price);
+
+    onEditCardDetails(card.id, {
+      name: trimmedName,
+      setName: editValues.setName.trim() || null,
+      localNumber: editValues.localNumber.trim() || null,
+      variation: editValues.variation.trim() || null,
+      price: parsedPrice === null || Number.isNaN(parsedPrice) ? null : parsedPrice,
+      image: editValues.imageFile,
+    })
+      .then(() => {
+        if (editValues.imagePreviewUrl) URL.revokeObjectURL(editValues.imagePreviewUrl);
+        setEditingCardId(null);
+        setEditValues(null);
+      })
+      .catch(() => {
+        // Already surfaced via the save-status toast; nothing further to do
+        // here besides leaving the row open for another attempt.
+      });
+  }
 
   const sortableHeaderProps = {
     allCards,
@@ -273,6 +432,11 @@ export function CardListTable({
               <th className="py-2 pr-4 font-regular">Change</th>
             </>
           )}
+          {/* Story 49's trailing Edit/Save/Cancel actions column - no
+              sort/filter of its own. */}
+          <th className="py-2 pl-4 font-regular">
+            <span className="sr-only">Row actions</span>
+          </th>
         </tr>
       </thead>
       <tbody>
@@ -289,6 +453,8 @@ export function CardListTable({
         {visibleCards.map((card) => {
           const isTogglePending = pendingCardAcquiredToggleIds.has(card.id);
           const reviewRow = priceReview?.rows.get(card.id) ?? null;
+          const isEditingThisRow = editingCardId === card.id;
+          const isSavingThisRow = pendingCardDetailsEditIds.has(card.id);
           return (
             <tr key={card.id} className="border-b border-neutral-800">
               <td className="py-2 pr-4 text-center">
@@ -324,39 +490,156 @@ export function CardListTable({
                 </Tooltip>
               </td>
               <td className="py-2 pr-2">
-                {/* Story 37 (this file) + on-hover enlarge: wraps the
-                    small thumbnail in the shared `ImagePreview` so hovering
-                    a row shows a much larger version of the same image,
-                    without needing a second, higher-resolution image URL -
-                    the browser already has the thumbnail's URL cached from
-                    the `img` below, so the enlarged copy loads instantly. */}
-                <ImagePreview src={resolveCardImageUrl(card.imageUrl)} alt={card.name}>
-                  <div className="flex h-12 w-9 items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800">
+                {isEditingThisRow ? (
+                  // Story 49: a compact file-picker replacing the thumbnail
+                  // while editing - clicking anywhere in it opens the native
+                  // file picker (the `<input>` is visually hidden rather than
+                  // removed, keeping this keyboard/screen-reader accessible),
+                  // previewing the newly chosen file via its own object URL
+                  // or falling back to the card's existing image otherwise.
+                  <label className="flex h-12 w-9 cursor-pointer items-center justify-center overflow-hidden rounded-standard border border-dashed border-neutral-600 bg-neutral-800 hover:border-primary">
+                    <input
+                      type="file"
+                      accept={CUSTOM_CARD_IMAGE_ACCEPT}
+                      disabled={isSavingThisRow}
+                      onChange={(event) => changeEditingCardImage(event.target.files?.[0] ?? null)}
+                      className="sr-only"
+                    />
                     {/* eslint-disable-next-line @next/next/no-img-element -- the
                         card image comes from an arbitrary backend/provider
                         origin, so next/image's fixed-domain optimization
                         doesn't apply here. */}
                     <img
-                      src={resolveCardImageUrl(card.imageUrl)}
+                      src={editValues?.imagePreviewUrl ?? resolveCardImageUrl(card.imageUrl)}
                       alt={card.name}
                       className="h-full w-full object-contain"
                     />
-                  </div>
-                </ImagePreview>
+                  </label>
+                ) : (
+                  /* Story 37 (this file) + on-hover enlarge: wraps the
+                     small thumbnail in the shared `ImagePreview` so hovering
+                     a row shows a much larger version of the same image,
+                     without needing a second, higher-resolution image URL -
+                     the browser already has the thumbnail's URL cached from
+                     the `img` below, so the enlarged copy loads instantly. */
+                  <ImagePreview src={resolveCardImageUrl(card.imageUrl)} alt={card.name}>
+                    <div className="flex h-12 w-9 items-center justify-center overflow-hidden rounded-standard border border-neutral-700 bg-neutral-800">
+                      {/* eslint-disable-next-line @next/next/no-img-element -- the
+                          card image comes from an arbitrary backend/provider
+                          origin, so next/image's fixed-domain optimization
+                          doesn't apply here. */}
+                      <img
+                        src={resolveCardImageUrl(card.imageUrl)}
+                        alt={card.name}
+                        className="h-full w-full object-contain"
+                      />
+                    </div>
+                  </ImagePreview>
+                )}
               </td>
-              <td className="py-2 pr-4">{card.name}</td>
-              <td className="py-2 pr-4 text-neutral-500">{card.variation ?? '—'}</td>
-              <td className="py-2 pr-4 text-neutral-500">{card.setName ?? '—'}</td>
-              <td className="py-2 pr-4 text-neutral-500">{card.localNumber ?? '—'}</td>
               <td className="py-2 pr-4">
-                {/* Story 38: clicking the saved price fills the review
-                    row's new-price input with it (only meaningful, and
-                    only clickable, while review is active) - a manually
-                    entered price renders in the secondary color to stay
-                    visually distinct from an API-derived one. */}
-                {card.price === null ? (
+                {isEditingThisRow ? (
+                  <div className="flex flex-col gap-1">
+                    <input
+                      type="text"
+                      value={editValues?.name ?? ''}
+                      disabled={isSavingThisRow}
+                      maxLength={CUSTOM_CARD_NAME_MAX_LENGTH}
+                      aria-label={`${card.name}'s name`}
+                      onChange={(event) =>
+                        setEditValues((previous) =>
+                          previous ? { ...previous, name: event.target.value } : previous,
+                        )
+                      }
+                      className={rowEditInputClassName}
+                    />
+                    {editNameError && (
+                      <span role="alert" className="text-caption text-error">
+                        {editNameError}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  card.name
+                )}
+              </td>
+              <td className="py-2 pr-4 text-neutral-500">
+                {isEditingThisRow ? (
+                  <VariationCombobox
+                    id={`card-${card.id}-variation`}
+                    value={editValues?.variation ?? ''}
+                    disabled={isSavingThisRow}
+                    placeholder=""
+                    onChange={(value) =>
+                      setEditValues((previous) =>
+                        previous ? { ...previous, variation: value } : previous,
+                      )
+                    }
+                  />
+                ) : (
+                  (card.variation ?? '—')
+                )}
+              </td>
+              <td className="py-2 pr-4 text-neutral-500">
+                {isEditingThisRow ? (
+                  <input
+                    type="text"
+                    value={editValues?.setName ?? ''}
+                    disabled={isSavingThisRow}
+                    maxLength={CUSTOM_CARD_SET_MAX_LENGTH}
+                    aria-label={`${card.name}'s set`}
+                    onChange={(event) =>
+                      setEditValues((previous) =>
+                        previous ? { ...previous, setName: event.target.value } : previous,
+                      )
+                    }
+                    className={rowEditInputClassName}
+                  />
+                ) : (
+                  (card.setName ?? '—')
+                )}
+              </td>
+              <td className="py-2 pr-4 text-neutral-500">
+                {isEditingThisRow ? (
+                  <input
+                    type="text"
+                    value={editValues?.localNumber ?? ''}
+                    disabled={isSavingThisRow}
+                    maxLength={CUSTOM_CARD_NUMBER_MAX_LENGTH}
+                    aria-label={`${card.name}'s number`}
+                    onChange={(event) =>
+                      setEditValues((previous) =>
+                        previous ? { ...previous, localNumber: event.target.value } : previous,
+                      )
+                    }
+                    className={rowEditInputClassName}
+                  />
+                ) : (
+                  (card.localNumber ?? '—')
+                )}
+              </td>
+              <td className="py-2 pr-4">
+                {isEditingThisRow ? (
+                  <MoneyInput
+                    min={0}
+                    disabled={isSavingThisRow}
+                    value={editValues?.price ?? ''}
+                    onChange={(event) =>
+                      setEditValues((previous) =>
+                        previous ? { ...previous, price: event.target.value } : previous,
+                      )
+                    }
+                    ariaLabel={`${card.name}'s price`}
+                    className="w-28"
+                  />
+                ) : card.price === null ? (
                   <span className="text-neutral-500">--</span>
                 ) : priceReview ? (
+                  // Story 38: clicking the saved price fills the review
+                  // row's new-price input with it (only meaningful, and
+                  // only clickable, while review is active) - a manually
+                  // entered price renders in the secondary color to stay
+                  // visually distinct from an API-derived one.
                   <button
                     type="button"
                     onClick={() => priceReview.onFillPrice(card.id, card.price, 'savedPrice')}
@@ -378,6 +661,45 @@ export function CardListTable({
               {priceReview && (
                 <PriceReviewCells card={card} row={reviewRow} priceReview={priceReview} />
               )}
+              <td className="py-2 pl-4 text-right">
+                {isEditingThisRow ? (
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      disabled={isSavingThisRow}
+                      onClick={cancelEditingCard}
+                      className="cursor-pointer rounded-standard px-2 py-1 text-caption font-bold text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isSavingThisRow}
+                      onClick={() => saveEditingCard(card)}
+                      className="cursor-pointer rounded-standard bg-primary px-2 py-1 text-caption font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Save
+                    </button>
+                  </div>
+                ) : (
+                  !isBinderLocked && (
+                    <Tooltip label="Edit card">
+                      <button
+                        type="button"
+                        disabled={
+                          priceReview !== null ||
+                          (editingCardId !== null && editingCardId !== card.id)
+                        }
+                        onClick={() => startEditingCard(card)}
+                        aria-label={`Edit ${card.name}`}
+                        className="flex size-9 cursor-pointer items-center justify-center rounded-standard text-neutral-100 hover:bg-neutral-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Pencil className="size-4" aria-hidden="true" />
+                      </button>
+                    </Tooltip>
+                  )
+                )}
+              </td>
             </tr>
           );
         })}

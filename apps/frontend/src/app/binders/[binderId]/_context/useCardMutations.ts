@@ -8,11 +8,13 @@ import {
   duplicateCard as duplicateCardRequest,
   moveCards,
   updateCardAcquired as updateCardAcquiredRequest,
+  updateCardDetails as updateCardDetailsRequest,
   updateCardsAcquisition as updateCardsAcquisitionRequest,
   updateCardVariation as updateCardVariationRequest,
   type Card,
   type CardPositionUpdate,
   type PlacementCoordinates,
+  type UpdateCardDetailsRequest,
 } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
@@ -135,6 +137,13 @@ export function useCardMutations({
   // Story 19's in-flight-card-duplication ids (optimistic ids only),
   // mirroring `pendingArtDuplicateIds`.
   const [pendingCardDuplicateIds, setPendingCardDuplicateIds] = useState<Set<string>>(new Set());
+  // Story 49's in-flight-card-details-edit ids, mirroring
+  // `pendingCardVariationEditIds` - the Card List tab's row edit action
+  // uses this to disable its own Save/Cancel buttons while a save request
+  // is in flight.
+  const [pendingCardDetailsEditIds, setPendingCardDetailsEditIds] = useState<Set<string>>(
+    new Set(),
+  );
   // Story 36's in-flight-card-acquisition-toggle ids, mirroring
   // `pendingCardVariationEditIds`.
   const [pendingCardAcquiredToggleIds, setPendingCardAcquiredToggleIds] = useState<Set<string>>(
@@ -339,6 +348,46 @@ export function useCardMutations({
         });
     },
     [cards, setCards, pruneHistoryEntriesForItem, start, retry],
+  );
+
+  // Saves a card's edited name/set/number/variation/price and optional
+  // replacement image (story 49's Card List row "Edit" action), through
+  // `PATCH /cards/{cardId}/details`. Unlike `editCardVariation`/
+  // `toggleCardAcquired` below, this isn't applied optimistically - the
+  // row's own editable fields already show the user's in-progress edits
+  // locally while its request is in flight, so `cards` only needs to
+  // reflect the backend's authoritative representation once the save
+  // actually succeeds. Returns the request's promise so the row-edit UI
+  // can keep itself in the editing state (rather than closing early) on
+  // failure, matching this codebase's existing "surface the error, let
+  // the user retry" precedent.
+  const editCardDetails = useCallback(
+    (cardId: string, values: UpdateCardDetailsRequest) => {
+      setPendingCardDetailsEditIds((previous) => new Set(previous).add(cardId));
+      const toast = start(`edit-card-details-${cardId}`);
+
+      return updateCardDetailsRequest(cardId, values)
+        .then((updated) => {
+          setCards((previous) => previous.map((card) => (card.id === cardId ? updated : card)));
+          toast.markSaved();
+          return updated;
+        })
+        .catch((error) => {
+          toast.markFailed(error);
+          // Story 32: reload the complete binder graph when this edit was
+          // rejected because the binder is now locked.
+          if (isLockedBinderConflict(error)) retry();
+          throw error;
+        })
+        .finally(() => {
+          setPendingCardDetailsEditIds((previous) => {
+            const next = new Set(previous);
+            next.delete(cardId);
+            return next;
+          });
+        });
+    },
+    [setCards, start, retry],
   );
 
   // Toggles an existing card's acquired state (story 36), mirroring
@@ -636,6 +685,8 @@ export function useCardMutations({
     pendingCardDeletionIds,
     editCardVariation,
     pendingCardVariationEditIds,
+    editCardDetails,
+    pendingCardDetailsEditIds,
     toggleCardAcquired,
     pendingCardAcquiredToggleIds,
     toggleCardsAcquisition,

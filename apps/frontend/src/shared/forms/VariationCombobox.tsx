@@ -20,6 +20,10 @@ export function VariationCombobox({
   onChange,
   disabled = false,
   inputRef,
+  // Lets a caller opt out of (or replace) the default "e.g. Reverse Holo"
+  // example text, e.g. the card list's inline row editor (story 49), whose
+  // compact layout doesn't have room for it.
+  placeholder = 'e.g. Reverse Holo',
 }: {
   id: string;
   value: string;
@@ -30,6 +34,7 @@ export function VariationCombobox({
   // pattern other bespoke modals in this codebase use for their own
   // focus-on-mount `useRef`.
   inputRef?: Ref<HTMLInputElement>;
+  placeholder?: string;
 }) {
   // Whether the suggestion dropdown is currently shown - opened on focus,
   // closed on blur/Escape/selecting an option.
@@ -68,7 +73,7 @@ export function VariationCombobox({
         onKeyDown={(event) => {
           if (event.key === 'Escape') setIsOpen(false);
         }}
-        placeholder="e.g. Reverse Holo"
+        placeholder={placeholder}
         className="w-full rounded-standard border border-transparent bg-neutral-800 px-3 py-2 placeholder:text-neutral-500 focus:border-primary focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       />
       {isOpen && filteredSuggestions.length > 0 && (

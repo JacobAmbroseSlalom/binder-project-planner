@@ -6,6 +6,7 @@ import type {
   PlacementCoordinates,
   TcgDexCatalogCard,
   UpdateBinderResult,
+  UpdateCardDetailsRequest,
 } from '@/lib/api';
 import type { Dispatch, SetStateAction } from 'react';
 
@@ -145,6 +146,17 @@ export interface BinderRouteContextValue {
   // edit-variation modal/card tile can disable that one card's own actions
   // until the request settles.
   pendingCardVariationEditIds: Set<string>;
+  // Saves a card's edited name/set/number/variation/price and optional
+  // replacement image (story 49's Card List row "Edit" action) through
+  // `PATCH /cards/{cardId}/details`. Returns the request's promise so the
+  // row-edit UI can keep itself in the editing state on failure rather
+  // than closing early. Not applied optimistically - see
+  // `useCardMutations.ts`'s `editCardDetails` for why.
+  editCardDetails: (cardId: string, values: UpdateCardDetailsRequest) => Promise<Card>;
+  // The set of card ids with a details edit currently in flight, so the
+  // Card List tab's row-edit UI can disable its own Save/Cancel buttons
+  // until the request settles.
+  pendingCardDetailsEditIds: Set<string>;
   // Toggles an existing card's acquired state (story 36): optimistically
   // flips the value immediately, then replaces it with the backend's
   // authoritative representation on success, or restores the prior value

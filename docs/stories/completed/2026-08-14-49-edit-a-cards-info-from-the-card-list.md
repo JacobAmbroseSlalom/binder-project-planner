@@ -1,6 +1,6 @@
 # 49. Edit a card's info from the Card List
 
-**Status:** Not started
+**Status:** Done (2026-08-14 00:59 EDT)
 
 #### Acceptance criteria
 

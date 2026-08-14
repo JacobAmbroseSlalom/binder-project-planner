@@ -48,11 +48,19 @@ export default function BinderCardListPage() {
     pendingCardAcquiredToggleIds,
     toggleCardsAcquisition,
     isBulkAcquisitionPending,
+    editCardDetails,
+    pendingCardDetailsEditIds,
   } = useBinderRouteContext();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState<CardListSortOption>(DEFAULT_SORT_OPTION);
   const [sortDirection, setSortDirection] = useState<CardListSortDirection>(DEFAULT_SORT_DIRECTION);
+  // Whether a Card List row is currently mid-edit (open for editing or
+  // its save request in flight) - kept here (rather than only inside
+  // `CardListTable`) so "Fetch card prices" can be disabled for the same
+  // reason `CardListTable` already disables its own Edit buttons while a
+  // price review is active: the two flows shouldn't ever overlap.
+  const [isEditingCardRow, setIsEditingCardRow] = useState(false);
   // Each column's filter starts with every one of its distinct values
   // selected (no cards excluded) - recomputed only when the binder's own
   // card set changes size (a card added/removed), not on every render.
@@ -197,8 +205,9 @@ export default function BinderCardListPage() {
         ) : (
           <button
             type="button"
+            disabled={isEditingCardRow}
             onClick={handleFetchCardPrices}
-            className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold whitespace-nowrap hover:brightness-110"
+            className="cursor-pointer rounded-standard bg-primary px-4 py-2 font-bold whitespace-nowrap hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Fetch card prices
           </button>
@@ -229,6 +238,10 @@ export default function BinderCardListPage() {
         pendingCardAcquiredToggleIds={pendingCardAcquiredToggleIds}
         onToggleAllAcquisition={handleToggleAllAcquisition}
         isBulkAcquisitionPending={isBulkAcquisitionPending}
+        isBinderLocked={binder.locked}
+        onEditCardDetails={editCardDetails}
+        pendingCardDetailsEditIds={pendingCardDetailsEditIds}
+        onEditingRowChange={setIsEditingCardRow}
         priceReview={
           isPriceReviewActive
             ? {

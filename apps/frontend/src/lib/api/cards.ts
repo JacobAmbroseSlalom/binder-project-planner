@@ -149,6 +149,58 @@ export async function createCustomCard(
   return data;
 }
 
+// The Card List row edit action's editable field values (story 49) - a
+// full form submission (never partial), mirroring `CreateCustomCardRequest`
+// above but with every field optional/nullable to match an existing
+// card's already-populated values, and `image` optional since replacing it
+// isn't required. `price` blank/`null` clears the card's saved price
+// entirely rather than being sent as an empty value.
+export interface UpdateCardDetailsRequest {
+  name: string;
+  setName: string | null;
+  localNumber: string | null;
+  variation: string | null;
+  price: number | null;
+  image: File | null;
+}
+
+// Edits a card's name, set, number, variation, price, and (optionally) its
+// image through `PATCH /cards/{cardId}/details` (story 49's Card List row
+// "Edit" action) - a dedicated multipart endpoint from `PATCH
+// /cards/{cardId}` (which stays exclusively move/swap/variation/acquired).
+// Applies identically regardless of the card's `source`. Blank
+// setName/localNumber/variation, and a `null` price, are omitted from the
+// form data entirely so the backend stores them as `null`; omitting
+// `image` leaves the card's existing image unchanged. Throws the Problem
+// Details body on failure (e.g. `409 Conflict` if the binder is locked, or
+// `415 Unsupported Media Type` for a bad replacement image) so the caller
+// can roll back its optimistic edit.
+export async function updateCardDetails(
+  cardId: string,
+  request: UpdateCardDetailsRequest,
+): Promise<Card> {
+  const formData = new FormData();
+  formData.append('name', request.name);
+  if (request.setName) formData.append('setName', request.setName);
+  if (request.localNumber) formData.append('localNumber', request.localNumber);
+  if (request.variation) formData.append('variation', request.variation);
+  if (request.price !== null) formData.append('price', String(request.price));
+  if (request.image) formData.append('image', request.image);
+
+  const { data, error } = await apiClient.PATCH('/cards/{cardId}/details', {
+    params: { path: { cardId } },
+    // See `createCustomCard` above: openapi-fetch passes a `FormData`
+    // instance through untouched, so this cast is required.
+    body: formData as never,
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  return data;
+}
+
 // Permanently deletes a binder-owned card through `DELETE /cards/{cardId}`
 // (story 13). Deleting an already-absent card also succeeds (`204 No
 // Content`), matching the backend's idempotent-delete contract; throws the
