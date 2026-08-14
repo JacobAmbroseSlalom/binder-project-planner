@@ -57,6 +57,7 @@ This index maps every story file to its current bucket.
 | 32    | Lock a binder                          | [docs/stories/ready-for-dev/32-lock-a-binder.md](ready-for-dev/32-lock-a-binder.md)                                                   |
 | 44    | Delete custom art finance cost entries | [docs/stories/ready-for-dev/44-delete-custom-art-finance-cost-entries.md](ready-for-dev/44-delete-custom-art-finance-cost-entries.md) |
 | 45    | What I'm looking for section           | [docs/stories/ready-for-dev/45-what-im-looking-for-section.md](ready-for-dev/45-what-im-looking-for-section.md)                       |
+| 51    | Add binder tags                        | [docs/stories/ready-for-dev/51-add-binder-tags.md](ready-for-dev/51-add-binder-tags.md)                                               |
 
 ## Needs Refinement
 
