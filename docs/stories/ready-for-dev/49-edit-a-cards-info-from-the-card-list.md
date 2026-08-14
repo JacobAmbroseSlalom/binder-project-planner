@@ -28,11 +28,11 @@
 
 - No existing backend endpoint updates a card's `name`/`setName`/`localNumber`/
   `variation`/image together. A new dedicated endpoint, `PATCH /cards/{cardId}/
-  details`, handles this edit as a `multipart/form-data` request (the optional image
+details`, handles this edit as a `multipart/form-data` request (the optional image
   file, alongside the other editable fields) - `PATCH /cards/{cardId}` itself stays
   exclusively JSON/move-swap/variation/acquired, unchanged by this story.
 - Image replacement reuses story 12's existing `resolveCustomImageAsset(database,
-  imagesDirectory, uploadedFile)` helper (the same digest-computed disk storage path
+imagesDirectory, uploadedFile)` helper (the same digest-computed disk storage path
   already used by `POST /binders/{binderId}/cards`'s custom-card-creation endpoint),
   rather than introducing a second image-storage mechanism. Unlike creation, the
   image field is optional on this edit request: omitting it leaves the card's

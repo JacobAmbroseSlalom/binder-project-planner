@@ -286,3 +286,9 @@ export const POKEMONTCG_SET_ID_CACHE_TTL_MS = 86_400_000; // 24 hours
 // opening an unbounded number of simultaneous upstream requests for one
 // large card-list selection).
 export const POKEMONTCG_PRICE_FETCH_CONCURRENCY = 5;
+
+// Story 50: "Enhance the View Financials Cards section". How many of the
+// binder's highest-priced cards the Cards section's "Top priced cards"
+// list shows, imported wherever that list is computed rather than
+// hardcoding the count at the call site.
+export const DEFAULT_TOP_PRICED_CARDS_COUNT = 6;

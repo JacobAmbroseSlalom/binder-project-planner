@@ -1,6 +1,6 @@
 # 50. Enhance the View Financials Cards section
 
-**Status:** Not started
+**Status:** Done (2026-08-13 22:03 EDT)
 
 #### Acceptance criteria
 
