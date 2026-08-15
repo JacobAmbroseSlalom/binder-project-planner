@@ -3,13 +3,18 @@
 import {
   CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
   CARD_SEARCH_LANGUAGE_DEFAULT,
+  CARD_SEARCH_PROVIDER_DEFAULT,
 } from '@binder-project-planner/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
-import { type CardSearchLanguage, type TcgDexCatalogCard } from '@/lib/api';
+import {
+  type CardSearchLanguage,
+  type CardSearchProvider,
+  type TcgDexCatalogCard,
+} from '@/lib/api';
 import { useModalFocusTrap } from '@/shared/hooks/useModalFocusTrap';
 import { VariationCombobox } from '@/shared/forms';
 
@@ -81,13 +86,17 @@ export function WatchlistCardSelectionModal({
   isBulkAddPending: boolean;
 }) {
   // This page has no per-binder-visit context to persist the language/TCG
-  // Pocket toggles in (unlike `CardSelectionModal`, which lives inside
-  // `BinderRouteContext`) - local state is enough here since this modal's
-  // own mount/unmount cycle is this page's only lifetime that matters.
+  // Pocket toggles (or story 43's source dropdown) in (unlike
+  // `CardSelectionModal`, which lives inside `BinderRouteContext`) - local
+  // state is enough here since this modal's own mount/unmount cycle is
+  // this page's only lifetime that matters.
   const [cardSearchLanguage, setCardSearchLanguage] = useState<CardSearchLanguage>(
     CARD_SEARCH_LANGUAGE_DEFAULT,
   );
   const [includeTcgPocket, setIncludeTcgPocket] = useState(CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT);
+  const [cardSearchProvider, setCardSearchProvider] = useState<CardSearchProvider>(
+    CARD_SEARCH_PROVIDER_DEFAULT,
+  );
 
   const {
     query,
@@ -102,7 +111,7 @@ export function WatchlistCardSelectionModal({
     scrollContainerRef,
     handleScroll,
     resetSearch,
-  } = useCardCatalogSearch({ cardSearchLanguage, includeTcgPocket });
+  } = useCardCatalogSearch({ cardSearchProvider, cardSearchLanguage, includeTcgPocket });
 
   const {
     selectedIds,
@@ -285,6 +294,8 @@ export function WatchlistCardSelectionModal({
 
         {viewMode === 'search' ? (
           <SearchResultsView
+            cardSearchProvider={cardSearchProvider}
+            onCardSearchProviderChange={setCardSearchProvider}
             cardSearchLanguage={cardSearchLanguage}
             onCardSearchLanguageChange={setCardSearchLanguage}
             includeTcgPocket={includeTcgPocket}

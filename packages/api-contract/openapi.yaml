@@ -805,30 +805,44 @@ paths:
   /card-catalog/search:
     get:
       operationId: searchCardCatalog
-      summary: Search the TCGdex card catalog
+      summary: Search the card catalog
       description: >-
-        Searches TCGdex through the backend (story 11) and returns
-        normalized catalog cards in the provider's original order, without
-        application-level pagination or truncation. Story 41 adds the
+        Searches a card catalog provider through the backend and returns
+        normalized catalog cards in that provider's original order, without
+        application-level pagination or truncation. Story 43 adds the
+        optional `provider` parameter, letting the caller pick the Pokémon
+        TCG API (pokemontcg.io, default) or TCGdex as an independent source
+        switch rather than an automatic fallback. Story 41 adds the
         optional `language` parameter and, for `language=ja`, an automatic
         English-to-Japanese Pokémon species name translation applied to
-        `query` before searching TCGdex. Story 41 also adds the optional
-        `includeTcgPocket` parameter, which defaults to `false` (Pokémon
-        TCG Pocket cards are excluded from results unless explicitly
-        requested).
+        `query` before searching TCGdex; both `language` and
+        `includeTcgPocket` below are accepted but ignored (not errors) when
+        `provider=pokemontcg`, since pokemontcg.io has no TCG Pocket-set
+        concept and its card data is English-only. Story 41 also adds the
+        optional `includeTcgPocket` parameter, which defaults to `false`
+        (Pokémon TCG Pocket cards are excluded from results unless
+        explicitly requested).
       parameters:
         - name: query
           in: query
           required: true
           schema:
             type: string
+        - name: provider
+          in: query
+          required: false
+          description: >-
+            Defaults to `pokemontcg` when omitted (story 43).
+          schema:
+            $ref: '#/components/schemas/CardSearchProvider'
         - name: language
           in: query
           required: false
           description: >-
             Defaults to `en` when omitted. For `ja`, the backend first
             attempts to translate `query` as an English Pokémon species name
-            (see `CardSearchResponse.translationWarning`).
+            (see `CardSearchResponse.translationWarning`). Ignored when
+            `provider=pokemontcg`.
           schema:
             $ref: '#/components/schemas/CardSearchLanguage'
         - name: includeTcgPocket
@@ -838,7 +852,7 @@ paths:
             Defaults to `false` when omitted. When `false`, cards belonging
             to a Pokémon TCG Pocket set (TCGdex's `tcgp` serie) are excluded
             from results; when `true`, they're included alongside all other
-            matches.
+            matches. Ignored when `provider=pokemontcg`.
           schema:
             type: boolean
       responses:
@@ -3338,10 +3352,12 @@ components:
       type: object
       additionalProperties: false
       description: >-
-        A normalized TCGdex catalog card (story 11), returned by
-        `GET /card-catalog/search` and submitted as-is (plus variation and
-        placement) to create a TCGdex-sourced binder card.
+        A normalized catalog card returned by `GET /card-catalog/search`
+        (TCGdex, story 11; pokemontcg.io, story 43) and submitted as-is
+        (plus variation and placement) to create a provider-sourced binder
+        card via `POST /binders/{binderId}/cards/bulk`.
       required:
+        - source
         - name
         - setName
         - localNumber
@@ -3349,6 +3365,8 @@ components:
         - providerSetId
         - imageUrl
       properties:
+        source:
+          $ref: '#/components/schemas/CardSearchProvider'
         name:
           type: string
         setName:
@@ -3359,12 +3377,27 @@ components:
           nullable: true
         providerCardId:
           type: string
+          description: >-
+            The provider's own card identifier - TCGdex's card `id`, or,
+            for `pokemontcg`, pokemontcg.io's own card `id` (story 43).
         providerSetId:
           type: string
+          description: >-
+            The provider's own set identifier - TCGdex's set id, or, for
+            `pokemontcg`, that card's pokemontcg.io `set.id` (story 43).
         imageUrl:
           type: string
           format: uri
           description: The provider's image location; not the frontend-facing image URL.
+    CardSearchProvider:
+      type: string
+      description: >-
+        Which card catalog provider a search or creation request targets
+        (story 43): the Pokémon TCG API (pokemontcg.io, default) or
+        TCGdex.
+      enum:
+        - tcgdex
+        - pokemontcg
     CardSearchLanguage:
       type: string
       description: Which TCGdex-language dataset a card-catalog search targets (story 41).
@@ -3423,10 +3456,10 @@ components:
       additionalProperties: false
       description: >-
         `POST /binders/{binderId}/cards/bulk`'s request body (stories 17
-        and 18): the checked subset of a TCGdex catalog search, in
-        search-result order, plus one optional shared variation applied to
-        every created card and one optional target placement applied only
-        to the first array element.
+        and 18): the checked subset of a card catalog search (TCGdex or
+        pokemontcg.io, story 43), in search-result order, plus one optional
+        shared variation applied to every created card and one optional
+        target placement applied only to the first array element.
       required:
         - cards
       properties:
@@ -3743,8 +3776,12 @@ components:
           nullable: true
         source:
           type: string
+          description: >-
+            Story 43 adds `pokemontcg` alongside the original `tcgdex`/
+            `custom` values.
           enum:
             - tcgdex
+            - pokemontcg
             - custom
         providerCardId:
           type: string
@@ -3870,8 +3907,12 @@ components:
           nullable: true
         source:
           type: string
+          description: >-
+            Story 43 adds `pokemontcg` alongside the original `tcgdex`/
+            `custom` values.
           enum:
             - tcgdex
+            - pokemontcg
             - custom
         providerCardId:
           type: string
@@ -3988,10 +4029,11 @@ components:
       additionalProperties: false
       description: >-
         `POST /watchlist-entries/bulk`'s request body (story 45): the
-        checked subset of a TCGdex catalog search, in search-result order,
-        plus one optional shared variation applied to every created entry
-        - mirroring `BulkCreateCardsRequest` minus placement and
-        acquisition, which have no meaning for a binder-less entry.
+        checked subset of a card catalog search (TCGdex or pokemontcg.io,
+        story 43), in search-result order, plus one optional shared
+        variation applied to every created entry - mirroring
+        `BulkCreateCardsRequest` minus placement and acquisition, which
+        have no meaning for a binder-less entry.
       required:
         - cards
       properties:

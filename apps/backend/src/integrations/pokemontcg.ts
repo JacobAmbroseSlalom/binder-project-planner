@@ -1,8 +1,13 @@
 import {
+  CARD_SEARCH_CACHE_MAX_ENTRIES,
+  CARD_SEARCH_CACHE_TTL_MS,
   POKEMONTCG_REQUEST_TIMEOUT_MS,
   POKEMONTCG_RETRY_DELAY_MS,
   POKEMONTCG_SET_ID_CACHE_TTL_MS,
 } from '@binder-project-planner/shared';
+import { createWriteStream } from 'node:fs';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 // One print variant's normalized pokemontcg.io price data for a single
 // card (story 38). `marketPriceCents`/`lowPriceCents` are null when
@@ -496,4 +501,168 @@ export async function fetchCardPriceData(
         : null,
     };
   }
+}
+
+// Story 43's normalized pokemontcg.io catalog card - the same shape as
+// TCGdex's own `TcgDexCatalogCard` (name, setName, localNumber,
+// providerCardId, providerSetId, imageUrl) so the frontend's search
+// results grid, loading state, and no-results messaging work unchanged
+// regardless of the selected provider.
+export interface PokemonTcgCatalogCard {
+  name: string;
+  setName: string | null;
+  localNumber: string | null;
+  providerCardId: string;
+  providerSetId: string;
+  imageUrl: string;
+}
+
+interface RawCardSearchResult {
+  id?: unknown;
+  name?: unknown;
+  number?: unknown;
+  set?: { id?: unknown; name?: unknown };
+  images?: { large?: unknown; small?: unknown };
+}
+
+interface RawCardSearchResponse {
+  data?: RawCardSearchResult[];
+}
+
+// Maps one raw pokemontcg.io search result into the app's normalized
+// contract. Prefers the `large` image rendition, falling back to `small`
+// when a card has no large image; a result with neither is dropped rather
+// than surfaced with a broken image. Results missing `id`/`name` are
+// dropped too, rather than breaking the whole search.
+function normalizeSearchCard(raw: RawCardSearchResult): PokemonTcgCatalogCard | null {
+  if (typeof raw.id !== 'string' || typeof raw.name !== 'string') return null;
+
+  const imageUrl =
+    typeof raw.images?.large === 'string'
+      ? raw.images.large
+      : typeof raw.images?.small === 'string'
+        ? raw.images.small
+        : null;
+  if (!imageUrl) return null;
+
+  return {
+    name: raw.name,
+    setName: typeof raw.set?.name === 'string' ? raw.set.name : null,
+    localNumber: typeof raw.number === 'string' ? raw.number : null,
+    providerCardId: raw.id,
+    providerSetId: typeof raw.set?.id === 'string' ? raw.set.id : '',
+    imageUrl,
+  };
+}
+
+// A least-recently-used cache entry for card-search results, mirroring
+// tcgdex.ts's own `CacheEntry`/`searchCache` pair - shares the same
+// `CARD_SEARCH_CACHE_TTL_MS`/`CARD_SEARCH_CACHE_MAX_ENTRIES` defaults since
+// both providers' search results have the same freshness/staleness
+// tradeoffs, but is kept as its own `Map` so a cached TCGdex query and a
+// cached pokemontcg.io query for the same text never collide.
+interface SearchCacheEntry {
+  results: PokemonTcgCatalogCard[];
+  expiresAt: number;
+}
+
+const searchCache = new Map<string, SearchCacheEntry>();
+
+function getCachedSearch(key: string): PokemonTcgCatalogCard[] | null {
+  const entry = searchCache.get(key);
+  if (!entry) return null;
+
+  if (entry.expiresAt <= Date.now()) {
+    searchCache.delete(key);
+    return null;
+  }
+
+  searchCache.delete(key);
+  searchCache.set(key, entry);
+  return entry.results;
+}
+
+function setCachedSearch(key: string, results: PokemonTcgCatalogCard[]): void {
+  searchCache.delete(key);
+  searchCache.set(key, { results, expiresAt: Date.now() + CARD_SEARCH_CACHE_TTL_MS });
+
+  if (searchCache.size > CARD_SEARCH_CACHE_MAX_ENTRIES) {
+    const oldestKey = searchCache.keys().next().value;
+    if (oldestKey !== undefined) searchCache.delete(oldestKey);
+  }
+}
+
+// Searches pokemontcg.io for `trimmedQuery` (story 43), using the same
+// in-memory LRU/TTL cache pattern as TCGdex search. Queries pokemontcg.io's
+// Lucene-style `q` parameter with a `name:<query>*` wildcard-prefix match -
+// this syntax is documented by pokemontcg.io, but (per the story's own
+// technical requirements) hasn't been confirmed against a live request in
+// this environment, since it has no outbound web access; verify this
+// against the real API during manual QA before release.
+export async function searchPokemonTcgCardCatalog(
+  trimmedQuery: string,
+  apiKey: string | undefined,
+  signal?: AbortSignal,
+): Promise<PokemonTcgCatalogCard[]> {
+  const cacheKey = trimmedQuery.toLowerCase();
+  const cached = getCachedSearch(cacheKey);
+  if (cached) return cached;
+
+  const searchUrl = `${API_BASE_URL}/cards?q=${encodeURIComponent(`name:${trimmedQuery}*`)}`;
+  const response = await fetchWithRetry(searchUrl, apiKey, signal);
+  if (!response.ok) {
+    throw new PokemonTcgProviderError(`pokemontcg.io responded with status ${response.status}.`);
+  }
+
+  const body: RawCardSearchResponse = await response.json();
+  const rawResults = Array.isArray(body.data) ? body.data : [];
+
+  const results = rawResults
+    .map((raw) => normalizeSearchCard(raw))
+    .filter((card): card is PokemonTcgCatalogCard => card !== null);
+
+  setCachedSearch(cacheKey, results);
+  return results;
+}
+
+// pokemontcg.io serves card artwork from this dedicated images CDN host -
+// the only origin card-image downloads are ever accepted from, mirroring
+// tcgdex.ts's own `APPROVED_IMAGE_ORIGINS` allowlist.
+const APPROVED_IMAGE_ORIGINS = new Set(['images.pokemontcg.io']);
+
+export interface DownloadedPokemonTcgImage {
+  sourceOrigin: string;
+}
+
+// Downloads a card's image from pokemontcg.io directly to
+// `destinationPath`, enforcing the approved-origin allowlist before making
+// any request - mirrors tcgdex.ts's own `downloadCardImage`. Streams the
+// response body straight to disk rather than buffering the complete image
+// in memory.
+export async function downloadPokemonTcgCardImage(
+  imageUrl: string,
+  destinationPath: string,
+  signal?: AbortSignal,
+): Promise<DownloadedPokemonTcgImage> {
+  let origin: URL;
+  try {
+    origin = new URL(imageUrl);
+  } catch {
+    throw new PokemonTcgProviderError('pokemontcg.io returned an invalid image URL.');
+  }
+
+  if (!APPROVED_IMAGE_ORIGINS.has(origin.hostname)) {
+    throw new PokemonTcgProviderError(
+      `Image origin "${origin.hostname}" is not an approved pokemontcg.io host.`,
+    );
+  }
+
+  const response = await fetchWithRetry(imageUrl, undefined, signal);
+  if (!response.body) {
+    throw new PokemonTcgProviderError('pokemontcg.io returned an empty image response.');
+  }
+
+  await pipeline(Readable.fromWeb(response.body as never), createWriteStream(destinationPath));
+
+  return { sourceOrigin: origin.hostname };
 }

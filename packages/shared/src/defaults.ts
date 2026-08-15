@@ -77,6 +77,11 @@ export const TCGDEX_REQUEST_TIMEOUT_MS = 30_000;
 // doesn't supply a valid `Retry-After` header.
 export const TCGDEX_RETRY_DELAY_MS = 500;
 
+// Story 43: "Add a card from other API sources". The card-selection
+// modal's source dropdown defaults to the Pokémon TCG API (pokemontcg.io);
+// switching it to TCGdex searches that provider's catalog instead.
+export const CARD_SEARCH_PROVIDER_DEFAULT = 'pokemontcg';
+
 // Story 41: "Filter card search by TCG Pocket inclusion and language". The
 // card-selection modal's language toggle defaults to English; switching it
 // to Japanese searches TCGdex's `ja` catalog instead.

@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import {
   BULK_CARD_CREATE_CONCURRENCY,
   CARD_SEARCH_MIN_QUERY_LENGTH,
+  CARD_SEARCH_PROVIDER_DEFAULT,
   CARD_VARIATION_MAX_LENGTH,
   CUSTOM_CARD_NAME_MAX_LENGTH,
   CUSTOM_CARD_NUMBER_MAX_LENGTH,
@@ -36,8 +37,11 @@ import {
 import { translateEnglishNameToJapanese } from '../integrations/pokeapi.js';
 import {
   createPriceFetchBatchCache,
+  downloadPokemonTcgCardImage,
   fetchCardPriceData,
   PokemonTcgAbortedError,
+  PokemonTcgProviderError,
+  searchPokemonTcgCardCatalog,
   type CardPriceFetchResult,
 } from '../integrations/pokemontcg.js';
 import { lockedBinderConflictProblem } from '../lockedBinderProblem.js';
@@ -52,11 +56,14 @@ import {
 
 import { mapWithConcurrencyLimit } from './concurrency.js';
 
-// One normalized TCGdex catalog result within a bulk create-cards request
-// (stories 17/18, `POST /binders/{binderId}/cards/bulk`) - the sole
-// TCGdex-card creation path; there is no single-card JSON variant of
-// `POST /binders/{binderId}/cards` anymore.
+// One normalized catalog result within a bulk create-cards request
+// (stories 17/18, 43; `POST /binders/{binderId}/cards/bulk`) - the sole
+// provider-sourced card creation path; there is no single-card JSON
+// variant of `POST /binders/{binderId}/cards` anymore. `source` (story 43)
+// is `tcgdex` or `pokemontcg`, determining both which provider's image is
+// downloaded and how `providerCardId`/`providerSetId` are interpreted.
 interface BulkCardItem {
+  source: 'tcgdex' | 'pokemontcg';
   name: string;
   setName: string | null;
   localNumber: string | null;
@@ -441,24 +448,37 @@ export interface ResolvedImageAsset {
   newlyCreatedFilePath: string | null;
 }
 
-// Finds or creates the shared local image asset for a TCGdex card
-// (planning.md: "TCGdex card instances with the same provider card ID share
-// one local image-asset record and file"). Downloads only happen when no
-// existing asset is found; a concurrent duplicate download that loses the
-// database race is discarded in favor of the winner's asset. Only the
-// identity/image fields a TCGdex card's shared asset actually keys on are
-// needed here (used by the bulk create-cards endpoint, stories 17/18).
-// Exported for reuse by routes/watchlistEntries.ts (story 45).
-export async function resolveTcgDexImageAsset(
+// Finds or creates the shared local image asset for a provider-sourced
+// card (planning.md: "TCGdex card instances with the same provider card ID
+// share one local image-asset record and file"; story 43 extends this to
+// pokemontcg.io, keyed by `source` together with `providerCardId` so the
+// two providers' independently-minted ids can never collide into a
+// shared, wrong-provider asset). Downloads only happen when no existing
+// asset is found; a concurrent duplicate download that loses the database
+// race is discarded in favor of the winner's asset. Only the
+// identity/image fields a provider card's shared asset actually keys on
+// are needed here (used by the bulk create-cards endpoint, stories 17,
+// 18, 43). Exported for reuse by routes/watchlistEntries.ts (story 45).
+export async function resolveCardCatalogImageAsset(
   database: DatabaseConnection['database'],
   imagesDirectory: string,
-  body: { providerCardId: string; providerSetId: string; imageUrl: string },
+  body: {
+    source: 'tcgdex' | 'pokemontcg';
+    providerCardId: string;
+    providerSetId: string;
+    imageUrl: string;
+  },
   signal: AbortSignal,
 ): Promise<ResolvedImageAsset> {
   const existing = database
     .select()
     .from(cardImageAssets)
-    .where(eq(cardImageAssets.providerCardId, body.providerCardId))
+    .where(
+      and(
+        eq(cardImageAssets.source, body.source),
+        eq(cardImageAssets.providerCardId, body.providerCardId),
+      ),
+    )
     .get();
   if (existing) {
     return { assetId: existing.id, newlyCreatedFilePath: null };
@@ -466,12 +486,20 @@ export async function resolveTcgDexImageAsset(
 
   mkdirSync(imagesDirectory, { recursive: true });
   const tempPath = join(imagesDirectory, `${randomUUID()}.tmp`);
-  await downloadCardImage(body.imageUrl, tempPath, signal);
+  if (body.source === 'tcgdex') {
+    await downloadCardImage(body.imageUrl, tempPath, signal);
+  } else {
+    await downloadPokemonTcgCardImage(body.imageUrl, tempPath, signal);
+  }
 
   const format = detectImageFormat(readFileHeader(tempPath, 12));
   if (!format) {
     unlinkSync(tempPath);
-    throw new TcgDexProviderError('The downloaded TCGdex image was not a supported format.');
+    throw body.source === 'tcgdex'
+      ? new TcgDexProviderError('The downloaded TCGdex image was not a supported format.')
+      : new PokemonTcgProviderError(
+          'The downloaded pokemontcg.io image was not a supported format.',
+        );
   }
 
   const assetId = randomUUID();
@@ -484,6 +512,7 @@ export async function resolveTcgDexImageAsset(
       .insert(cardImageAssets)
       .values({
         id: assetId,
+        source: body.source,
         providerCardId: body.providerCardId,
         providerSetId: body.providerSetId,
         storageFilename,
@@ -495,13 +524,18 @@ export async function resolveTcgDexImageAsset(
     return { assetId, newlyCreatedFilePath: finalPath };
   } catch (error) {
     if (isUniqueConstraintError(error)) {
-      // Lost a concurrent race to assign the same TCGdex card; discard our
-      // own duplicate download and reuse the winner's asset.
+      // Lost a concurrent race to assign the same provider card; discard
+      // our own duplicate download and reuse the winner's asset.
       unlinkSync(finalPath);
       const winner = database
         .select()
         .from(cardImageAssets)
-        .where(eq(cardImageAssets.providerCardId, body.providerCardId))
+        .where(
+          and(
+            eq(cardImageAssets.source, body.source),
+            eq(cardImageAssets.providerCardId, body.providerCardId),
+          ),
+        )
         .get();
       if (winner) {
         return { assetId: winner.id, newlyCreatedFilePath: null };
@@ -513,10 +547,10 @@ export async function resolveTcgDexImageAsset(
 }
 
 // Finds or creates the shared local image asset for a custom-card upload
-// (story 12), mirroring `resolveTcgDexImageAsset`'s dedupe/concurrent-race
-// pattern but keyed by the SHA-256 digest `createDigestDiskStorage` already
-// computed while streaming the upload to temporary storage, rather than a
-// TCGdex provider card ID. `uploadedFile.path` is always consumed by this
+// (story 12), mirroring `resolveCardCatalogImageAsset`'s dedupe/concurrent-
+// race pattern but keyed by the SHA-256 digest `createDigestDiskStorage`
+// already computed while streaming the upload to temporary storage, rather
+// than a provider card ID. `uploadedFile.path` is always consumed by this
 // function - either deleted (a duplicate) or renamed into place - so the
 // caller never needs to remove it itself once this function is called.
 // Exported for reuse by routes/watchlistEntries.ts (story 45).
@@ -597,8 +631,9 @@ export function createCardsRouter(
 ): Router {
   const router = Router();
 
-  // Story 11's TCGdex search, proxied through the backend so the frontend
-  // never calls TCGdex directly.
+  // Story 11's TCGdex search (story 43 adds the pokemontcg.io alternative
+  // below), proxied through the backend so the frontend never calls either
+  // provider directly.
   router.get('/card-catalog/search', async (request, response) => {
     const rawQuery = request.query.query;
     const query = typeof rawQuery === 'string' ? rawQuery : '';
@@ -618,9 +653,19 @@ export function createCardsRouter(
       return;
     }
 
+    // Defaults to `pokemontcg` when omitted; the OpenAPI validator middleware
+    // already rejects any value other than `tcgdex`/`pokemontcg` before
+    // this handler runs, per the shared `CardSearchProvider` enum (story
+    // 43). This is a source switch the user picks, not an automatic
+    // fallback between the two.
+    const provider: 'tcgdex' | 'pokemontcg' =
+      request.query.provider === 'pokemontcg' ? 'pokemontcg' : CARD_SEARCH_PROVIDER_DEFAULT;
     // Defaults to English when omitted; the OpenAPI validator middleware
     // already rejects any value other than `en`/`ja` before this handler
-    // runs, per the shared `CardSearchLanguage` enum (story 41).
+    // runs, per the shared `CardSearchLanguage` enum (story 41). Only
+    // meaningful for `provider=tcgdex`; accepted but ignored for
+    // `provider=pokemontcg` (story 43), since pokemontcg.io's card data is
+    // English-only.
     const language: CardSearchLanguage = request.query.language === 'ja' ? 'ja' : 'en';
     // Defaults to excluded (`false`) when omitted, per story 41. The OpenAPI
     // validator middleware's ajv instance is configured with `coerceTypes`
@@ -630,15 +675,31 @@ export function createCardsRouter(
     // typing implies. Comparing against the runtime `true` (rather than the
     // string `'true'`) is what actually matches; the `unknown` cast exists
     // only because TypeScript's static `ParsedQs` value type doesn't know
-    // about that coercion.
+    // about that coercion. Only meaningful for `provider=tcgdex`; ignored
+    // for `provider=pokemontcg` (story 43), since pokemontcg.io has no TCG
+    // Pocket-set concept.
     const includeTcgPocket = (request.query.includeTcgPocket as unknown) === true;
 
     // Propagates a disconnected/aborted client request to the upstream
-    // TCGdex request (planning.md).
+    // provider request (planning.md).
     const controller = new AbortController();
     request.on('close', () => controller.abort());
 
     try {
+      if (provider === 'pokemontcg') {
+        // pokemontcg.io has no language/TCG Pocket concept (story 43), so
+        // there's no translation attempt and `translationWarning` is
+        // always `false` here.
+        const rawResults = await searchPokemonTcgCardCatalog(
+          trimmedQuery,
+          pokemonTcgApiKey,
+          controller.signal,
+        );
+        const results = rawResults.map((card) => ({ source: 'pokemontcg' as const, ...card }));
+        response.status(200).json({ results, translationWarning: false });
+        return;
+      }
+
       // A `ja` search first attempts to translate the trimmed query as an
       // English Pokémon species name into its Japanese equivalent
       // (planning.md story 41). A translation miss - unknown species name,
@@ -659,16 +720,17 @@ export function createCardsRouter(
         }
       }
 
-      const results = await searchCardCatalog(
+      const rawResults = await searchCardCatalog(
         searchQuery,
         language,
         includeTcgPocket,
         controller.signal,
       );
+      const results = rawResults.map((card) => ({ source: 'tcgdex' as const, ...card }));
       response.status(200).json({ results, translationWarning });
     } catch (error) {
-      if (error instanceof TcgDexAbortedError) return;
-      if (error instanceof TcgDexProviderError) {
+      if (error instanceof TcgDexAbortedError || error instanceof PokemonTcgAbortedError) return;
+      if (error instanceof TcgDexProviderError || error instanceof PokemonTcgProviderError) {
         response
           .status(error.isTimeout ? 504 : 502)
           .type('application/problem+json')
@@ -681,8 +743,9 @@ export function createCardsRouter(
 
   // Inserts a new card row and responds, sharing the "unique-placement
   // conflict" (409) handling and unreferenced-asset cleanup between the
-  // TCGdex (story 11) and custom-card (story 12) branches below - both
-  // return the same `201`/Location/serialized-card shape on success.
+  // provider-sourced (stories 11, 43) and custom-card (story 12) branches
+  // below - both return the same `201`/Location/serialized-card shape on
+  // success.
   function insertCardAndRespond(
     response: Response,
     card: {
@@ -691,7 +754,7 @@ export function createCardsRouter(
       name: string;
       setName: string | null;
       localNumber: string | null;
-      source: 'tcgdex' | 'custom';
+      source: 'tcgdex' | 'pokemontcg' | 'custom';
       providerCardId: string | null;
       providerSetId: string | null;
       variation: string | null;
@@ -1293,14 +1356,14 @@ export function createCardsRouter(
 
           let asset: ResolvedImageAsset;
           try {
-            asset = await resolveTcgDexImageAsset(
+            asset = await resolveCardCatalogImageAsset(
               database,
               imagesDirectory,
               item,
               neverAbortedSignal,
             );
           } catch (error) {
-            if (error instanceof TcgDexProviderError) {
+            if (error instanceof TcgDexProviderError || error instanceof PokemonTcgProviderError) {
               const status = error.isTimeout ? 504 : 502;
               return { status: 'failed', problem: problem(status, 'Bad Gateway', error.message) };
             }
@@ -1314,7 +1377,7 @@ export function createCardsRouter(
             name: item.name,
             setName: item.setName,
             localNumber: item.localNumber,
-            source: 'tcgdex' as const,
+            source: item.source,
             providerCardId: item.providerCardId,
             providerSetId: item.providerSetId,
             variation,

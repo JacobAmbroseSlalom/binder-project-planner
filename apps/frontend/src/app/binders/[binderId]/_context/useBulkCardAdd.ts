@@ -119,7 +119,7 @@ export function useBulkCardAdd({
           name: catalogCard.name,
           setName: catalogCard.setName,
           localNumber: catalogCard.localNumber,
-          source: 'tcgdex',
+          source: catalogCard.source,
           providerCardId: catalogCard.providerCardId,
           providerSetId: catalogCard.providerSetId,
           variation,
@@ -179,7 +179,8 @@ export function useBulkCardAdd({
         binderId,
         {
           cards: selection.map(
-            ({ name, setName, localNumber, providerCardId, providerSetId, imageUrl }) => ({
+            ({ source, name, setName, localNumber, providerCardId, providerSetId, imageUrl }) => ({
+              source,
               name,
               setName,
               localNumber,

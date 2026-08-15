@@ -13,6 +13,7 @@ export type ResizePreviewRequest = components['schemas']['ResizePreviewRequest']
 export type ResizePreviewResult = components['schemas']['ResizePreviewResult'];
 export type Card = components['schemas']['Card'];
 export type TcgDexCatalogCard = components['schemas']['TcgDexCatalogCard'];
+export type CardSearchProvider = components['schemas']['CardSearchProvider'];
 export type CardSearchLanguage = components['schemas']['CardSearchLanguage'];
 export type CardSearchResponse = components['schemas']['CardSearchResponse'];
 export type CardPositionUpdate = components['schemas']['CardPositionUpdate'];

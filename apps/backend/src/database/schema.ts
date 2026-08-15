@@ -331,10 +331,18 @@ export const cardImageAssets = sqliteTable(
   'card_image_assets',
   {
     id: text().primaryKey(),
-    // Present (and, together, unique) only for TCGdex-sourced assets; used
-    // to let concurrent assignments of the same provider card share one
-    // asset instead of downloading duplicates. Left null for custom-upload
-    // asset rows (story 12), deduplicated by SHA-256 digest instead.
+    // 'tcgdex', 'pokemontcg' (story 43), or null for custom-upload assets -
+    // together with `providerCardId`, identifies which provider (if any)
+    // this asset came from. Needed alongside `providerCardId` (rather than
+    // that column alone) once a second provider exists, since TCGdex and
+    // pokemontcg.io each mint their own card ids independently and could in
+    // principle collide.
+    source: text(),
+    // Present (and, together with `source`, unique) only for provider-
+    // sourced assets; used to let concurrent assignments of the same
+    // provider card share one asset instead of downloading duplicates. Left
+    // null for custom-upload asset rows (story 12), deduplicated by
+    // SHA-256 digest instead.
     providerCardId: text(),
     providerSetId: text(),
     // Present (and, together, unique) only for custom-upload assets (story
@@ -359,12 +367,18 @@ export const cardImageAssets = sqliteTable(
     createdAt: text().notNull(),
   },
   (table) => [
-    // Lets concurrent assignments of the same TCGdex card reuse one shared
-    // asset/file instead of racing to download and store duplicates. SQLite
-    // unique indexes never treat two NULLs as equal, so this constraint is
-    // inert for custom-upload asset rows (story 12) that leave
-    // `providerCardId` null.
-    uniqueIndex('card_image_assets_provider_card_id_unique').on(table.providerCardId),
+    // Lets concurrent assignments of the same provider card (TCGdex or
+    // pokemontcg.io, story 43) reuse one shared asset/file instead of
+    // racing to download and store duplicates. Keyed by `source` together
+    // with `providerCardId` (rather than `providerCardId` alone) so the two
+    // providers' independently-minted card ids can never collide into a
+    // shared, wrong-provider asset. SQLite unique indexes never treat two
+    // NULLs as equal, so this constraint is inert for custom-upload asset
+    // rows (story 12) that leave both columns null.
+    uniqueIndex('card_image_assets_source_provider_card_id_unique').on(
+      table.source,
+      table.providerCardId,
+    ),
     // Story 12's concurrent-upload dedupe constraint: inert for
     // TCGdex-sourced rows that leave `sha256Digest` null, for the same
     // NULL-never-equals-NULL reason as the index above.
@@ -384,8 +398,8 @@ export const cards = sqliteTable(
     name: text().notNull(),
     setName: text(),
     localNumber: text(),
-    // 'tcgdex' (story 11) or 'custom' (story 12), enforced by the
-    // `card_source_valid` check below rather than a native SQLite enum.
+    // 'tcgdex', 'pokemontcg' (story 43), or 'custom' (story 12), enforced by
+    // the `card_source_valid` check below rather than a native SQLite enum.
     source: text().notNull(),
     providerCardId: text(),
     providerSetId: text(),
@@ -427,10 +441,10 @@ export const cards = sqliteTable(
       'card_placement_all_or_none',
       sql`(${table.physicalPage} IS NULL AND ${table.row} IS NULL AND ${table.column} IS NULL) OR (${table.physicalPage} IS NOT NULL AND ${table.row} IS NOT NULL AND ${table.column} IS NOT NULL)`,
     ),
-    check('card_source_valid', sql`${table.source} IN ('tcgdex', 'custom')`),
+    check('card_source_valid', sql`${table.source} IN ('tcgdex', 'pokemontcg', 'custom')`),
     check(
-      'card_tcgdex_identity_required',
-      sql`(${table.source} != 'tcgdex') OR (${table.providerCardId} IS NOT NULL AND ${table.providerSetId} IS NOT NULL)`,
+      'card_provider_identity_required',
+      sql`(${table.source} NOT IN ('tcgdex', 'pokemontcg')) OR (${table.providerCardId} IS NOT NULL AND ${table.providerSetId} IS NOT NULL)`,
     ),
     check(
       'card_custom_identity_absent',
@@ -523,11 +537,11 @@ export const watchlistEntries = sqliteTable(
     ),
     check(
       'watchlist_entry_source_valid',
-      sql`${table.source} IS NULL OR ${table.source} IN ('tcgdex', 'custom')`,
+      sql`${table.source} IS NULL OR ${table.source} IN ('tcgdex', 'pokemontcg', 'custom')`,
     ),
     check(
-      'watchlist_entry_tcgdex_identity_required',
-      sql`${table.source} != 'tcgdex' OR (${table.providerCardId} IS NOT NULL AND ${table.providerSetId} IS NOT NULL)`,
+      'watchlist_entry_provider_identity_required',
+      sql`${table.source} NOT IN ('tcgdex', 'pokemontcg') OR (${table.providerCardId} IS NOT NULL AND ${table.providerSetId} IS NOT NULL)`,
     ),
     check(
       'watchlist_entry_custom_identity_absent',

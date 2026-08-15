@@ -324,8 +324,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Search the TCGdex card catalog
-         * @description Searches TCGdex through the backend (story 11) and returns normalized catalog cards in the provider's original order, without application-level pagination or truncation. Story 41 adds the optional `language` parameter and, for `language=ja`, an automatic English-to-Japanese Pokémon species name translation applied to `query` before searching TCGdex. Story 41 also adds the optional `includeTcgPocket` parameter, which defaults to `false` (Pokémon TCG Pocket cards are excluded from results unless explicitly requested).
+         * Search the card catalog
+         * @description Searches a card catalog provider through the backend and returns normalized catalog cards in that provider's original order, without application-level pagination or truncation. Story 43 adds the optional `provider` parameter, letting the caller pick the Pokémon TCG API (pokemontcg.io, default) or TCGdex as an independent source switch rather than an automatic fallback. Story 41 adds the optional `language` parameter and, for `language=ja`, an automatic English-to-Japanese Pokémon species name translation applied to `query` before searching TCGdex; both `language` and `includeTcgPocket` below are accepted but ignored (not errors) when `provider=pokemontcg`, since pokemontcg.io has no TCG Pocket-set concept and its card data is English-only. Story 41 also adds the optional `includeTcgPocket` parameter, which defaults to `false` (Pokémon TCG Pocket cards are excluded from results unless explicitly requested).
          */
         get: operations["searchCardCatalog"];
         put?: never;
@@ -1336,12 +1336,15 @@ export interface components {
             cardIds: string[];
             acquired: boolean;
         };
-        /** @description A normalized TCGdex catalog card (story 11), returned by `GET /card-catalog/search` and submitted as-is (plus variation and placement) to create a TCGdex-sourced binder card. */
+        /** @description A normalized catalog card returned by `GET /card-catalog/search` (TCGdex, story 11; pokemontcg.io, story 43) and submitted as-is (plus variation and placement) to create a provider-sourced binder card via `POST /binders/{binderId}/cards/bulk`. */
         TcgDexCatalogCard: {
+            source: components["schemas"]["CardSearchProvider"];
             name: string;
             setName: string | null;
             localNumber: string | null;
+            /** @description The provider's own card identifier - TCGdex's card `id`, or, for `pokemontcg`, pokemontcg.io's own card `id` (story 43). */
             providerCardId: string;
+            /** @description The provider's own set identifier - TCGdex's set id, or, for `pokemontcg`, that card's pokemontcg.io `set.id` (story 43). */
             providerSetId: string;
             /**
              * Format: uri
@@ -1349,6 +1352,11 @@ export interface components {
              */
             imageUrl: string;
         };
+        /**
+         * @description Which card catalog provider a search or creation request targets (story 43): the Pokémon TCG API (pokemontcg.io, default) or TCGdex.
+         * @enum {string}
+         */
+        CardSearchProvider: "tcgdex" | "pokemontcg";
         /**
          * @description Which TCGdex-language dataset a card-catalog search targets (story 41).
          * @enum {string}
@@ -1366,7 +1374,7 @@ export interface components {
             row: number;
             column: number;
         };
-        /** @description `POST /binders/{binderId}/cards/bulk`'s request body (stories 17 and 18): the checked subset of a TCGdex catalog search, in search-result order, plus one optional shared variation applied to every created card and one optional target placement applied only to the first array element. */
+        /** @description `POST /binders/{binderId}/cards/bulk`'s request body (stories 17 and 18): the checked subset of a card catalog search (TCGdex or pokemontcg.io, story 43), in search-result order, plus one optional shared variation applied to every created card and one optional target placement applied only to the first array element. */
         BulkCreateCardsRequest: {
             cards: components["schemas"]["TcgDexCatalogCard"][];
             variation?: string | null;
@@ -1472,8 +1480,11 @@ export interface components {
             name: string;
             setName: string | null;
             localNumber: string | null;
-            /** @enum {string} */
-            source: "tcgdex" | "custom";
+            /**
+             * @description Story 43 adds `pokemontcg` alongside the original `tcgdex`/ `custom` values.
+             * @enum {string}
+             */
+            source: "tcgdex" | "pokemontcg" | "custom";
             providerCardId: string | null;
             providerSetId: string | null;
             variation: string | null;
@@ -1519,8 +1530,11 @@ export interface components {
             name: string;
             setName: string | null;
             localNumber: string | null;
-            /** @enum {string} */
-            source: "tcgdex" | "custom";
+            /**
+             * @description Story 43 adds `pokemontcg` alongside the original `tcgdex`/ `custom` values.
+             * @enum {string}
+             */
+            source: "tcgdex" | "pokemontcg" | "custom";
             providerCardId: string | null;
             providerSetId: string | null;
             variation: string | null;
@@ -1573,7 +1587,7 @@ export interface components {
              */
             image?: string;
         };
-        /** @description `POST /watchlist-entries/bulk`'s request body (story 45): the checked subset of a TCGdex catalog search, in search-result order, plus one optional shared variation applied to every created entry - mirroring `BulkCreateCardsRequest` minus placement and acquisition, which have no meaning for a binder-less entry. */
+        /** @description `POST /watchlist-entries/bulk`'s request body (story 45): the checked subset of a card catalog search (TCGdex or pokemontcg.io, story 43), in search-result order, plus one optional shared variation applied to every created entry - mirroring `BulkCreateCardsRequest` minus placement and acquisition, which have no meaning for a binder-less entry. */
         BulkCreateWatchlistEntriesRequest: {
             cards: components["schemas"]["TcgDexCatalogCard"][];
             variation?: string | null;
@@ -2740,9 +2754,11 @@ export interface operations {
         parameters: {
             query: {
                 query: string;
-                /** @description Defaults to `en` when omitted. For `ja`, the backend first attempts to translate `query` as an English Pokémon species name (see `CardSearchResponse.translationWarning`). */
+                /** @description Defaults to `pokemontcg` when omitted (story 43). */
+                provider?: components["schemas"]["CardSearchProvider"];
+                /** @description Defaults to `en` when omitted. For `ja`, the backend first attempts to translate `query` as an English Pokémon species name (see `CardSearchResponse.translationWarning`). Ignored when `provider=pokemontcg`. */
                 language?: components["schemas"]["CardSearchLanguage"];
-                /** @description Defaults to `false` when omitted. When `false`, cards belonging to a Pokémon TCG Pocket set (TCGdex's `tcgp` serie) are excluded from results; when `true`, they're included alongside all other matches. */
+                /** @description Defaults to `false` when omitted. When `false`, cards belonging to a Pokémon TCG Pocket set (TCGdex's `tcgp` serie) are excluded from results; when `true`, they're included alongside all other matches. Ignored when `provider=pokemontcg`. */
                 includeTcgPocket?: boolean;
             };
             header?: never;

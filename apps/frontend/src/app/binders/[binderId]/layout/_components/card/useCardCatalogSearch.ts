@@ -7,7 +7,12 @@ import {
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useMemo, useRef, useState, type UIEvent } from 'react';
 
-import { searchCardCatalog, type CardSearchLanguage, type TcgDexCatalogCard } from '@/lib/api';
+import {
+  searchCardCatalog,
+  type CardSearchLanguage,
+  type CardSearchProvider,
+  type TcgDexCatalogCard,
+} from '@/lib/api';
 import { toProblemDetailsInfo, useDelayedLoading, useToastContext } from '@/shared/feedback';
 
 // The number of results per virtualized row. Not a shared/application
@@ -50,9 +55,11 @@ let lastScrollOffset = 0;
 // self-contained concern independent of the rest of that component's
 // state (selection, manual entry, submission).
 export function useCardCatalogSearch({
+  cardSearchProvider,
   cardSearchLanguage,
   includeTcgPocket,
 }: {
+  cardSearchProvider: CardSearchProvider;
   cardSearchLanguage: CardSearchLanguage;
   includeTcgPocket: boolean;
 }) {
@@ -127,7 +134,13 @@ export function useCardCatalogSearch({
     // before `showLoading` itself flips true.
     setHasCompletedSearch(false);
 
-    searchCardCatalog(trimmed, cardSearchLanguage, includeTcgPocket, controller.signal)
+    searchCardCatalog(
+      trimmed,
+      cardSearchProvider,
+      cardSearchLanguage,
+      includeTcgPocket,
+      controller.signal,
+    )
       .then(({ results: catalogCards, translationWarning: missedTranslation }) => {
         setResults(catalogCards);
         setTranslationWarning(missedTranslation);
@@ -144,13 +157,20 @@ export function useCardCatalogSearch({
     return () => {
       controller.abort();
     };
-    // `cardSearchLanguage`/`includeTcgPocket` in the dependency array is
-    // what satisfies planning.md's "changing either toggle immediately
-    // re-searches the current trimmed query... without waiting for
-    // CARD_SEARCH_DEBOUNCE_MS" - a toggle flip re-runs this effect using
-    // whatever `debouncedQuery` already holds, rather than waiting for a new
-    // debounce cycle.
-  }, [debouncedQuery, cardSearchLanguage, includeTcgPocket, markFailed, dismiss]);
+    // `cardSearchProvider`/`cardSearchLanguage`/`includeTcgPocket` in the
+    // dependency array is what satisfies planning.md's "changing either
+    // toggle immediately re-searches the current trimmed query... without
+    // waiting for CARD_SEARCH_DEBOUNCE_MS" - a toggle flip (or a source
+    // switch, story 43) re-runs this effect using whatever `debouncedQuery`
+    // already holds, rather than waiting for a new debounce cycle.
+  }, [
+    debouncedQuery,
+    cardSearchProvider,
+    cardSearchLanguage,
+    includeTcgPocket,
+    markFailed,
+    dismiss,
+  ]);
 
   // Chunks the flat results list into fixed-size rows for the virtualizer,
   // which measures whole rows rather than individual cards.

@@ -3,6 +3,7 @@
 import {
   CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
   CARD_SEARCH_LANGUAGE_DEFAULT,
+  CARD_SEARCH_PROVIDER_DEFAULT,
 } from '@binder-project-planner/shared';
 import { useRouter } from 'next/navigation';
 import {
@@ -23,6 +24,7 @@ import {
   type Binder,
   type Card,
   type CardSearchLanguage,
+  type CardSearchProvider,
   type UpdateBinderResult,
 } from '@/lib/api';
 import {
@@ -132,6 +134,12 @@ export function BinderRouteProvider({
   // the same way as `cardSearchLanguage` above.
   const [includeTcgPocket, setIncludeTcgPocket] = useState<boolean>(
     CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT,
+  );
+  // Story 43's card-selection modal source dropdown (TCGdex or
+  // pokemontcg.io) - ephemeral, scoped the same way as `cardSearchLanguage`
+  // above.
+  const [cardSearchProvider, setCardSearchProvider] = useState<CardSearchProvider>(
+    CARD_SEARCH_PROVIDER_DEFAULT,
   );
 
   const showLoading = useDelayedLoading(status === 'loading');
@@ -344,6 +352,8 @@ export function BinderRouteProvider({
       setCardSearchLanguage,
       includeTcgPocket,
       setIncludeTcgPocket,
+      cardSearchProvider,
+      setCardSearchProvider,
       createArt: artMutations.createArt,
       pendingUnplacedArtIds: artMutations.pendingUnplacedArtIds,
       artCreateRestore: artMutations.artCreateRestore,
@@ -399,6 +409,7 @@ export function BinderRouteProvider({
     layoutMovement.redoLayoutMovement,
     cardSearchLanguage,
     includeTcgPocket,
+    cardSearchProvider,
     artMutations.createArt,
     artMutations.pendingUnplacedArtIds,
     artMutations.artCreateRestore,

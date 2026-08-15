@@ -47,6 +47,7 @@ This index maps every story file to its current bucket.
 | 40    | Add summary stats on Binder Layout Page                                 | [docs/stories/completed/2026-08-03-40-add-summary-stats-on-binder-layout-page.md](completed/2026-08-03-40-add-summary-stats-on-binder-layout-page.md)                                                               |
 | 41    | Filter card search by TCG Pocket inclusion and language                 | [docs/stories/completed/2026-08-01-41-filter-card-search-by-tcg-pocket-inclusion-and-language.md](completed/2026-08-01-41-filter-card-search-by-tcg-pocket-inclusion-and-language.md)                               |
 | 42    | Preview binder layout and multi-slot art while editing binder settings  | [docs/stories/completed/2026-08-03-42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md](completed/2026-08-03-42-preview-binder-layout-and-multi-slot-art-while-editing-binder-settings.md) |
+| 43    | Add a card from other API sources                                       | [docs/stories/completed/2026-08-14-43-add-a-card-from-other-api-sources.md](completed/2026-08-14-43-add-a-card-from-other-api-sources.md)                                                                           |
 | 44    | Delete custom art finance cost entries                                  | [docs/stories/completed/2026-08-14-44-delete-custom-art-finance-cost-entries.md](completed/2026-08-14-44-delete-custom-art-finance-cost-entries.md)                                                                 |
 | 45    | What I'm looking for section                                            | [docs/stories/completed/2026-08-14-45-what-im-looking-for-section.md](completed/2026-08-14-45-what-im-looking-for-section.md)                                                                                       |
 | 46    | Bulk acquire cards                                                      | [docs/stories/completed/2026-08-12-46-bulk-acquire-cards.md](completed/2026-08-12-46-bulk-acquire-cards.md)                                                                                                         |
@@ -57,11 +58,10 @@ This index maps every story file to its current bucket.
 
 ## Ready For Dev
 
-| Story | Title                                                 | File                                                                                                                                                                    |
-| ----- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 43    | Add a card from other API sources                   | [docs/stories/ready-for-dev/43-add-a-card-from-other-api-sources.md](ready-for-dev/43-add-a-card-from-other-api-sources.md)                                            |
-| 47    | Package and export the application as an executable | [docs/stories/ready-for-dev/47-package-and-export-the-application-as-an-executable.md](ready-for-dev/47-package-and-export-the-application-as-an-executable.md)       |
-| 48    | House cleaning                                      | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md)                                                                                   |
+| Story | Title                                               | File                                                                                                                                                            |
+| ----- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 47    | Package and export the application as an executable | [docs/stories/ready-for-dev/47-package-and-export-the-application-as-an-executable.md](ready-for-dev/47-package-and-export-the-application-as-an-executable.md) |
+| 48    | House cleaning                                      | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md)                                                                           |
 
 ## Needs Refinement
 

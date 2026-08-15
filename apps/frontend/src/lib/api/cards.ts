@@ -8,6 +8,7 @@ import type {
   CardPriceUpdate,
   CardPriceUpdateOutcome,
   CardSearchLanguage,
+  CardSearchProvider,
   CardSearchResponse,
   TcgDexCatalogCard,
 } from './types';
@@ -27,22 +28,26 @@ export async function listBinderCards(binderId: string, signal?: AbortSignal): P
   return data;
 }
 
-// Searches the TCGdex card catalog through `GET /card-catalog/search`
-// (story 11), used by the card-selection modal's debounced search box.
-// Accepts an `AbortSignal` so the modal can cancel a stale in-flight search
-// as soon as a newer query is typed. `language` (story 41) defaults to
-// English on the backend when omitted; the response's `translationWarning`
-// flag is only ever meaningful for a `ja` search. `includeTcgPocket`
-// (story 41) defaults to `false` on the backend when omitted, excluding
-// Pokémon TCG Pocket cards from results.
+// Searches the card catalog through `GET /card-catalog/search` (story 11's
+// TCGdex provider, story 43's pokemontcg.io alternative), used by the
+// card-selection modal's debounced search box. Accepts an `AbortSignal` so
+// the modal can cancel a stale in-flight search as soon as a newer query is
+// typed. `provider` (story 43) defaults to `pokemontcg` on the backend when
+// omitted. `language` (story 41) defaults to English on the backend when
+// omitted and is ignored for `provider: 'pokemontcg'`; the response's
+// `translationWarning` flag is only ever meaningful for a `ja` TCGdex
+// search. `includeTcgPocket` (story 41) defaults to `false` on the backend
+// when omitted, excluding Pokémon TCG Pocket cards from TCGdex results, and
+// is likewise ignored for `provider: 'pokemontcg'`.
 export async function searchCardCatalog(
   query: string,
+  provider?: CardSearchProvider,
   language?: CardSearchLanguage,
   includeTcgPocket?: boolean,
   signal?: AbortSignal,
 ): Promise<CardSearchResponse> {
   const { data, error } = await apiClient.GET('/card-catalog/search', {
-    params: { query: { query, language, includeTcgPocket } },
+    params: { query: { query, provider, language, includeTcgPocket } },
     signal,
   });
 

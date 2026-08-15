@@ -1,13 +1,13 @@
 # 43. Add a card from other API sources
 
-**Status:** Not started
+**Status:** Done (2026-08-14 20:36 EDT)
 
 #### Acceptance criteria
 
 - Every existing TCGdex-only card search (the card-selection modal from Story 11, bulk
   add from Stories 17/18, and the watchlist's own TCGdex search from Story 45) gains a
-  source dropdown letting the user pick which API to search: TCGdex (default) or the
-  Pokémon TCG API (pokemontcg.io). This is a source switch the user picks, not an
+  source dropdown letting the user pick which API to search: the Pokémon TCG API
+  (pokemontcg.io, default) or TCGdex. This is a source switch the user picks, not an
   automatic fallback.
 - Searching a Pokémon name (e.g. "Umbreon") while the Pokémon TCG API source is selected
   returns a set of matching cards with their images, mirroring the existing TCGdex
@@ -15,9 +15,10 @@
   toast on error, the no-results message when a completed search has zero matches, and
   the same virtualized result grid.
 - The first time the card-selection modal is opened in a binder visit, the source
-  dropdown defaults to TCGdex. Reopening the modal retains the source last selected,
-  even though the existing empty-query, no-results reset still applies to the search
-  itself — mirroring Story 41's TCG Pocket-inclusion/language toggle persistence exactly.
+  dropdown defaults to the Pokémon TCG API. Reopening the modal retains the source last
+  selected, even though the existing empty-query, no-results reset still applies to the
+  search itself — mirroring Story 41's TCG Pocket-inclusion/language toggle persistence
+  exactly.
 - An Add More or Bulk Add session (Stories 17 and 18) retains the source in effect when
   that session's searches were performed, mirroring Story 41's same rule for its toggles.
 - Story 41's TCG Pocket-inclusion and language toggles are hidden entirely (not merely

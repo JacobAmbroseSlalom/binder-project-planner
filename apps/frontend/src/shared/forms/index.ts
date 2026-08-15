@@ -17,3 +17,6 @@ export { TagsInput } from './TagsInput';
 // Story 42's live, read-only previews (layout spread + art border outline),
 // rendered by `BinderDetailsForm` itself.
 export { BinderSettingsLayoutPreview, BinderSettingsArtPreview } from './BinderSettingsPreview';
+// Story 43's card-search source dropdown (TCGdex or pokemontcg.io), shared
+// by the card-selection modal and the watchlist's own card-selection modal.
+export { CardSearchProviderSelect } from './CardSearchProviderSelect';

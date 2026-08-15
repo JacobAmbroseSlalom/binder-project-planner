@@ -128,12 +128,18 @@ export function CardSelectionModal({
 }) {
   // Story 41's language toggle lives in the route context (rather than as
   // local state) so it survives this modal's own mount/unmount cycle within
-  // the same binder visit. The TCG Pocket inclusion toggle lives there for
-  // the same reason.
-  const { cardSearchLanguage, setCardSearchLanguage, includeTcgPocket, setIncludeTcgPocket } =
-    useBinderRouteContext();
+  // the same binder visit. The TCG Pocket inclusion toggle and story 43's
+  // source dropdown live there for the same reason.
+  const {
+    cardSearchLanguage,
+    setCardSearchLanguage,
+    includeTcgPocket,
+    setIncludeTcgPocket,
+    cardSearchProvider,
+    setCardSearchProvider,
+  } = useBinderRouteContext();
 
-  // The TCGdex catalog search itself - see `useCardCatalogSearch`.
+  // The catalog search itself - see `useCardCatalogSearch`.
   const {
     query,
     setQuery,
@@ -147,7 +153,7 @@ export function CardSelectionModal({
     scrollContainerRef,
     handleScroll,
     resetSearch,
-  } = useCardCatalogSearch({ cardSearchLanguage, includeTcgPocket });
+  } = useCardCatalogSearch({ cardSearchProvider, cardSearchLanguage, includeTcgPocket });
 
   // The results checkbox multi-select - see `useCardSelectionState`.
   const {
@@ -483,6 +489,8 @@ export function CardSelectionModal({
 
         {viewMode === 'search' ? (
           <SearchResultsView
+            cardSearchProvider={cardSearchProvider}
+            onCardSearchProviderChange={setCardSearchProvider}
             cardSearchLanguage={cardSearchLanguage}
             onCardSearchLanguageChange={setCardSearchLanguage}
             includeTcgPocket={includeTcgPocket}

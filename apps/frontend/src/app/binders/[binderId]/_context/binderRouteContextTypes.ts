@@ -3,6 +3,7 @@ import type {
   Binder,
   Card,
   CardSearchLanguage,
+  CardSearchProvider,
   PlacementCoordinates,
   TcgDexCatalogCard,
   UpdateBinderResult,
@@ -231,6 +232,13 @@ export interface BinderRouteContextValue {
   // above.
   includeTcgPocket: boolean;
   setIncludeTcgPocket: (includeTcgPocket: boolean) => void;
+  // Story 43's card-selection modal source dropdown (TCGdex or
+  // pokemontcg.io): ephemeral React state with the same lifetime and reset
+  // behavior as `cardSearchLanguage`/`includeTcgPocket` above - it's the
+  // toggles above, not this field itself, that get hidden while
+  // `pokemontcg` is selected.
+  cardSearchProvider: CardSearchProvider;
+  setCardSearchProvider: (provider: CardSearchProvider) => void;
   // Creates multi-slot art directly into the unplaced-art section (story
   // 25): inserts an optimistic `Art` item immediately using an object-URL
   // image preview, then replaces it with the backend's authoritative

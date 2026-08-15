@@ -27,6 +27,7 @@ import {
   createPriceFetchBatchCache,
   fetchCardPriceData,
   PokemonTcgAbortedError,
+  PokemonTcgProviderError,
 } from '../integrations/pokemontcg.js';
 import { TcgDexProviderError } from '../integrations/tcgdex.js';
 import { generateWatchlistPdf } from '../pdf/watchlistPdf.js';
@@ -35,8 +36,8 @@ import { mapWithConcurrencyLimit } from './concurrency.js';
 import {
   isUniqueConstraintError,
   removeTemporaryUploads,
+  resolveCardCatalogImageAsset,
   resolveCustomImageAsset,
-  resolveTcgDexImageAsset,
   UnsupportedImageFormatError,
   type ResolvedImageAsset,
 } from './cards.js';
@@ -103,9 +104,11 @@ interface UpdateWatchlistEntryRequestBody {
   price?: number;
 }
 
-// One normalized TCGdex catalog result within a bulk request (story 45),
-// mirroring `cards.ts`'s own `BulkCardItem`.
+// One normalized catalog result within a bulk request (story 45; story 43
+// widens `source` beyond `tcgdex`), mirroring `cards.ts`'s own
+// `BulkCardItem`.
 interface BulkWatchlistCardItem {
+  source: 'tcgdex' | 'pokemontcg';
   name: string;
   setName: string | null;
   localNumber: string | null;
@@ -788,14 +791,14 @@ export function createWatchlistEntriesRouter(
       async (item, index): Promise<BulkWatchlistEntryOutcome> => {
         let asset: ResolvedImageAsset;
         try {
-          asset = await resolveTcgDexImageAsset(
+          asset = await resolveCardCatalogImageAsset(
             database,
             imagesDirectory,
             item,
             neverAbortedSignal,
           );
         } catch (error) {
-          if (error instanceof TcgDexProviderError) {
+          if (error instanceof TcgDexProviderError || error instanceof PokemonTcgProviderError) {
             const status = error.isTimeout ? 504 : 502;
             return { status: 'failed', problem: problem(status, 'Bad Gateway', error.message) };
           }
@@ -810,7 +813,7 @@ export function createWatchlistEntriesRouter(
           name: item.name,
           setName: item.setName,
           localNumber: item.localNumber,
-          source: 'tcgdex',
+          source: item.source,
           providerCardId: item.providerCardId,
           providerSetId: item.providerSetId,
           variation,

@@ -141,6 +141,13 @@
       "when": 1786743624582,
       "tag": "0019_watchlist_entry_sort_order",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "6",
+      "when": 1786749945602,
+      "tag": "0020_pokemontcg_card_source",
+      "breakpoints": true
     }
   ]
 }

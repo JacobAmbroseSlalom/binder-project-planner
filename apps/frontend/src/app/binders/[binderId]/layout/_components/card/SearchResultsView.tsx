@@ -3,19 +3,28 @@
 import { Check } from 'lucide-react';
 import type { RefObject } from 'react';
 
-import { resolveCardImageUrl, type CardSearchLanguage, type TcgDexCatalogCard } from '@/lib/api';
+import {
+  resolveCardImageUrl,
+  type CardSearchLanguage,
+  type CardSearchProvider,
+  type TcgDexCatalogCard,
+} from '@/lib/api';
 import { LoadingIndicator } from '@/shared/feedback';
+import { CardSearchProviderSelect } from '@/shared/forms';
 
 import type { useCardCatalogSearch } from './useCardCatalogSearch';
 
-// `CardSelectionModal`'s search view (stories 11, 17, 18, 41): the search
-// input and its language/TCG-Pocket toggles, the translation-miss warning,
-// the Select All/Deselect All row, and the row-virtualized results grid
-// itself. Extracted from `CardSelectionModal` since this is a large,
-// purely presentational block driven entirely by props (mostly the return
-// value of `useCardCatalogSearch` and `useCardSelectionState`) rather than
-// owning any state of its own.
+// `CardSelectionModal`'s search view (stories 11, 17, 18, 41, 43): the
+// search input, source dropdown, and (TCGdex-only) language/TCG-Pocket
+// toggles, the translation-miss warning, the Select All/Deselect All row,
+// and the row-virtualized results grid itself. Extracted from
+// `CardSelectionModal` since this is a large, purely presentational block
+// driven entirely by props (mostly the return value of
+// `useCardCatalogSearch` and `useCardSelectionState`) rather than owning
+// any state of its own.
 export function SearchResultsView({
+  cardSearchProvider,
+  onCardSearchProviderChange,
   cardSearchLanguage,
   onCardSearchLanguageChange,
   includeTcgPocket,
@@ -41,6 +50,8 @@ export function SearchResultsView({
   onEnterSelectedTile,
   isTileDisabled,
 }: {
+  cardSearchProvider: CardSearchProvider;
+  onCardSearchProviderChange: (provider: CardSearchProvider) => void;
   cardSearchLanguage: CardSearchLanguage;
   onCardSearchLanguageChange: (language: CardSearchLanguage) => void;
   includeTcgPocket: boolean;
@@ -79,46 +90,68 @@ export function SearchResultsView({
           className="flex-1 rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
         />
 
-        {/* Story 41's language toggle: matches the Michi-indicator
-        checkbox convention (styling.instructions.md's "Forms & inputs"
-        section). Defaults to English (`cardSearchLanguage` starts at
-        `CARD_SEARCH_LANGUAGE_DEFAULT`); checking it switches to searching
-        TCGdex's Japanese catalog. */}
-        <label htmlFor="card-search-language-toggle" className="flex shrink-0 items-center gap-2">
-          <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-            <input
-              id="card-search-language-toggle"
-              type="checkbox"
-              checked={cardSearchLanguage === 'ja'}
-              onChange={(event) => onCardSearchLanguageChange(event.target.checked ? 'ja' : 'en')}
-              className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-            />
-            <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-          </span>
-          <span className="text-caption text-neutral-500">Japanese</span>
-        </label>
+        {/* Story 43's source dropdown: TCGdex (default) or pokemontcg.io. */}
+        <CardSearchProviderSelect
+          id="card-search-provider-select"
+          value={cardSearchProvider}
+          onChange={onCardSearchProviderChange}
+        />
 
-        {/* Story 41's TCG Pocket inclusion toggle: same checkbox
-        convention as the language toggle above. Defaults to excluded
-        (`includeTcgPocket` starts at
-        `CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT`); checking it includes
-        Pokémon TCG Pocket cards in results. */}
-        <label
-          htmlFor="card-search-include-tcg-pocket-toggle"
-          className="flex shrink-0 items-center gap-2"
-        >
-          <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
-            <input
-              id="card-search-include-tcg-pocket-toggle"
-              type="checkbox"
-              checked={includeTcgPocket}
-              onChange={(event) => onIncludeTcgPocketChange(event.target.checked)}
-              className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
-            />
-            <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
-          </span>
-          <span className="text-caption text-neutral-500">TCG Pocket</span>
-        </label>
+        {/* Story 41's language/TCG-Pocket toggles only apply to TCGdex
+        (story 43) - pokemontcg.io has no TCG Pocket-set concept and its
+        card data is English-only, so both are hidden entirely (not merely
+        disabled) while `pokemontcg` is selected. Their prior values are
+        preserved underneath (in route/local state, untouched here) and
+        restored automatically if the user switches back to TCGdex. */}
+        {cardSearchProvider === 'tcgdex' && (
+          <>
+            {/* Story 41's language toggle: matches the Michi-indicator
+            checkbox convention (styling.instructions.md's "Forms & inputs"
+            section). Defaults to English (`cardSearchLanguage` starts at
+            `CARD_SEARCH_LANGUAGE_DEFAULT`); checking it switches to
+            searching TCGdex's Japanese catalog. */}
+            <label
+              htmlFor="card-search-language-toggle"
+              className="flex shrink-0 items-center gap-2"
+            >
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                <input
+                  id="card-search-language-toggle"
+                  type="checkbox"
+                  checked={cardSearchLanguage === 'ja'}
+                  onChange={(event) =>
+                    onCardSearchLanguageChange(event.target.checked ? 'ja' : 'en')
+                  }
+                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                />
+                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+              </span>
+              <span className="text-caption text-neutral-500">Japanese</span>
+            </label>
+
+            {/* Story 41's TCG Pocket inclusion toggle: same checkbox
+            convention as the language toggle above. Defaults to excluded
+            (`includeTcgPocket` starts at
+            `CARD_SEARCH_INCLUDE_TCG_POCKET_DEFAULT`); checking it includes
+            Pokémon TCG Pocket cards in results. */}
+            <label
+              htmlFor="card-search-include-tcg-pocket-toggle"
+              className="flex shrink-0 items-center gap-2"
+            >
+              <span className="relative inline-flex size-5 shrink-0 items-center justify-center">
+                <input
+                  id="card-search-include-tcg-pocket-toggle"
+                  type="checkbox"
+                  checked={includeTcgPocket}
+                  onChange={(event) => onIncludeTcgPocketChange(event.target.checked)}
+                  className="peer size-5 appearance-none rounded-standard border border-neutral-500 bg-neutral-800 checked:border-primary checked:bg-primary"
+                />
+                <Check className="pointer-events-none absolute size-4 text-background opacity-0 peer-checked:opacity-100" />
+              </span>
+              <span className="text-caption text-neutral-500">TCG Pocket</span>
+            </label>
+          </>
+        )}
       </div>
 
       {/* Nonblocking translation-miss warning (story 41): rendered inline

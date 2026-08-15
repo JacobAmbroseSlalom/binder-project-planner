@@ -39,7 +39,7 @@ export function createDigestDiskStorage(directory: string): StorageEngine {
       mkdir(directory, { recursive: true })
         .then(() => {
           // A `.tmp`-suffixed random filename, matching the temporary-file
-          // naming convention `resolveTcgDexImageAsset` already uses in
+          // naming convention `resolveCardCatalogImageAsset` already uses in
           // routes/cards.ts; renamed to its final `{assetId}.{extension}`
           // name only once the upload is validated and persisted.
           const tempPath = join(directory, `${randomUUID()}.tmp`);
