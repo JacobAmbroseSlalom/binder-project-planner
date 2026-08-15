@@ -10,7 +10,7 @@ import sharp from 'sharp';
 
 // Story 29's binder-layout PDF generator. Draws from an already-resolved,
 // transactionally consistent snapshot of the binder graph (query and
-// transaction handling live in routes/binders.ts) rather than reaching
+// transaction handling live in routes/binders/exportRoutes.ts) rather than reaching
 // back into the database itself, keeping this module a pure rendering
 // step that's easy to reason about independently of the request/response
 // plumbing around it.

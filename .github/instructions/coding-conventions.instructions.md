@@ -51,3 +51,21 @@ applyTo: '**'
   happening; the comment should add context a reader can't get from the code itself.
 - Keep comments accurate and up to date: when editing a commented code block, update or
   remove its comment if the change makes the comment stale or misleading.
+
+## File size
+
+- Once a file grows past roughly 600 lines, split it into smaller, focused files
+  rather than letting it keep growing.
+- Follow existing split precedents already in the codebase (e.g. a component's own
+  extracted hooks/subcomponents, or a route file's own extracted handler modules)
+  instead of inventing a new structure per file.
+- Frontend splits follow the `_components/`, `_context/`, `_lib/` folder convention
+  (or a co-located top-level hook file) already used under `apps/frontend/src/app`.
+- Backend splits follow a flat domain-folder structure (e.g. `routes/cards.ts` becoming
+  a `routes/cards/` folder of focused sub-files) rather than the frontend's
+  underscore-prefixed convention.
+- Preserve every existing export's name and public shape when splitting a file — other
+  files may import from it by path, so re-export from the original file's path if
+  needed to avoid updating every call site.
+- After a split, verify with the project's typecheck/lint/format commands that no new
+  errors or warnings were introduced.

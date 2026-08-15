@@ -5,7 +5,7 @@
 #### Acceptance criteria
 
 - **Reorganize the codebase.** Re-run the largest-files check first done in an earlier
-  session (frontend-only, ~500-line threshold) against both the frontend and backend
+  session (frontend-only, ~600-line threshold) against both the frontend and backend
   source trees this time (excluding generated/build output such as `.next/`, `dist/`,
   and `drizzle/` migration SQL). Any file still or newly over roughly 500 lines is
   evaluated for splitting into smaller, cohesively-scoped files, following the same

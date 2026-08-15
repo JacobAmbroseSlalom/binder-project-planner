@@ -15,7 +15,7 @@ import { createApp } from '../src/app.js';
 import { createDatabase, type DatabaseConnection } from '../src/database/client.js';
 import { binders } from '../src/database/schema.js';
 
-// Mirrors `toHundredths` in `src/routes/binders.ts` so directly inserted
+// Mirrors `toHundredths` in `src/routes/binders/serialization.ts` so directly inserted
 // rows (bypassing POST /binders) use the same integer-hundredths storage
 // representation the schema's NOT NULL columns require.
 function toHundredths(value: number): number {

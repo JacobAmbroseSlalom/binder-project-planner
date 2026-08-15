@@ -40,7 +40,7 @@ export function createDigestDiskStorage(directory: string): StorageEngine {
         .then(() => {
           // A `.tmp`-suffixed random filename, matching the temporary-file
           // naming convention `resolveCardCatalogImageAsset` already uses in
-          // routes/cards.ts; renamed to its final `{assetId}.{extension}`
+          // routes/cards/imageAssets.ts; renamed to its final `{assetId}.{extension}`
           // name only once the upload is validated and persisted.
           const tempPath = join(directory, `${randomUUID()}.tmp`);
           const hash = createHash('sha256');

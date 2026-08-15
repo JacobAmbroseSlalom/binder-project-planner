@@ -1,10 +1,8 @@
 'use client';
 
 import { DEFAULT_CARD_ACQUIRED } from '@binder-project-planner/shared';
-import { zodResolver } from '@hookform/resolvers/zod';
 import { ArrowLeft, Check, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useEffect, useRef, useState } from 'react';
 
 import { type TcgDexCatalogCard } from '@/lib/api';
 import { useModalFocusTrap } from '@/shared/hooks/useModalFocusTrap';
@@ -12,14 +10,10 @@ import { VariationCombobox } from '@/shared/forms';
 
 import { useBinderRouteContext, type CustomCardFormValues } from '../../../BinderRouteContext';
 import { ManualCardForm } from './ManualCardForm';
-import {
-  defaultManualCardFormValues,
-  manualCardSchema,
-  type ManualCardFormValues,
-} from './manualCardSchema';
 import { SearchResultsView } from './SearchResultsView';
 import { useCardCatalogSearch } from './useCardCatalogSearch';
 import { useCardSelectionState } from './useCardSelectionState';
+import { useManualCardEntry } from './useManualCardEntry';
 
 // The custom card-selection modal (stories 11 and 12): searches the TCGdex
 // catalog through a debounced, cancellable search box and lets the user
@@ -187,10 +181,6 @@ export function CardSelectionModal({
   // disables this modal's own controls while awaited, independent of
   // whatever other pending state the binder context tracks.
   const [isAddMoreSubmitting, setIsAddMoreSubmitting] = useState(false);
-  // Mirrors `isAddMoreSubmitting` for the manual-entry view's own Add More
-  // (story 18) - a separate flag since the two views' submissions are
-  // mutually exclusive but not the same request type.
-  const [isCustomAddMoreSubmitting, setIsCustomAddMoreSubmitting] = useState(false);
   // Story 17's session-scoped slot-consumption tracking: `true` once any
   // submission (Add Card or Add More, from either view) has been made in
   // this modal session, regardless of outcome - every later submission
@@ -209,43 +199,6 @@ export function CardSelectionModal({
   const [viewMode, setViewMode] = useState<'search' | 'manual'>(
     initialManualEntry ? 'manual' : 'search',
   );
-  const [customCardFile, setCustomCardFile] = useState<File | null>(
-    initialManualEntry?.file ?? null,
-  );
-  // Shown only after a submit attempt without a file selected yet
-  // (planning.md: "An image is required before a custom card can be
-  // added").
-  const [fileError, setFileError] = useState<string | undefined>(undefined);
-  const manualForm = useForm<ManualCardFormValues>({
-    resolver: zodResolver(manualCardSchema),
-    defaultValues: initialManualEntry
-      ? {
-          name: initialManualEntry.values.name,
-          setName: initialManualEntry.values.setName ?? '',
-          localNumber: initialManualEntry.values.localNumber ?? '',
-        }
-      : defaultManualCardFormValues,
-  });
-
-  // A local object-URL preview of the selected file (decoupled from the
-  // separate object URL the route context creates for the optimistic
-  // card's `imageUrl` once submitted), so this modal's own preview never
-  // leaks a blob URL. `URL.createObjectURL` is a pure, synchronous
-  // derivation of `customCardFile`, so it's computed via `useMemo` (not
-  // `useEffect` + `useState`) - storing it as effect-driven state would
-  // trip React Compiler's `react-hooks/set-state-in-effect` rule, since
-  // nothing here is actually waiting on an external async event. A
-  // separate cleanup-only effect (no `setState` call of its own) revokes
-  // each created url once it's no longer the current one or on unmount.
-  const customCardPreviewUrl = useMemo(
-    () => (customCardFile ? URL.createObjectURL(customCardFile) : null),
-    [customCardFile],
-  );
-  useEffect(() => {
-    return () => {
-      if (customCardPreviewUrl) URL.revokeObjectURL(customCardPreviewUrl);
-    };
-  }, [customCardPreviewUrl]);
 
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -293,6 +246,31 @@ export function CardSelectionModal({
       column: initialTarget.column as number,
     };
   }
+
+  // The manual-entry view's own form/file/preview state and Add-Card/Add-
+  // More submission handlers - see `useManualCardEntry`.
+  const {
+    customCardFile,
+    customCardPreviewUrl,
+    fileError,
+    manualForm,
+    isCustomAddMoreSubmitting,
+    handleCustomCardFileChange,
+    handleManualSubmit,
+    handleManualAddMore,
+  } = useManualCardEntry({
+    initialManualEntry,
+    onSubmitCustomCard,
+    onSubmitCustomCardAddMore,
+    resolveTargetPlacement,
+    markSubmitted: () => {
+      hasSubmittedRef.current = true;
+    },
+    variation,
+    acquired,
+    setVariation,
+    setAcquired,
+  });
 
   // Shared disabled-state gate for the search view's Add Card action,
   // reused by both the footer button and the result-tile Enter shortcut
@@ -351,11 +329,6 @@ export function CardSelectionModal({
     setViewMode('search');
   }
 
-  function handleCustomCardFileChange(nextFile: File | null) {
-    setCustomCardFile(nextFile);
-    if (nextFile) setFileError(undefined);
-  }
-
   // Lets the user paste a copied image directly into the manual-entry
   // view's image field (e.g. Cmd/Ctrl+V after copying an image from
   // another app or browser tab), as an alternative to browsing for a file.
@@ -379,75 +352,6 @@ export function CardSelectionModal({
       return;
     }
   }
-
-  // Submits the manual-entry form's "Add Card" (story 12). A file is
-  // required independently of the RHF/Zod-validated text fields (see
-  // `manualCardSchema.ts`'s comment), so it's checked here rather than
-  // through the form's own validation. `hasSubmittedRef` (read via
-  // `resolveTargetPlacement()` and written below) is only ever touched once
-  // this callback actually runs, on a real form submission triggered by a
-  // click handler - never during render, so the disable below silences a
-  // false positive from the compiler's conservative analysis of
-  // `react-hook-form`'s `handleSubmit` wrapper.
-  // eslint-disable-next-line react-hooks/refs
-  const handleManualSubmit = manualForm.handleSubmit((values) => {
-    if (!customCardFile) {
-      setFileError('An image is required.');
-      return;
-    }
-    const targetPlacement = resolveTargetPlacement();
-    hasSubmittedRef.current = true;
-    onSubmitCustomCard(
-      {
-        name: values.name,
-        setName: values.setName.trim() || null,
-        localNumber: values.localNumber.trim() || null,
-        variation: variation.trim() || null,
-        acquired,
-      },
-      customCardFile,
-      targetPlacement,
-    );
-  });
-
-  // The manual-entry view's own "Add More" (story 18), mirroring
-  // `handleAddMoreCards`: awaited so the form (and its selected file) only
-  // clears on complete success, keeping everything in place for
-  // correction on failure. See the matching comment on `handleManualSubmit`
-  // above; the same false positive applies here.
-  // eslint-disable-next-line react-hooks/refs
-  const handleManualAddMore = manualForm.handleSubmit(async (values) => {
-    if (!customCardFile) {
-      setFileError('An image is required.');
-      return;
-    }
-    if (isCustomAddMoreSubmitting) return;
-    const targetPlacement = resolveTargetPlacement();
-    hasSubmittedRef.current = true;
-    setIsCustomAddMoreSubmitting(true);
-    try {
-      const succeeded = await onSubmitCustomCardAddMore(
-        {
-          name: values.name,
-          setName: values.setName.trim() || null,
-          localNumber: values.localNumber.trim() || null,
-          variation: variation.trim() || null,
-          acquired,
-        },
-        customCardFile,
-        targetPlacement,
-      );
-      if (succeeded) {
-        manualForm.reset(defaultManualCardFormValues);
-        setCustomCardFile(null);
-        setVariation('');
-        setAcquired(DEFAULT_CARD_ACQUIRED);
-        setFileError(undefined);
-      }
-    } finally {
-      setIsCustomAddMoreSubmitting(false);
-    }
-  });
 
   return (
     // The dimmed backdrop (styling.instructions.md's "Elevation & surfaces"

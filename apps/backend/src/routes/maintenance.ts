@@ -9,8 +9,8 @@ import { art, artImageAssets, cardImageAssets, cards } from '../database/schema.
 
 // Orphaned asset rows/files younger than this are skipped even though
 // nothing currently references them - an image-asset row (and its file)
-// is created before its owning `cards`/`art` row in routes/cards.ts and
-// routes/art.ts, so a request still in flight briefly looks exactly like
+// is created before its owning `cards`/`art` row in routes/cards/ and
+// routes/art/, so a request still in flight briefly looks exactly like
 // an orphan; this guards against deleting one out from under it.
 const MINIMUM_ORPHAN_AGE_MS = 5 * 60 * 1000;
 

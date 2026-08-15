@@ -208,7 +208,7 @@ export const binders = sqliteTable(
     // Story 34: "Add custom art finances". Nullable foreign keys to this
     // binder's currently selected shared physical-cost entries - null means
     // "none selected yet". Selecting one of these is never restricted by
-    // `locked` (see routes/binders.ts's `isRestrictedFieldsOnlyUpdate`),
+    // `locked` (see routes/binders/updateRoute.ts's `isRestrictedFieldsOnlyUpdate`),
     // mirroring the acquisition/price carve-out story 32 documents for a
     // future story. No `onDelete` action is declared yet since this story's
     // catalogs support create/edit only (no delete) - story 44 will revisit
@@ -250,7 +250,7 @@ export const binders = sqliteTable(
     // Story 24: width/height-per-slot must be positive, and the one-slot
     // formula (`perSlot + base`) must stay positive even when its base is
     // negative - belt-and-suspenders alongside the application-level
-    // cross-field validation in routes/binders.ts.
+    // cross-field validation in routes/binders/validation.ts.
     check('binder_width_per_slot_positive', sql`${table.widthPerSlotHundredths} > 0`),
     check('binder_height_per_slot_positive', sql`${table.heightPerSlotHundredths} > 0`),
     check(
@@ -279,7 +279,7 @@ export const binders = sqliteTable(
     // Story 20: the preview page must be a valid physical page for this
     // binder's own stored page count (1 through pages * 2), belt-and-
     // suspenders alongside the application-level validation/auto-reset in
-    // routes/binders.ts.
+    // routes/binders/updateRoute.ts.
     check(
       'binder_preview_physical_page_range',
       sql`${table.previewPhysicalPage} >= 1 AND ${table.previewPhysicalPage} <= (${table.pages} * 2)`,

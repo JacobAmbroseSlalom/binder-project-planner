@@ -4,7 +4,7 @@
 // percentage integer-hundredths convention elsewhere in the backend, while
 // REST contracts use human-readable decimal dollars (e.g. `12.50`). These
 // two helpers convert between the two representations at the API boundary,
-// mirroring routes/binders.ts's own `toHundredths`/`fromHundredths` pair.
+// mirroring routes/binders/serialization.ts's own `toHundredths`/`fromHundredths` pair.
 // `Math.round` already rounds half-up for the non-negative dollar amounts
 // this app deals with, matching the story's documented rounding rule.
 export function toCents(dollars: number): number {

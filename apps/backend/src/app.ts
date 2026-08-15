@@ -9,14 +9,14 @@ import { pinoHttp } from 'pino-http';
 
 import type { DatabaseConnection } from './database/client.js';
 import { openApiSpecificationPath } from './paths.js';
-import { createArtRouter } from './routes/art.js';
-import { createBindersRouter } from './routes/binders.js';
-import { createCardsRouter } from './routes/cards.js';
+import { createArtRouter } from './routes/art/index.js';
+import { createBindersRouter } from './routes/binders/index.js';
+import { createCardsRouter } from './routes/cards/index.js';
 import { createCostEntriesRouter } from './routes/costEntries.js';
 import { createDataTransferRouter } from './routes/dataTransfer.js';
 import { createFinanceSettingsRouter } from './routes/financeSettings.js';
 import { createMaintenanceRouter } from './routes/maintenance.js';
-import { createWatchlistEntriesRouter } from './routes/watchlistEntries.js';
+import { createWatchlistEntriesRouter } from './routes/watchlistEntries/index.js';
 import { createDigestDiskStorage } from './uploads/digestDiskStorage.js';
 
 interface CreateAppOptions {
@@ -59,7 +59,8 @@ export function createApp({
       validateRequests: {
         // Body validation's ajv instance leaves `coerceTypes` off by
         // default (unlike the always-coerced query/path parameter
-        // instance - see routes/cards.ts's `includeTcgPocket` comment).
+        // instance - see routes/cards/catalogSearchRoute.ts's
+        // `includeTcgPocket` comment).
         // Story 12's multipart custom-card fields (e.g. `physicalPage`)
         // arrive as strings from the multipart form, so coercion needs to
         // be enabled here for them to validate against their `integer`

@@ -14,7 +14,8 @@ import {
 // Story 30's print-art PDF generator. Like Story 29's
 // `generateBinderLayoutPdf`, draws from an already-resolved, transactionally
 // consistent snapshot (query and transaction handling live in
-// routes/binders.ts) rather than reaching back into the database itself.
+// routes/binders/exportRoutes.ts and routes/binders/artPrintPageCountRoute.ts)
+// rather than reaching back into the database itself.
 // Unlike the binder-layout export, page placement here isn't a fixed grid -
 // it comes from `artPrintPacking.ts`'s deterministic packing heuristic,
 // which may also tile a piece of art too large for one page across several.

@@ -1,65 +1,19 @@
 'use client';
 
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 
-import {
-  createCustomCard,
-  deleteCard,
-  duplicateCard as duplicateCardRequest,
-  moveCards,
-  updateCardAcquired as updateCardAcquiredRequest,
-  updateCardDetails as updateCardDetailsRequest,
-  updateCardsAcquisition as updateCardsAcquisitionRequest,
-  updateCardVariation as updateCardVariationRequest,
-  type Card,
-  type CardPositionUpdate,
-  type PlacementCoordinates,
-  type UpdateCardDetailsRequest,
-} from '@/lib/api';
-import { useSaveStatusToast } from '@/shared/feedback';
+import type { Card } from '@/lib/api';
 
-import { isLockedBinderConflict } from './lockedBinderConflict';
-import { placementKey } from './placementKey';
 import { useBulkCardAdd } from './useBulkCardAdd';
+import { useCardDuplication } from './useCardDuplication';
+import { useCardFieldEdits } from './useCardFieldEdits';
+import { useCardMovement } from './useCardMovement';
+import { useCardRemoval } from './useCardRemoval';
+import { useCustomCardAssignment } from './useCustomCardAssignment';
 import type { LayoutMovementHistoryAction } from './useLayoutMovement';
 
 export type { BulkAddFailedCard, BulkAddFailure, BulkSelectionRestore } from './useBulkCardAdd';
-
-interface CardMovementActionEntry {
-  cardId: string;
-  from: PlacementCoordinates;
-  to: PlacementCoordinates;
-}
-
-type CardMovementActionEntries =
-  [CardMovementActionEntry] | [CardMovementActionEntry, CardMovementActionEntry];
-
-// The manual-entry form's text-field values (story 12) - excludes the
-// image file (handled separately as a `File`). `variation` (story 16) is
-// entered through the same shared add-card modal field the TCGdex search
-// view uses, rather than a separate manual-entry-only field.
-export interface CustomCardFormValues {
-  name: string;
-  setName: string | null;
-  localNumber: string | null;
-  variation: string | null;
-  // Story 36: the modal's "Acquired" checkbox value, entered through the
-  // same shared add-card modal field the TCGdex search view uses.
-  acquired: boolean;
-}
-
-// A one-shot signal set by `assignCustomCard` when a custom-card submission
-// fails (story 12: "the manual-entry view reopens ... with the entered
-// values and selected file preserved"). `BinderLayoutView` consumes this
-// exactly once (reopening the card-selection modal pre-filled, then
-// clearing it via `clearManualEntryRestore`) rather than it living as
-// persistent state, so a later unrelated modal open never accidentally
-// restores a stale failed attempt.
-export interface ManualEntryRestore {
-  placement: { physicalPage: number; row: number; column: number } | null;
-  values: CustomCardFormValues;
-  file: File;
-}
+export type { CustomCardFormValues, ManualEntryRestore } from './useCustomCardAssignment';
 
 // Owns every card-scoped mutation (stories 11-19: search/manual add,
 // remove, edit variation, duplicate, move) and their pending-request/
@@ -70,7 +24,11 @@ export interface ManualEntryRestore {
 // other's setters. `moveCard` shares its "movement in flight" flag and
 // undo/redo history recording with `useArtMutations` (per story 14/28's
 // single binder-scoped movement queue), so both are passed in from the
-// shared `useLayoutMovement` hook rather than owned here.
+// shared `useLayoutMovement` hook rather than owned here. Each mutation
+// group (bulk add, custom-card assignment, removal, field edits,
+// duplication, movement) is broken out into its own sibling hook - this
+// hook's own job is purely wiring their shared state together and
+// combining their return values into one object for `BinderRouteContext`.
 export function useCardMutations({
   binderId,
   cards,
@@ -90,26 +48,17 @@ export function useCardMutations({
   pruneHistoryEntriesForItem: (itemId: string) => void;
   retry: () => void;
 }) {
-  const { start } = useSaveStatusToast();
-
   // The slots (by `placementKey`) with an assignment currently in flight
   // (story 11), so the layout tab can disable them until the request
-  // settles. Shared between `assignCustomCard` below and `useBulkCardAdd`'s
-  // `assignCards`, so it's owned here rather than by either mutation path
-  // individually.
+  // settles. Shared between `useCustomCardAssignment` and
+  // `useBulkCardAdd`'s `assignCards`, so it's owned here rather than by
+  // either mutation path individually.
   const [pendingPlacementKeys, setPendingPlacementKeys] = useState<Set<string>>(new Set());
-  // Story 15's in-flight-unplaced-create ids (see the context value's own
-  // doc comment above) - also shared between `assignCustomCard` and
-  // `useBulkCardAdd`.
+  // Story 15's in-flight-unplaced-create ids (see `useCustomCardAssignment`'s
+  // `ManualEntryRestore` doc comment) - also shared between
+  // `useCustomCardAssignment` and `useBulkCardAdd`.
   const [pendingUnplacedCardIds, setPendingUnplacedCardIds] = useState<Set<string>>(new Set());
-  // Story 12's one-shot restore signal (see the context value type's doc
-  // comment above) - `null` whenever there's no failed custom-card
-  // submission awaiting correction.
-  const [manualEntryRestore, setManualEntryRestore] = useState<ManualEntryRestore | null>(null);
 
-  // Story 17/18's bulk TCGdex card-add flow, extracted to its own hook
-  // since `assignCards` and its failure/restore state make up a
-  // substantial share of this hook's overall size on their own.
   const {
     assignCards,
     isBulkAddPending,
@@ -126,547 +75,54 @@ export function useCardMutations({
     retry,
   });
 
-  // Story 13's in-flight card removals, by card id - lets the layout tab
-  // disable a pending card's own actions until its delete request settles.
-  const [pendingCardDeletionIds, setPendingCardDeletionIds] = useState<Set<string>>(new Set());
-  // Story 16's in-flight-card-variation-edit ids, mirroring
-  // `pendingCardDeletionIds`.
-  const [pendingCardVariationEditIds, setPendingCardVariationEditIds] = useState<Set<string>>(
-    new Set(),
-  );
-  // Story 19's in-flight-card-duplication ids (optimistic ids only),
-  // mirroring `pendingArtDuplicateIds`.
-  const [pendingCardDuplicateIds, setPendingCardDuplicateIds] = useState<Set<string>>(new Set());
-  // Story 49's in-flight-card-details-edit ids, mirroring
-  // `pendingCardVariationEditIds` - the Card List tab's row edit action
-  // uses this to disable its own Save/Cancel buttons while a save request
-  // is in flight.
-  const [pendingCardDetailsEditIds, setPendingCardDetailsEditIds] = useState<Set<string>>(
-    new Set(),
-  );
-  // Story 36's in-flight-card-acquisition-toggle ids, mirroring
-  // `pendingCardVariationEditIds`.
-  const [pendingCardAcquiredToggleIds, setPendingCardAcquiredToggleIds] = useState<Set<string>>(
-    new Set(),
-  );
-  // Story 46's single in-flight-bulk-acquisition-toggle flag - unlike the
-  // per-card `pendingCardAcquiredToggleIds` above, the whole affected set
-  // is applied/rolled back together in one request, so there's nothing to
-  // track per-card; the Card List tab's header control disables itself
-  // while this is `true`.
-  const [isBulkAcquisitionPending, setIsBulkAcquisitionPending] = useState(false);
-
-  // Assigns a manually-entered custom card to a binder slot (story 12).
-  // Mirrors `assignCards`'s optimistic lifecycle, but creates its own
-  // object-URL preview from the uploaded `file` for the optimistic card's
-  // `imageUrl` (independent of the card-selection modal's own preview
-  // object URL - each owns and revokes its own). Revoking it
-  // unconditionally in `.finally()` is safe either way: by the time
-  // `.finally()` runs, the `.then()`/`.catch()` above has already replaced
-  // or removed the optimistic card from `cards`, so nothing continues to
-  // reference this URL regardless of outcome. `reopenOnFailure` mirrors
-  // `assignCards`'s own parameter (story 17): `true` only for an Add-Card
-  // (closes-immediately) submission, so an Add-More custom-card submission
-  // - whose view stays open on its own - never sets `manualEntryRestore`.
-  // Returns whether the submission succeeded, so an Add-More caller can
-  // await it to decide whether to clear its own form state.
-  const assignCustomCard = useCallback(
-    (
-      values: CustomCardFormValues,
-      file: File,
-      placement: { physicalPage: number; row: number; column: number } | null,
-      reopenOnFailure: boolean,
-    ): Promise<boolean> => {
-      const key = placement ? placementKey(placement) : `unplaced-${crypto.randomUUID()}`;
-      const optimisticId = `optimistic-${crypto.randomUUID()}`;
-      const previewUrl = URL.createObjectURL(file);
-      const now = new Date().toISOString();
-      const optimisticCard: Card = {
-        id: optimisticId,
-        binderId,
-        name: values.name,
-        setName: values.setName,
-        localNumber: values.localNumber,
-        source: 'custom',
-        providerCardId: null,
-        providerSetId: null,
-        variation: values.variation,
-        placement: placement ?? { physicalPage: null, row: null, column: null },
-        imageUrl: previewUrl,
-        acquired: values.acquired,
-        // Story 38: every new card starts with no saved price, matching
-        // the backend's default for a newly created card.
-        price: null,
-        isManualPrice: false,
-        priceUpdatedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      setCards((previous) => [...previous, optimisticCard]);
-      if (placement) {
-        setPendingPlacementKeys((previous) => new Set(previous).add(key));
-      } else {
-        setPendingUnplacedCardIds((previous) => new Set(previous).add(optimisticId));
-      }
-
-      const toast = start(`assign-custom-card-${key}`);
-
-      return createCustomCard(binderId, { ...values, placement, image: file })
-        .then((created) => {
-          setCards((previous) =>
-            previous.map((card) => (card.id === optimisticId ? created : card)),
-          );
-          toast.markSaved();
-          return true;
-        })
-        .catch((error) => {
-          setCards((previous) => previous.filter((card) => card.id !== optimisticId));
-          // Preserves the failed attempt's values/file so the layout tab
-          // can reopen the modal pre-filled (see `ManualEntryRestore`'s doc
-          // comment above) instead of the user having to re-enter
-          // everything.
-          if (reopenOnFailure) setManualEntryRestore({ placement, values, file });
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this card
-          // creation was rejected because the binder is now locked.
-          if (isLockedBinderConflict(error)) retry();
-          return false;
-        })
-        .finally(() => {
-          URL.revokeObjectURL(previewUrl);
-          if (placement) {
-            setPendingPlacementKeys((previous) => {
-              const next = new Set(previous);
-              next.delete(key);
-              return next;
-            });
-          } else {
-            setPendingUnplacedCardIds((previous) => {
-              const next = new Set(previous);
-              next.delete(optimisticId);
-              return next;
-            });
-          }
-        });
+  const { assignCustomCard, manualEntryRestore, clearManualEntryRestore } = useCustomCardAssignment(
+    {
+      binderId,
+      setCards,
+      setPendingPlacementKeys,
+      setPendingUnplacedCardIds,
+      retry,
     },
-    [binderId, setCards, start, retry],
   );
 
-  // Clears the one-shot restore signal once `BinderLayoutView` has consumed
-  // it (copied it into its own local state and reopened the modal).
-  const clearManualEntryRestore = useCallback(() => {
-    setManualEntryRestore(null);
-  }, []);
+  const { removeCard, pendingCardDeletionIds } = useCardRemoval({
+    cards,
+    setCards,
+    pruneHistoryEntriesForItem,
+    retry,
+  });
 
-  // Permanently removes a card from a binder slot (story 13). Sending X
-  // immediately: no confirmation dialog. Captures the card's current list
-  // index and full record before removing it so a failed delete restores
-  // it to the exact same spot rather than appending it back at the end -
-  // this list itself is what already encodes each card's slot, so there's
-  // no separate placement state to roll back alongside it.
-  const removeCard = useCallback(
-    (cardId: string) => {
-      const index = cards.findIndex((card) => card.id === cardId);
-      if (index === -1) return;
-      const removedCard = cards[index];
+  const {
+    editCardVariation,
+    pendingCardVariationEditIds,
+    editCardDetails,
+    pendingCardDetailsEditIds,
+    toggleCardAcquired,
+    pendingCardAcquiredToggleIds,
+    toggleCardsAcquisition,
+    isBulkAcquisitionPending,
+  } = useCardFieldEdits({
+    binderId,
+    cards,
+    setCards,
+    pruneHistoryEntriesForItem,
+    retry,
+  });
 
-      setCards((previous) => previous.filter((card) => card.id !== cardId));
-      setPendingCardDeletionIds((previous) => new Set(previous).add(cardId));
+  const { duplicateCard, pendingCardDuplicateIds } = useCardDuplication({
+    cards,
+    setCards,
+    retry,
+  });
 
-      const toast = start(`remove-card-${cardId}`);
-
-      deleteCard(cardId)
-        .then(() => {
-          pruneHistoryEntriesForItem(cardId);
-          toast.markSaved();
-        })
-        .catch((error) => {
-          setCards((previous) => {
-            const restored = [...previous];
-            restored.splice(index, 0, removedCard);
-            return restored;
-          });
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this removal was
-          // rejected because the binder is now locked.
-          if (isLockedBinderConflict(error)) retry();
-        })
-        .finally(() => {
-          setPendingCardDeletionIds((previous) => {
-            const next = new Set(previous);
-            next.delete(cardId);
-            return next;
-          });
-        });
-    },
-    [cards, setCards, pruneHistoryEntriesForItem, start, retry],
-  );
-
-  // Edits an existing card's saved variation (story 16), mirroring
-  // `removeCard`'s optimistic-apply/restore-on-failure lifecycle:
-  // optimistically applies the new value immediately, then either confirms
-  // it with the backend's authoritative representation or restores the
-  // card's prior variation on failure.
-  const editCardVariation = useCallback(
-    (cardId: string, variation: string | null) => {
-      const existing = cards.find((card) => card.id === cardId);
-      if (!existing) return;
-
-      const previousVariation = existing.variation;
-
-      setCards((previous) =>
-        previous.map((card) => (card.id === cardId ? { ...card, variation } : card)),
-      );
-      setPendingCardVariationEditIds((previous) => new Set(previous).add(cardId));
-
-      const toast = start(`edit-card-variation-${cardId}`);
-
-      updateCardVariationRequest(cardId, variation)
-        .then((updated) => {
-          setCards((previous) => previous.map((card) => (card.id === cardId ? updated : card)));
-          pruneHistoryEntriesForItem(cardId);
-          toast.markSaved();
-        })
-        .catch((error) => {
-          setCards((previous) =>
-            previous.map((card) =>
-              card.id === cardId ? { ...card, variation: previousVariation } : card,
-            ),
-          );
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this variation
-          // edit was rejected because the binder is now locked.
-          if (isLockedBinderConflict(error)) retry();
-        })
-        .finally(() => {
-          setPendingCardVariationEditIds((previous) => {
-            const next = new Set(previous);
-            next.delete(cardId);
-            return next;
-          });
-        });
-    },
-    [cards, setCards, pruneHistoryEntriesForItem, start, retry],
-  );
-
-  // Saves a card's edited name/set/number/variation/price and optional
-  // replacement image (story 49's Card List row "Edit" action), through
-  // `PATCH /cards/{cardId}/details`. Unlike `editCardVariation`/
-  // `toggleCardAcquired` below, this isn't applied optimistically - the
-  // row's own editable fields already show the user's in-progress edits
-  // locally while its request is in flight, so `cards` only needs to
-  // reflect the backend's authoritative representation once the save
-  // actually succeeds. Returns the request's promise so the row-edit UI
-  // can keep itself in the editing state (rather than closing early) on
-  // failure, matching this codebase's existing "surface the error, let
-  // the user retry" precedent.
-  const editCardDetails = useCallback(
-    (cardId: string, values: UpdateCardDetailsRequest) => {
-      setPendingCardDetailsEditIds((previous) => new Set(previous).add(cardId));
-      const toast = start(`edit-card-details-${cardId}`);
-
-      return updateCardDetailsRequest(cardId, values)
-        .then((updated) => {
-          setCards((previous) => previous.map((card) => (card.id === cardId ? updated : card)));
-          toast.markSaved();
-          return updated;
-        })
-        .catch((error) => {
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this edit was
-          // rejected because the binder is now locked.
-          if (isLockedBinderConflict(error)) retry();
-          throw error;
-        })
-        .finally(() => {
-          setPendingCardDetailsEditIds((previous) => {
-            const next = new Set(previous);
-            next.delete(cardId);
-            return next;
-          });
-        });
-    },
-    [setCards, start, retry],
-  );
-
-  // Toggles an existing card's acquired state (story 36), mirroring
-  // `editCardVariation`'s optimistic-apply/restore-on-failure lifecycle
-  // exactly: optimistically flips the value immediately, then either
-  // confirms it with the backend's authoritative representation or
-  // restores the card's prior value on failure. Not gated by binder lock
-  // state on the caller's side (matching this codebase's existing
-  // unplaced-card action precedent) - the backend's own 409 response
-  // still enforces the restriction and triggers the same retry-on-conflict
-  // handling as every other restricted mutation.
-  const toggleCardAcquired = useCallback(
-    (cardId: string) => {
-      const existing = cards.find((card) => card.id === cardId);
-      if (!existing) return;
-
-      const previousAcquired = existing.acquired;
-      const nextAcquired = !previousAcquired;
-
-      setCards((previous) =>
-        previous.map((card) => (card.id === cardId ? { ...card, acquired: nextAcquired } : card)),
-      );
-      setPendingCardAcquiredToggleIds((previous) => new Set(previous).add(cardId));
-
-      const toast = start(`toggle-card-acquired-${cardId}`);
-
-      updateCardAcquiredRequest(cardId, nextAcquired)
-        .then((updated) => {
-          setCards((previous) => previous.map((card) => (card.id === cardId ? updated : card)));
-          toast.markSaved();
-        })
-        .catch((error) => {
-          setCards((previous) =>
-            previous.map((card) =>
-              card.id === cardId ? { ...card, acquired: previousAcquired } : card,
-            ),
-          );
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this toggle was
-          // rejected because the binder is now locked.
-          if (isLockedBinderConflict(error)) retry();
-        })
-        .finally(() => {
-          setPendingCardAcquiredToggleIds((previous) => {
-            const next = new Set(previous);
-            next.delete(cardId);
-            return next;
-          });
-        });
-    },
-    [cards, setCards, start, retry],
-  );
-
-  // Bulk-toggles every card in `cardIds` to `acquired` in one request
-  // (story 46's Card List tab header select-all/deselect-all control),
-  // mirroring `toggleCardAcquired`'s optimistic-apply/restore-on-failure
-  // lifecycle but applied to the whole affected set together rather than
-  // one card at a time: every listed card optimistically flips to
-  // `acquired` immediately, and if the bulk request fails, every one of
-  // them rolls back to its own prior value (all-or-nothing, matching the
-  // single request/response shape of the bulk endpoint) rather than each
-  // card being applied/rolled back independently. Not gated by binder lock
-  // state on the caller's side, mirroring `toggleCardAcquired` above - the
-  // backend's bulk endpoint has no lock check at all (story 32's Card List
-  // tab exemption).
-  const toggleCardsAcquisition = useCallback(
-    (cardIds: string[], acquired: boolean) => {
-      if (cardIds.length === 0) return;
-      const targetIds = new Set(cardIds);
-
-      const previousAcquiredById = new Map(
-        cards.filter((card) => targetIds.has(card.id)).map((card) => [card.id, card.acquired]),
-      );
-
-      setCards((previous) =>
-        previous.map((card) => (targetIds.has(card.id) ? { ...card, acquired } : card)),
-      );
-      setIsBulkAcquisitionPending(true);
-
-      const toast = start('bulk-toggle-cards-acquisition');
-
-      updateCardsAcquisitionRequest(binderId, cardIds, acquired)
-        .then((updated) => {
-          setCards((previous) =>
-            previous.map((card) => updated.find((row) => row.id === card.id) ?? card),
-          );
-          toast.markSaved();
-        })
-        .catch((error) => {
-          setCards((previous) =>
-            previous.map((card) =>
-              previousAcquiredById.has(card.id)
-                ? { ...card, acquired: previousAcquiredById.get(card.id)! }
-                : card,
-            ),
-          );
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this bulk toggle
-          // was rejected because the binder is now locked (unreachable in
-          // practice today, since this endpoint has no lock check - kept
-          // for parity with every other mutation's failure handling).
-          if (isLockedBinderConflict(error)) retry();
-        })
-        .finally(() => {
-          setIsBulkAcquisitionPending(false);
-        });
-    },
-    [binderId, cards, setCards, start, retry],
-  );
-
-  // Duplicates a card into the unplaced-cards section (story 19),
-  // mirroring `duplicateArt`'s optimistic-insert/replace-or-remove
-  // lifecycle exactly: the copy always lands unplaced (even when the
-  // source card is currently placed), sharing the source's existing image
-  // asset/URL rather than triggering any new upload. A fresh
-  // `crypto.randomUUID()` idempotency key accompanies the request (not
-  // reused across retries within this simple fire-once action) so a
-  // dropped response the backend actually processed is still replayed
-  // rather than silently duplicated if this action is ever retried.
-  const duplicateCard = useCallback(
-    (cardId: string) => {
-      const source = cards.find((card) => card.id === cardId);
-      if (!source) return;
-
-      const optimisticId = `optimistic-${crypto.randomUUID()}`;
-      const idempotencyKey = crypto.randomUUID();
-      const now = new Date().toISOString();
-      const optimisticCard: Card = {
-        ...source,
-        id: optimisticId,
-        placement: { physicalPage: null, row: null, column: null },
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      setCards((previous) => [...previous, optimisticCard]);
-      setPendingCardDuplicateIds((previous) => new Set(previous).add(optimisticId));
-
-      const toast = start(`duplicate-card-${optimisticId}`);
-
-      duplicateCardRequest(cardId, idempotencyKey)
-        .then((created) => {
-          setCards((previous) =>
-            previous.map((card) => (card.id === optimisticId ? created : card)),
-          );
-          toast.markSaved();
-        })
-        .catch((error) => {
-          setCards((previous) => previous.filter((card) => card.id !== optimisticId));
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this
-          // duplication was rejected because the binder is now locked.
-          if (isLockedBinderConflict(error)) retry();
-        })
-        .finally(() => {
-          setPendingCardDuplicateIds((previous) => {
-            const next = new Set(previous);
-            next.delete(optimisticId);
-            return next;
-          });
-        });
-    },
-    [cards, setCards, start, retry],
-  );
-
-  // Moves (or swaps) a card to another slot in the same binder, or into the
-  // unplaced section if `destination` is all-null (story 14; unplaced
-  // destination/source added in story 15). `destination` always identifies
-  // whatever the layout tab's drop target resolved to (a concrete slot or
-  // the unplaced panel); a `null`/missing dragged card is unreachable in
-  // practice (dragging only starts from an occupied slot or an unplaced
-  // list item) but guarded rather than asserted. If another card already
-  // occupies a *placed* `destination`, both cards trade placements (a
-  // swap) in a single `PATCH` request; otherwise only the dragged card
-  // moves. An all-null destination never has an "occupant" to swap with -
-  // every unplaced card already shares that same null placement, and the
-  // backend's unique-placement index is inert for null coordinates - so
-  // the occupant lookup only ever runs against a placed destination.
-  const moveCard = useCallback(
-    (
-      cardId: string,
-      destination: { physicalPage: number | null; row: number | null; column: number | null },
-    ) => {
-      if (isMovePending) return;
-
-      const draggedCard = cards.find((card) => card.id === cardId);
-      if (!draggedCard) return;
-
-      const occupyingCard =
-        destination.physicalPage !== null
-          ? cards.find(
-              (card) =>
-                card.id !== cardId &&
-                card.placement.physicalPage === destination.physicalPage &&
-                card.placement.row === destination.row &&
-                card.placement.column === destination.column,
-            )
-          : undefined;
-
-      const previousDraggedPlacement = draggedCard.placement;
-      const previousOccupyingPlacement = occupyingCard?.placement ?? null;
-
-      setCards((previous) =>
-        previous.map((card) => {
-          if (card.id === draggedCard.id) return { ...card, placement: destination };
-          if (occupyingCard && card.id === occupyingCard.id) {
-            return { ...card, placement: previousDraggedPlacement };
-          }
-          return card;
-        }),
-      );
-      setIsMovePending(true);
-
-      const updates: CardPositionUpdate[] = [
-        {
-          cardId: draggedCard.id,
-          expectedPlacement: previousDraggedPlacement,
-          finalPlacement: destination,
-        },
-      ];
-      if (occupyingCard && previousOccupyingPlacement) {
-        updates.push({
-          cardId: occupyingCard.id,
-          expectedPlacement: previousOccupyingPlacement,
-          finalPlacement: previousDraggedPlacement,
-        });
-      }
-
-      const toast = start(`move-card-${draggedCard.id}`);
-
-      moveCards(draggedCard.id, updates)
-        .then((updatedCards) => {
-          setCards((previous) =>
-            previous.map((card) => updatedCards.find((updated) => updated.id === card.id) ?? card),
-          );
-          const historyUpdates: CardMovementActionEntries = occupyingCard
-            ? [
-                { cardId: draggedCard.id, from: previousDraggedPlacement, to: destination },
-                {
-                  cardId: occupyingCard.id,
-                  from: previousOccupyingPlacement!,
-                  to: previousDraggedPlacement,
-                },
-              ]
-            : [{ cardId: draggedCard.id, from: previousDraggedPlacement, to: destination }];
-          recordSuccessfulMovement({
-            id: crypto.randomUUID(),
-            kind: 'card',
-            focalCardId: draggedCard.id,
-            updates: historyUpdates,
-          });
-          toast.markSaved();
-        })
-        .catch((error) => {
-          // Rolls both cards back to their exact pre-drop placements
-          // (rather than re-fetching the binder) so an unaffected slot's
-          // optimistic state elsewhere in the grid is left untouched.
-          setCards((previous) =>
-            previous.map((card) => {
-              if (card.id === draggedCard.id) {
-                return { ...card, placement: previousDraggedPlacement };
-              }
-              if (occupyingCard && card.id === occupyingCard.id) {
-                return { ...card, placement: previousOccupyingPlacement! };
-              }
-              return card;
-            }),
-          );
-          toast.markFailed(error);
-          // Story 32: reload the complete binder graph when this move was
-          // rejected because the binder is now locked.
-          if (isLockedBinderConflict(error)) retry();
-        })
-        .finally(() => {
-          setIsMovePending(false);
-        });
-    },
-    [cards, setCards, isMovePending, recordSuccessfulMovement, setIsMovePending, start, retry],
-  );
+  const { moveCard } = useCardMovement({
+    cards,
+    setCards,
+    isMovePending,
+    setIsMovePending,
+    recordSuccessfulMovement,
+    retry,
+  });
 
   return {
     pendingPlacementKeys,

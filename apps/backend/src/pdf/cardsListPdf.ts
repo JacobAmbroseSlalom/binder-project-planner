@@ -9,7 +9,7 @@ import { loadImageForEmbedding } from './binderLayoutPdf.js';
 // art-print PDF (which packs items by their own pixel dimensions), this is
 // a plain, binder-agnostic printable list: every submitted card renders at
 // its real physical size (2.5 x 3.5 in), in the exact order the caller
-// (routes/binders.ts) already resolved from the request's `cardIds`, with
+// (routes/binders/exportRoutes.ts) already resolved from the request's `cardIds`, with
 // no packing/scaling logic needed.
 
 // US Letter **landscape** - fits more real-size (2.5 x 3.5 in), upright

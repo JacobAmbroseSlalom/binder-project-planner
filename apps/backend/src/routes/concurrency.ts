@@ -4,7 +4,7 @@
 // preserve submitted array order regardless of processing completion
 // order"). A small worker-pool loop over a shared index cursor rather than
 // an external concurrency-limiting dependency. Shared between
-// routes/cards.ts (stories 17/18/38) and routes/watchlistEntries.ts
+// routes/cards/ (stories 17/18/38) and routes/watchlistEntries/
 // (story 45), which both bulk-process TCGdex lookups/downloads this way.
 export async function mapWithConcurrencyLimit<T, R>(
   items: T[],
