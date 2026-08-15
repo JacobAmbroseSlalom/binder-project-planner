@@ -3,12 +3,29 @@ import createClient from 'openapi-fetch';
 
 import type { paths } from '@binder-project-planner/api-contract';
 
-// The backend origin is overridable per-environment via NEXT_PUBLIC_BACKEND_URL
-// (e.g. for a non-default port in local development); it otherwise falls back to
-// the canonical shared default so the frontend and backend never drift apart.
-// Exported so callers rendering a card's image (story 11) can resolve its
-// backend-relative `imageUrl` (e.g. `/cards/{cardId}/image`) into a full URL.
-export const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ?? DEFAULT_BACKEND_ORIGIN;
+// Story 47: "Package and export the application as an executable". The
+// packaged desktop app can't know its backend's actual port at build time
+// (it's chosen at runtime - see apps/desktop/src/ports.ts), so its preload
+// script injects the real origin as this global before any of the page's
+// own scripts run (see apps/desktop/src/preload.ts). Declared here so
+// `window.__BACKEND_URL__` below type-checks without `any`.
+declare global {
+  interface Window {
+    __BACKEND_URL__?: string;
+  }
+}
+
+// The backend origin is, in order: the Electron desktop app's injected
+// runtime global (above); NEXT_PUBLIC_BACKEND_URL, overridable
+// per-environment (e.g. for a non-default port in local web development);
+// or the canonical shared default, so the frontend and backend never drift
+// apart. Exported so callers rendering a card's image (story 11) can
+// resolve its backend-relative `imageUrl` (e.g. `/cards/{cardId}/image`)
+// into a full URL.
+export const backendUrl =
+  (typeof window !== 'undefined' ? window.__BACKEND_URL__ : undefined) ??
+  process.env.NEXT_PUBLIC_BACKEND_URL ??
+  DEFAULT_BACKEND_ORIGIN;
 
 // A single OpenAPI-typed REST client shared by every backend call the frontend makes.
 export const apiClient = createClient<paths>({ baseUrl: backendUrl });

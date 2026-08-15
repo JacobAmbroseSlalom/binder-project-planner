@@ -8,15 +8,18 @@
   },
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "build": "pnpm --filter @binder-project-planner/shared build && pnpm --filter @binder-project-planner/api-contract build && pnpm --filter @binder-project-planner/backend build && pnpm --filter @binder-project-planner/frontend build",
+    "build": "pnpm --filter @binder-project-planner/shared build && pnpm --filter @binder-project-planner/api-contract build && pnpm --filter @binder-project-planner/backend build && pnpm --filter @binder-project-planner/frontend build && pnpm --filter @binder-project-planner/desktop build",
     "dev": "concurrently -n backend,frontend -c blue,green \"pnpm --filter @binder-project-planner/backend dev\" \"pnpm --filter @binder-project-planner/frontend dev\"",
     "dev:backend": "pnpm --filter @binder-project-planner/backend dev",
     "dev:frontend": "pnpm --filter @binder-project-planner/frontend dev",
+    "dev:desktop": "pnpm --filter @binder-project-planner/desktop dev",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "lint": "eslint .",
     "test": "pnpm build && pnpm --filter @binder-project-planner/backend test && pnpm --filter @binder-project-planner/frontend test",
-    "typecheck": "pnpm --filter @binder-project-planner/shared typecheck && pnpm --filter @binder-project-planner/api-contract typecheck && pnpm --filter @binder-project-planner/backend typecheck && pnpm --filter @binder-project-planner/frontend typecheck",
+    "typecheck": "pnpm --filter @binder-project-planner/shared typecheck && pnpm --filter @binder-project-planner/api-contract typecheck && pnpm --filter @binder-project-planner/backend typecheck && pnpm --filter @binder-project-planner/frontend typecheck && pnpm --filter @binder-project-planner/desktop typecheck",
+    "package:mac": "pnpm --filter @binder-project-planner/desktop package:mac",
+    "package:win": "pnpm --filter @binder-project-planner/desktop package:win",
     "story:done": "node scripts/move-story-to-done.mjs"
   },
   "devDependencies": {

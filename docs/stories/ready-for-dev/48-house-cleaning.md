@@ -26,6 +26,9 @@
   warning is investigated individually and either fixed or explicitly documented (in
   the relevant code comment or this story) as an intentionally accepted warning with a
   reason. No new tests are written — this task only fixes what already exists.
+- rebuild project with Electron
+- push a new tag on Git
+- test application on windows
 
 #### Technical requirements
 

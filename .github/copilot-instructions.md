@@ -33,6 +33,32 @@ file to match what was actually built.
 - **Image storage:** Local application data directory with metadata in the database
 - **Deployment:** Local single-user application without authentication initially
 - **Database:** TBD; SQLite is a strong option for the local deployment
+- **Desktop packaging:** Electron + `electron-builder`, in a new `apps/desktop`
+  workspace package (story 47) — bundles the frontend's production build and the
+  backend as two managed local child processes, producing unsigned/unnotarized macOS
+  `.dmg` and Windows NSIS installer builds with no auto-updater. See
+  [apps/desktop/src/main.ts](../apps/desktop/src/main.ts) for the Electron main
+  process and [apps/desktop/scripts/prepare-package.mjs](../apps/desktop/scripts/prepare-package.mjs)
+  for the packaging build (production `pnpm deploy --legacy` staging +
+  `@electron/rebuild` for `better-sqlite3`/`sharp`).
+  - `apps/desktop`'s own main/preload code is bundled with esbuild
+    ([apps/desktop/scripts/build.mjs](../apps/desktop/scripts/build.mjs)) instead of
+    plain `tsc`, so `apps/desktop/package.json` has zero runtime `dependencies` (all
+    moved to `devDependencies`) — this prevents electron-builder's automatic
+    node-modules dependency collector from attempting a destructive, unscoped
+    `pnpm install --production` across the whole pnpm workspace.
+  - Both child processes (`apps/desktop/src/processes/backendProcess.ts` and
+    `frontendProcess.ts`) set `ELECTRON_RUN_AS_NODE: '1'` in their spawned `env`,
+    since a packaged/branded Electron executable always relaunches itself as the
+    full app rather than running as plain Node when given a script path via argv —
+    unlike the unpacked dev Electron binary, where that heuristic works implicitly.
+- **Release automation:** [.github/workflows/release.yml](workflows/release.yml)
+  builds the macOS `.dmg` and Windows NSIS installer in CI and uploads them as assets
+  on the matching GitHub Release, triggered by pushing a `v*.*.*` tag or via manual
+  `workflow_dispatch` against an existing tag. `apps/desktop/package.json`'s
+  `build.mac.artifactName`/`build.nsis.artifactName` fix each installer's filename (no
+  embedded version number) so the root [README.md](../README.md)'s
+  `releases/latest/download/<filename>` links keep resolving to the newest build.
 - If you introduce a new dependency or architectural decision, record it in
   [docs/planning.md](../docs/planning.md) and keep this file in sync.
 

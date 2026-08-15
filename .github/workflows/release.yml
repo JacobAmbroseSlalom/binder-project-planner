@@ -1,0 +1,86 @@
+name: Release desktop app
+
+# Builds and publishes the macOS and Windows desktop installers whenever a
+# version tag (e.g. v0.1.0) is pushed, or on demand via workflow_dispatch
+# against an existing tag. This automates what was previously a manual
+# `pnpm package:mac`/`pnpm package:win` + hand-upload step (story 47:
+# "Package and export the application as an executable"), and keeps the
+# README's fixed-filename download links (apps/desktop/package.json's
+# `build.mac.artifactName`/`build.nsis.artifactName`) valid across releases,
+# since `softprops/action-gh-release` attaches assets to the release matching
+# the pushed tag.
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Existing git tag to attach the built installers to (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    name: Build macOS installer
+    runs-on: macos-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag_name || github.ref_name }}
+
+      - name: Enable Corepack (installs the pnpm version pinned in package.json)
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the macOS .dmg
+        run: pnpm --filter @binder-project-planner/desktop package:mac
+
+      - name: Upload the .dmg to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
+          files: apps/desktop/release/*.dmg
+          generate_release_notes: true
+
+  build-win:
+    name: Build Windows installer
+    runs-on: windows-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag_name || github.ref_name }}
+
+      - name: Enable Corepack (installs the pnpm version pinned in package.json)
+        run: corepack enable
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24.18.1'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build the Windows installer
+        run: pnpm --filter @binder-project-planner/desktop package:win
+
+      - name: Upload the installer to the GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag_name || github.ref_name }}
+          files: apps/desktop/release/*.exe
+          generate_release_notes: true

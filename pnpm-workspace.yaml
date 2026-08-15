@@ -5,6 +5,7 @@ packages:
 allowBuilds:
   '@swc/core': true
   better-sqlite3: true
+  electron-winstaller: true
   esbuild: true
   sharp: true
   unrs-resolver: true
@@ -16,6 +17,8 @@ minimumReleaseAgeExclude:
 onlyBuiltDependencies:
   - '@swc/core'
   - better-sqlite3
+  - electron
+  - electron-winstaller
   - esbuild
   - sharp
   - unrs-resolver

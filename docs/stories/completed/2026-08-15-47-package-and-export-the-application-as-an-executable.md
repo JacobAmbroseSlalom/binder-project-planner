@@ -1,6 +1,6 @@
 # 47. Package and export the application as an executable
 
-**Status:** Not started
+**Status:** Done (2026-08-15 00:26 EDT)
 
 #### Acceptance criteria
 

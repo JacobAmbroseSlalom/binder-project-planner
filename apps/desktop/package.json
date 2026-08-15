@@ -1,0 +1,100 @@
+{
+  "name": "@binder-project-planner/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "electron .",
+    "dev": "pnpm build && electron .",
+    "package:prepare": "node scripts/prepare-package.mjs",
+    "package:mac": "pnpm package:prepare && electron-builder --mac",
+    "package:win": "pnpm package:prepare && electron-builder --win"
+  },
+  "devDependencies": {
+    "@binder-project-planner/shared": "workspace:*",
+    "@electron/rebuild": "4.2.0",
+    "@types/node": "26.1.2",
+    "electron": "43.4.0",
+    "electron-builder": "26.15.3",
+    "esbuild": "0.28.2",
+    "get-port": "7.2.0",
+    "typescript": "5.9.3"
+  },
+  "build": {
+    "appId": "com.slalom.binderprojectplanner",
+    "productName": "Binder Project Planner",
+    "asar": true,
+    "npmRebuild": false,
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": ".staging/backend/dist",
+        "to": "apps/backend/dist"
+      },
+      {
+        "from": ".staging/backend/drizzle",
+        "to": "apps/backend/drizzle"
+      },
+      {
+        "from": ".staging/backend/node_modules",
+        "to": "apps/backend/node_modules"
+      },
+      {
+        "from": ".staging/backend/package.json",
+        "to": "apps/backend/package.json"
+      },
+      {
+        "from": ".staging/frontend/.next",
+        "to": "apps/frontend/.next"
+      },
+      {
+        "from": ".staging/frontend/public",
+        "to": "apps/frontend/public"
+      },
+      {
+        "from": ".staging/frontend/node_modules",
+        "to": "apps/frontend/node_modules"
+      },
+      {
+        "from": ".staging/frontend/package.json",
+        "to": "apps/frontend/package.json"
+      },
+      {
+        "from": ".staging/frontend/next.config.ts",
+        "to": "apps/frontend/next.config.ts"
+      },
+      {
+        "from": "../../packages/api-contract/openapi.yaml",
+        "to": "packages/api-contract/openapi.yaml"
+      }
+    ],
+    "asarUnpack": [
+      "**/*.node"
+    ],
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.utilities",
+      "icon": "build/icon.png",
+      "identity": null,
+      "artifactName": "${productName}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "artifactName": "${productName}-win-setup.${ext}"
+    }
+  }
+}

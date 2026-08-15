@@ -1,7 +1,13 @@
 export const DEFAULT_BACKEND_HOST = '127.0.0.1';
 export const DEFAULT_BACKEND_PORT = 3001;
 export const DEFAULT_BACKEND_ORIGIN = `http://${DEFAULT_BACKEND_HOST}:${DEFAULT_BACKEND_PORT}`;
-export const DEFAULT_FRONTEND_ORIGIN = 'http://localhost:3000';
+// Story 47: "Package and export the application as an executable". The
+// packaged desktop app's main process reuses this fixed default when
+// picking a free port for its bundled `next start` child process (falling
+// back to another available port if it's already taken), the same way the
+// backend already does with `DEFAULT_BACKEND_PORT`.
+export const DEFAULT_FRONTEND_PORT = 3000;
+export const DEFAULT_FRONTEND_ORIGIN = `http://localhost:${DEFAULT_FRONTEND_PORT}`;
 export const DEFAULT_APPLICATION_DATA_DIRECTORY = '.data';
 export const DEFAULT_DATABASE_FILENAME = 'binder-project-planner.sqlite';
 

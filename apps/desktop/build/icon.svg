@@ -1,0 +1,25 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Source vector for apps/desktop/build/icon.png (electron-builder generates the
+       macOS .icns/Windows .ico from that PNG). Regenerate the PNG after editing this
+       file with sharp, e.g.:
+       node -e "require('sharp')('build/icon.svg', { density: 384 }).resize(1024, 1024).png().toFile('build/icon.png')"
+       (run from apps/desktop, using the sharp install under apps/backend/node_modules).
+       "Two-page card collage": a neutral background with two dark-blue binder pages
+       side by side, each holding a collage of differently sized card rectangles in
+       light blue, yellow, green, and red, echoing a real filled binder spread. Uses
+       the app's dark-theme brand palette from
+       .github/instructions/styling.instructions.md. -->
+  <rect x="32" y="32" width="960" height="960" rx="200" fill="#1D2731" />
+  <!-- Left page -->
+  <rect x="120" y="200" width="380" height="624" rx="40" fill="#0B3C5D" />
+  <!-- Right page -->
+  <rect x="524" y="200" width="380" height="624" rx="40" fill="#0B3C5D" />
+  <!-- Left page cards: one large feature card, two smaller cards below -->
+  <rect x="150" y="230" width="320" height="340" rx="24" fill="#328CC1" />
+  <rect x="150" y="590" width="150" height="200" rx="20" fill="#D9B310" />
+  <rect x="320" y="590" width="150" height="200" rx="20" fill="#D6483D" />
+  <!-- Right page cards: two smaller cards above, one large feature card below -->
+  <rect x="554" y="230" width="150" height="200" rx="20" fill="#D6483D" />
+  <rect x="724" y="230" width="150" height="200" rx="20" fill="#328CC1" />
+  <rect x="554" y="450" width="320" height="340" rx="24" fill="#3FA34D" />
+</svg>

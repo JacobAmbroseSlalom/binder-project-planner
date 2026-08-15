@@ -51,6 +51,7 @@ This index maps every story file to its current bucket.
 | 44    | Delete custom art finance cost entries                                  | [docs/stories/completed/2026-08-14-44-delete-custom-art-finance-cost-entries.md](completed/2026-08-14-44-delete-custom-art-finance-cost-entries.md)                                                                 |
 | 45    | What I'm looking for section                                            | [docs/stories/completed/2026-08-14-45-what-im-looking-for-section.md](completed/2026-08-14-45-what-im-looking-for-section.md)                                                                                       |
 | 46    | Bulk acquire cards                                                      | [docs/stories/completed/2026-08-12-46-bulk-acquire-cards.md](completed/2026-08-12-46-bulk-acquire-cards.md)                                                                                                         |
+| 47    | Package and export the application as an executable                     | [docs/stories/completed/2026-08-15-47-package-and-export-the-application-as-an-executable.md](completed/2026-08-15-47-package-and-export-the-application-as-an-executable.md)                                       |
 | 49    | Edit a card's info from the Card List                                   | [docs/stories/completed/2026-08-14-49-edit-a-cards-info-from-the-card-list.md](completed/2026-08-14-49-edit-a-cards-info-from-the-card-list.md)                                                                     |
 | 50    | Enhance the View Financials Cards section                               | [docs/stories/completed/2026-08-13-50-enhance-view-financials-cards-section.md](completed/2026-08-13-50-enhance-view-financials-cards-section.md)                                                                   |
 | 51    | Add binder tags                                                         | [docs/stories/completed/2026-08-14-51-add-binder-tags.md](completed/2026-08-14-51-add-binder-tags.md)                                                                                                               |
@@ -58,10 +59,9 @@ This index maps every story file to its current bucket.
 
 ## Ready For Dev
 
-| Story | Title                                               | File                                                                                                                                                            |
-| ----- | --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 47    | Package and export the application as an executable | [docs/stories/ready-for-dev/47-package-and-export-the-application-as-an-executable.md](ready-for-dev/47-package-and-export-the-application-as-an-executable.md) |
-| 48    | House cleaning                                      | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md)                                                                           |
+| Story | Title          | File                                                                                  |
+| ----- | -------------- | ------------------------------------------------------------------------------------- |
+| 48    | House cleaning | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md) |
 
 ## Needs Refinement
 

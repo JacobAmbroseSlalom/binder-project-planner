@@ -26,6 +26,27 @@ been placed vs. still needs a home.
 - Database: SQLite with Drizzle ORM.
 - Authentication: None for the initial local single-user version.
 - Hosting: Local machine for the initial version.
+- Desktop packaging: Electron + `electron-builder` (story 47), bundling the Next.js
+  frontend and Express backend as two managed local child processes in a new
+  `apps/desktop` workspace package; unsigned/unnotarized macOS `.dmg`/Windows NSIS
+  installer builds, no auto-updater. `apps/desktop`'s own main/preload code is bundled
+  with esbuild (`apps/desktop/scripts/build.mjs`) rather than plain `tsc`, so its
+  `package.json` carries zero runtime `dependencies` — this keeps electron-builder's
+  automatic node-modules dependency collector from finding anything to resolve, which
+  otherwise risks triggering a destructive, unscoped `pnpm install --production` across
+  the whole workspace in this pnpm monorepo. Both the backend and frontend child
+  processes are spawned with `ELECTRON_RUN_AS_NODE: '1'` in their `env`, since a
+  packaged/branded Electron executable (unlike the unpacked dev binary) always
+  relaunches itself as the full app rather than running as plain Node when given a
+  script path via argv.
+- Release automation: [.github/workflows/release.yml](../.github/workflows/release.yml)
+  builds the macOS `.dmg` and Windows NSIS installer in CI (on `macos-latest`/
+  `windows-latest` GitHub-hosted runners) and uploads them as assets on the matching
+  GitHub Release, triggered by pushing a `v*.*.*` tag or via manual `workflow_dispatch`
+  against an existing tag. `apps/desktop/package.json`'s `build.mac.artifactName`/
+  `build.nsis.artifactName` fix each installer's filename (no embedded version number),
+  so the root [README.md](../README.md)'s `releases/latest/download/<filename>` links
+  keep resolving to the newest build across releases.
 
 ## Story backlog
 
