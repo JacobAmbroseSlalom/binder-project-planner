@@ -50,9 +50,13 @@ export const financeInputClassName = `${financeInputBaseClassName} px-3`;
 export const financeErrorInputClassName = `${financeInputClassName} border-error bg-error/10 ring-2 ring-error`;
 
 // Shared root className for the Physical costs section's 3 cost-entry
-// cards (Binder, Printing, Holographic Paper). `min-h-[13rem]` reserves
-// the same height a card takes up once an entry is selected (title +
-// dropdown + one row of fields + a cost caption), so the 3 cards stay a
-// consistent height even before anything's been selected in one of them.
+// cards (Binder, Printing, Holographic Paper). Deliberately has no
+// hardcoded min-height: a fixed `min-h-[...]` value here previously drifted
+// out of sync with the actual content height (most recently once the
+// Finances Preview page's Binder card grew a second row of fields for
+// width/height/pages, story 54). The parent grid's default
+// `align-items: stretch` already makes every card in the same row match
+// the row's tallest card automatically, so relying on that keeps the 3
+// cards a consistent height however tall any one of them actually renders.
 export const physicalCostCardClassName =
-  'flex min-h-[13rem] flex-col gap-3 rounded-standard bg-surface p-4 shadow-panel';
+  'flex flex-col gap-3 rounded-standard bg-surface p-4 shadow-panel';

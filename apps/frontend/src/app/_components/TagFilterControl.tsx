@@ -3,6 +3,8 @@
 import { Check, Tag as TagIcon } from 'lucide-react';
 import { useState } from 'react';
 
+import { Tooltip } from '@/shared/feedback';
+
 // The home page's multi-select tag filter (story 51): a dropdown of
 // checkboxes over `BinderList`'s own reported distinct tag options,
 // applying OR-logic client-side filtering there. Renders nothing once
@@ -40,16 +42,19 @@ export function TagFilterControl({
     // styling.instructions.md's layering convention) directly below this
     // button.
     <div className="relative">
-      <button
-        type="button"
-        onClick={() => setIsOpen((previous) => !previous)}
-        onBlur={() => setIsOpen(false)}
-        aria-expanded={isOpen}
-        className="flex cursor-pointer items-center gap-2 rounded-standard bg-neutral-800 px-4 py-2 font-bold hover:brightness-110"
-      >
-        <TagIcon className="size-4" aria-hidden="true" />
-        Tags{selectedTags.length > 0 ? ` (${selectedTags.length})` : ''}
-      </button>
+      <Tooltip label="Filter by tags">
+        <button
+          type="button"
+          onClick={() => setIsOpen((previous) => !previous)}
+          onBlur={() => setIsOpen(false)}
+          aria-expanded={isOpen}
+          aria-label={`Filter by tags${selectedTags.length > 0 ? ` (${selectedTags.length} selected)` : ''}`}
+          className="flex h-10 cursor-pointer items-center gap-2 rounded-standard bg-neutral-800 px-4 font-bold hover:brightness-110"
+        >
+          <TagIcon className="size-4" aria-hidden="true" />
+          {selectedTags.length > 0 ? `(${selectedTags.length})` : null}
+        </button>
+      </Tooltip>
       {isOpen && (
         <ul
           role="listbox"

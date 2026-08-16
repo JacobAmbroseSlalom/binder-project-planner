@@ -56,14 +56,14 @@ This index maps every story file to its current bucket.
 | 50    | Enhance the View Financials Cards section                               | [docs/stories/completed/2026-08-13-50-enhance-view-financials-cards-section.md](completed/2026-08-13-50-enhance-view-financials-cards-section.md)                                                                   |
 | 51    | Add binder tags                                                         | [docs/stories/completed/2026-08-14-51-add-binder-tags.md](completed/2026-08-14-51-add-binder-tags.md)                                                                                                               |
 | 52    | Persist What I'm Looking For order and add a movable PDF export divider | [docs/stories/completed/2026-08-14-52-persist-watchlist-order-and-pdf-export-divider.md](completed/2026-08-14-52-persist-watchlist-order-and-pdf-export-divider.md)                                                 |
+| 54    | Finances preview page                                                   | [docs/stories/completed/2026-08-15-54-finances-preview-page.md](completed/2026-08-15-54-finances-preview-page.md)                                                                                                   |
 
 ## Ready For Dev
 
-| Story | Title                                            | File                                                                                                                                       |
-| ----- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| 48    | House cleaning                                    | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md)                                                       |
-| 53    | Sync data across laptops via cloud-sync folder    | [docs/stories/ready-for-dev/53-sync-data-across-laptops-via-cloud-sync-folder.md](ready-for-dev/53-sync-data-across-laptops-via-cloud-sync-folder.md) |
-| 54    | Finances preview page                             | [docs/stories/ready-for-dev/54-finances-preview-page.md](ready-for-dev/54-finances-preview-page.md) |
+| Story | Title                                          | File                                                                                                                                                  |
+| ----- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 48    | House cleaning                                 | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md)                                                                 |
+| 53    | Sync data across laptops via cloud-sync folder | [docs/stories/ready-for-dev/53-sync-data-across-laptops-via-cloud-sync-folder.md](ready-for-dev/53-sync-data-across-laptops-via-cloud-sync-folder.md) |
 
 ## Needs Refinement
 

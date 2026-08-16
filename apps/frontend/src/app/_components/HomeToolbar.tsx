@@ -1,7 +1,7 @@
 'use client';
 
 import { DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE } from '@binder-project-planner/shared';
-import { ArrowUpDown, Check, Download, Upload } from 'lucide-react';
+import { ArrowUpDown, Calculator, Check, Download, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 
@@ -9,6 +9,7 @@ import { commitImport, exportData, validateImport, type ImportSummary } from '@/
 import {
   LoadingIndicator,
   toProblemDetailsInfo,
+  Tooltip,
   useSaveStatusToast,
   useToastContext,
 } from '@/shared/feedback';
@@ -150,37 +151,55 @@ export function HomeToolbar({
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Search binders"
           aria-label="Search binders"
-          className="rounded-standard border border-transparent bg-neutral-800 px-3 py-2 focus:border-primary focus:outline-none"
+          className="h-10 rounded-standard border border-transparent bg-neutral-800 px-3 focus:border-primary focus:outline-none"
         />
 
-        {/* Story 39's sort toggle: a single button switching between the two
-            orderings, labeled with the ordering selecting it would switch
-            to (matching this codebase's other toggle-button conventions). */}
-        <button
-          type="button"
-          onClick={onToggleSort}
-          aria-label={`Sort by ${sortOption === 'lastActive' ? 'name' : 'last active'}`}
-          className="flex cursor-pointer items-center gap-2 rounded-standard bg-neutral-800 px-4 py-2 font-bold hover:brightness-110"
-        >
-          <ArrowUpDown className="size-4" aria-hidden="true" />
-          Sort: {sortOption === 'lastActive' ? 'Last Active' : 'Name'}
-        </button>
-
-        {/* Story 51's tag filter, alongside the search box/sort toggle
-            above and the completion-metrics toggle below. */}
+        {/* Story 51's tag filter, swapped ahead of the sort toggle below;
+            its own "Tags" label moved into an icon-button tooltip (see
+            `TagFilterControl`). */}
         <TagFilterControl
           availableTags={availableTags}
           selectedTags={selectedTags}
           onSelectedTagsChange={onSelectedTagsChange}
         />
 
+        {/* Story 39's sort toggle: a single icon button switching between
+            the two orderings. The current ordering is kept as visible text
+            (it's the button's own state, not just a static label), but the
+            fixed "Sort:" prefix moved into a tooltip instead. */}
+        <Tooltip label="Toggle sort options">
+          <button
+            type="button"
+            onClick={onToggleSort}
+            aria-label={`Sort by ${sortOption === 'lastActive' ? 'name' : 'last active'}`}
+            className="flex h-10 cursor-pointer items-center gap-2 rounded-standard bg-neutral-800 px-4 font-bold hover:brightness-110"
+          >
+            <ArrowUpDown className="size-4" aria-hidden="true" />
+            {sortOption === 'lastActive' ? 'Last Active' : 'Name'}
+          </button>
+        </Tooltip>
+
         {/* Story 4's create button. */}
         <Link
           href="/binders/new"
-          className="rounded-standard bg-primary px-4 py-2 font-bold hover:brightness-110"
+          className="flex h-10 items-center rounded-standard bg-primary px-4 font-bold hover:brightness-110"
         >
           Create new binder
         </Link>
+
+        {/* Story 54's Finances Preview page - a standalone finance
+            estimate calculator reachable without creating a binder.
+            Icon-only, with its label moved into a tooltip to match the
+            other icon actions in this toolbar. */}
+        <Tooltip label="Preview Finances">
+          <Link
+            href="/finances-preview"
+            aria-label="Preview Finances"
+            className="flex h-10 w-10 items-center justify-center rounded-standard bg-neutral-800 hover:brightness-110"
+          >
+            <Calculator className="size-5" aria-hidden="true" />
+          </Link>
+        </Tooltip>
 
         {/* Story 22's completion-metrics toggle. */}
         <label htmlFor="completion-metrics-toggle" className="flex items-center gap-2">
@@ -197,26 +216,33 @@ export function HomeToolbar({
           <span className="text-caption text-neutral-500">Show completion metrics</span>
         </label>
 
-        {/* Story 33's export/import actions. */}
+        {/* Story 33's export/import actions - icon-only buttons with their
+            labels moved into tooltips, their icons swapped from the
+            semantically "expected" pairing (Download=export, Upload=import),
+            and Import placed ahead of Export, all per later revisions. */}
         <div className="flex gap-3">
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={isBusy}
-            className="flex cursor-pointer items-center gap-2 rounded-standard bg-neutral-800 px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Download className="size-5" />
-            Export
-          </button>
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            disabled={isBusy}
-            className="flex cursor-pointer items-center gap-2 rounded-standard bg-neutral-800 px-4 py-2 font-bold hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            <Upload className="size-5" />
-            Import
-          </button>
+          <Tooltip label="Import data">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isBusy}
+              aria-label="Import data"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-standard bg-neutral-800 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Download className="size-5" />
+            </button>
+          </Tooltip>
+          <Tooltip label="Export data">
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={isBusy}
+              aria-label="Export data"
+              className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-standard bg-neutral-800 hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Upload className="size-5" />
+            </button>
+          </Tooltip>
           {/* Hidden file input driven by the Import button; accepts ZIP
               archives produced by Export. */}
           <input

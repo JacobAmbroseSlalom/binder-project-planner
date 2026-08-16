@@ -1,6 +1,6 @@
 # 54. Finances preview page
 
-**Status:** Not started
+**Status:** Done (2026-08-15 22:21 EDT)
 
 #### Acceptance criteria
 
@@ -63,7 +63,7 @@
 
 - New route: `apps/frontend/src/app/finances-preview/page.tsx`, following the
   existing kebab-case top-level route convention (e.g. `apps/frontend/src/app/
-  binders/new`).
+binders/new`).
 - Home page: a new "Preview Finances" button is added to `HomeToolbar.tsx` beside
   the existing "Create new binder" button, linking to `/finances-preview`.
 - The existing binder-scoped Financials components
@@ -73,7 +73,7 @@
   (`onBinderUpdated`, `updateFinanceSettings`, etc.). Rather than threading a
   "don't actually save" flag through those existing components, this page gets
   its own sibling components under `apps/frontend/src/app/finances-preview/
-  _components/`, reusing the same pure calculation helpers
+_components/`, reusing the same pure calculation helpers
   (`apps/frontend/src/app/binders/[binderId]/financials/_lib/financeCalculations.ts`)
   and the same `FinanceField`/currency-formatting building blocks, but holding
   their own local component state instead of calling any update endpoint. The
@@ -93,11 +93,15 @@
   no separate "pick one of my binders" control anywhere on this page.
 - Since there's no real placed multi-slot art to derive a print-PDF page count
   from (as the real Financials tab does via `GET /binders/{binderId}/art-print-
-  page-count`), the selected/created Binder cost entry's own `pages` value is used
-  directly as the page count driving the Printing and Holographic Paper costs and
-  all 5 time-cost categories on this page.
+page-count`, which packs actually-placed art), this page estimates it instead:
+  the total slots (from the selected/created Binder cost entry's width/height/
+  pages) minus the Cards & Art section's own total card count leaves the slot
+  count assumed to hold art (floored at 0), and a flat 8 slots' worth of art is
+  assumed to fit per printed page, rounded up (`Math.ceil`) — e.g. 9 slots of art
+  is 2 pages. This estimated page count drives the Printing and Holographic Paper
+  costs and all 5 time-cost categories on this page.
 - Total slots is computed with the existing shared `getTotalSlots(width, height,
-  pages)` helper (`packages/shared/src/binderSpread.ts`), matching how the real
+pages)` helper (`packages/shared/src/binderSpread.ts`), matching how the real
   binder's own summary stats compute it.
 - When entered card counts exceed total slots, the page reuses the existing
   over-capacity display convention from story 40's layout summary stats (turning
