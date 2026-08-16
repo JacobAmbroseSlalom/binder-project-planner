@@ -4,7 +4,7 @@ import { useState } from 'react';
 
 import { BINDER_DIMENSION_MAX } from '@binder-project-planner/shared';
 
-import { CostEntryDropdown } from '../../binders/[binderId]/financials/_components/CostEntryDropdown';
+import { CostEntryDropdown } from '../../binders/[binderId]/financials/_components/costEntries/CostEntryDropdown';
 import {
   FinanceField,
   FinanceMoneyInput,

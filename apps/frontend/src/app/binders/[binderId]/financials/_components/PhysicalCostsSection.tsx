@@ -12,15 +12,15 @@ import {
 } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
-import { BinderCostEntryCard } from './BinderCostEntryCard';
+import { BinderCostEntryCard } from './costEntries/BinderCostEntryCard';
 import {
   financeErrorInputClassName,
   FinanceField,
   financeInputClassName,
   stripLeadingZero,
 } from './FinanceField';
-import { HolographicPaperCostEntryCard } from './HolographicPaperCostEntryCard';
-import { PrintingCostEntryCard } from './PrintingCostEntryCard';
+import { HolographicPaperCostEntryCard } from './costEntries/HolographicPaperCostEntryCard';
+import { PrintingCostEntryCard } from './costEntries/PrintingCostEntryCard';
 
 function parseErrorMarginPercent(value: string): number | null {
   const parsed = Number(value);

@@ -8,7 +8,7 @@ import type { Binder } from '@/lib/api';
 import { Tooltip } from '@/shared/feedback';
 
 import { ArtGridSelector } from './ArtGridSelector';
-import type { ArtDetailsFormValues } from './artSchema';
+import type { ArtDetailsFormValues } from '../../_lib/art/artSchema';
 
 const inputClassName =
   'rounded-standard border border-transparent bg-neutral-800 px-3 py-2 placeholder:text-neutral-500 focus:border-primary focus:outline-none';

@@ -33,7 +33,7 @@ import {
   TIME_COST_CATEGORIES,
 } from './_lib/financeCalculations';
 import { computeCardPriceTotal } from '@/shared/finance/computeCardPriceTotal';
-import { ManageCostEntriesModal } from './_components/ManageCostEntriesModal';
+import { ManageCostEntriesModal } from './_components/costEntries/ManageCostEntriesModal';
 import { PhysicalCostsSection } from './_components/PhysicalCostsSection';
 import { StickyTotals } from './_components/StickyTotals';
 import { TimeCostsSection } from './_components/TimeCostsSection';

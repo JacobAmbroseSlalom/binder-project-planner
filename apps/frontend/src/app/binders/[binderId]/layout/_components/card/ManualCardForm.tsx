@@ -7,7 +7,7 @@ import type { UseFormReturn } from 'react-hook-form';
 
 import { VariationCombobox } from '@/shared/forms';
 
-import type { ManualCardFormValues } from './manualCardSchema';
+import type { ManualCardFormValues } from '../../_lib/card/manualCardSchema';
 
 // The same filled-input treatment used by BinderDetailsForm.tsx
 // (styling.instructions.md's "Forms & inputs" section).

@@ -23,10 +23,10 @@ import {
   defaultManualCardFormValues,
   manualCardSchema,
   type ManualCardFormValues,
-} from '../../binders/[binderId]/layout/_components/card/manualCardSchema';
+} from '../../binders/[binderId]/layout/_lib/card/manualCardSchema';
 import { SearchResultsView } from '../../binders/[binderId]/layout/_components/card/SearchResultsView';
-import { useCardCatalogSearch } from '../../binders/[binderId]/layout/_components/card/useCardCatalogSearch';
-import { useCardSelectionState } from '../../binders/[binderId]/layout/_components/card/useCardSelectionState';
+import { useCardCatalogSearch } from '../../binders/[binderId]/layout/_lib/card/useCardCatalogSearch';
+import { useCardSelectionState } from '../../binders/[binderId]/layout/_lib/card/useCardSelectionState';
 
 // Story 45's "Add card" modal for the What I'm Looking For page - reuses
 // the binder Card List/Layout tab's own add-card modal machinery

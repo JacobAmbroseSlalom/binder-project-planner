@@ -11,7 +11,7 @@ import {
 } from '@/lib/api';
 import { useSaveStatusToast } from '@/shared/feedback';
 
-import { computeHolographicPaperCost, formatCurrency } from '../_lib/financeCalculations';
+import { computeHolographicPaperCost, formatCurrency } from '../../_lib/financeCalculations';
 import {
   financeErrorInputClassName,
   FinanceField,
@@ -19,7 +19,7 @@ import {
   financeInputClassName,
   physicalCostCardClassName,
   stripLeadingZero,
-} from './FinanceField';
+} from '../FinanceField';
 import { CostEntryDropdown } from './CostEntryDropdown';
 
 const SELECT_TOAST_ID = 'select-holographic-paper-cost-entry';

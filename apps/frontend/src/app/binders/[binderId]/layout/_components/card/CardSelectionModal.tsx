@@ -11,9 +11,9 @@ import { VariationCombobox } from '@/shared/forms';
 import { useBinderRouteContext, type CustomCardFormValues } from '../../../BinderRouteContext';
 import { ManualCardForm } from './ManualCardForm';
 import { SearchResultsView } from './SearchResultsView';
-import { useCardCatalogSearch } from './useCardCatalogSearch';
-import { useCardSelectionState } from './useCardSelectionState';
-import { useManualCardEntry } from './useManualCardEntry';
+import { useCardCatalogSearch } from '../../_lib/card/useCardCatalogSearch';
+import { useCardSelectionState } from '../../_lib/card/useCardSelectionState';
+import { useManualCardEntry } from '../../_lib/card/useManualCardEntry';
 
 // The custom card-selection modal (stories 11 and 12): searches the TCGdex
 // catalog through a debounced, cancellable search box and lets the user

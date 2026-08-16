@@ -3,7 +3,7 @@
 import { MIN_ART_PRINT_RESOLUTION_PPI } from '@binder-project-planner/shared';
 
 import { ArtImageEditor, type ArtTransform } from './ArtImageEditor';
-import type { computeArtImageQuality } from './artImageQuality';
+import type { computeArtImageQuality } from '../../_lib/art/artImageQuality';
 
 // Displayed in the quality warning below.
 const MIN_PPI_LABEL = MIN_ART_PRINT_RESOLUTION_PPI;

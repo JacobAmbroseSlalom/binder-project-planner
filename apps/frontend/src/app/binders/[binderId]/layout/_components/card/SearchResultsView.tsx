@@ -12,7 +12,7 @@ import {
 import { LoadingIndicator } from '@/shared/feedback';
 import { CardSearchProviderSelect } from '@/shared/forms';
 
-import type { useCardCatalogSearch } from './useCardCatalogSearch';
+import type { useCardCatalogSearch } from '../../_lib/card/useCardCatalogSearch';
 
 // `CardSelectionModal`'s search view (stories 11, 17, 18, 41, 43): the
 // search input, source dropdown, and (TCGdex-only) language/TCG-Pocket

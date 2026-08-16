@@ -12,7 +12,7 @@ import {
   useImageFromFile,
   useImageFromUrl,
   type ArtTransform,
-} from './ArtImageEditor';
+} from '../../_components/art/ArtImageEditor';
 import { computeArtImageQuality } from './artImageQuality';
 import {
   artDetailsSchema,

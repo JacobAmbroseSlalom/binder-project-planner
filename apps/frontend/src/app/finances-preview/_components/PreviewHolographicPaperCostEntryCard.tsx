@@ -6,7 +6,7 @@ import {
   computeHolographicPaperCost,
   formatCurrency,
 } from '../../binders/[binderId]/financials/_lib/financeCalculations';
-import { CostEntryDropdown } from '../../binders/[binderId]/financials/_components/CostEntryDropdown';
+import { CostEntryDropdown } from '../../binders/[binderId]/financials/_components/costEntries/CostEntryDropdown';
 import {
   FinanceField,
   FinanceMoneyInput,

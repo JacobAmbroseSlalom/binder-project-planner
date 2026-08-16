@@ -12,7 +12,7 @@ import {
   PlacementConflictConfirmDialog,
 } from './ArtModalConfirmDialogs';
 import { ArtPreviewColumn } from './ArtPreviewColumn';
-import { useArtFormState } from './useArtFormState';
+import { useArtFormState } from '../../_lib/art/useArtFormState';
 
 // Converts an existing `Art` record into this modal's own form-values
 // shape (story 26's edit mode), resolving each nullable border override

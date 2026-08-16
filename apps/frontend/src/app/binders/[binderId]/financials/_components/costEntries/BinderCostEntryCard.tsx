@@ -17,7 +17,7 @@ import {
   FinanceMoneyInput,
   financeInputClassName,
   physicalCostCardClassName,
-} from './FinanceField';
+} from '../FinanceField';
 import { CostEntryDropdown } from './CostEntryDropdown';
 
 const SELECT_TOAST_ID = 'select-binder-cost-entry';
