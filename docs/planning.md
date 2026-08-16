@@ -47,6 +47,17 @@ been placed vs. still needs a home.
   `build.nsis.artifactName` fix each installer's filename (no embedded version number),
   so the root [README.md](../README.md)'s `releases/latest/download/<filename>` links
   keep resolving to the newest build across releases.
+- Multi-laptop data sync (story 53): a settings-screen folder picker lets the user
+  point the existing `APP_DATA_DIRECTORY` at a folder managed by a consumer
+  cloud-sync client (Dropbox/iCloud Drive/OneDrive/Google Drive, handled
+  provider-agnostically). The app checkpoints and cleanly closes SQLite's WAL on
+  quit so a single self-contained `.db` file is left for the sync client to pick up,
+  tracks a `.sync-lock.json` marker to warn (advisory only) when another laptop
+  recently had the data open or the directory looks mid-sync, and automatically
+  writes a rotating local (non-synced) backup snapshot, reusing story 33's export
+  archive format, before any risky operation. This remains local-first with no
+  hosted server or real-time concurrent editing — only one laptop is expected to have
+  the app open at a time.
 
 ## Story backlog
 

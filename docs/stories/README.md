@@ -59,9 +59,11 @@ This index maps every story file to its current bucket.
 
 ## Ready For Dev
 
-| Story | Title          | File                                                                                  |
-| ----- | -------------- | ------------------------------------------------------------------------------------- |
-| 48    | House cleaning | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md) |
+| Story | Title                                            | File                                                                                                                                       |
+| ----- | ------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| 48    | House cleaning                                    | [docs/stories/ready-for-dev/48-house-cleaning.md](ready-for-dev/48-house-cleaning.md)                                                       |
+| 53    | Sync data across laptops via cloud-sync folder    | [docs/stories/ready-for-dev/53-sync-data-across-laptops-via-cloud-sync-folder.md](ready-for-dev/53-sync-data-across-laptops-via-cloud-sync-folder.md) |
+| 54    | Finances preview page                             | [docs/stories/ready-for-dev/54-finances-preview-page.md](ready-for-dev/54-finances-preview-page.md) |
 
 ## Needs Refinement
 
