@@ -167,6 +167,65 @@ checked:border-primary`, `rounded-standard` for checkboxes and
   (`lucide-react`'s `Check`) layered over the box, revealed via a `peer`/
   `peer-checked:opacity-100` pairing so it only appears once checked.
 
+## Modals
+
+- Every modal is a fully custom dialog (no headless UI library, per the "Styling
+  method" section above): one `fixed inset-0` element serves as both the dimmed
+  backdrop (`bg-black/40`, centered flex layout, `onClick` closes the modal) and the
+  stacking layer for the dialog panel inside it, rather than two separately-layered
+  elements. The panel itself (`role="dialog"`, `aria-modal="true"`, `aria-labelledby`
+  pointing at the modal's own heading, `rounded-standard bg-surface shadow-modal`)
+  stops click propagation so clicking inside it doesn't trigger the backdrop's close
+  handler.
+- Focus management is centralized in the shared `useModalFocusTrap` hook
+  (`src/shared/hooks/useModalFocusTrap.ts`): on mount it captures whatever element had
+  focus immediately before the modal opened and restores it on unmount, and it returns
+  a `handleTabTrap` keydown handler that keeps `Tab`/`Shift+Tab` cycling within the
+  dialog panel's own focusable elements. Call it with a `ref` on the dialog panel, and
+  wire its `handleTabTrap` into the panel's own `onKeyDown` after handling any keys the
+  modal needs to intercept itself first (e.g. `Escape` - callers handle that directly,
+  since a modal with nested pending state, like an unsaved-changes confirmation, often
+  needs `Escape` to dismiss that nested state before closing the modal itself).
+- A confirmation dialog opened from inside an already-open modal (e.g. a delete
+  confirmation launched from a "manage entries" modal) stacks above it using the
+  `z-[60]` layer documented in "Z-index / layering" below, and relies on the outer
+  modal's own `Escape` handling rather than adding a second listener.
+
+## Tooltips
+
+- The shared `Tooltip` component (`src/shared/feedback/Tooltip.tsx`) wraps a single
+  interactive trigger - typically an icon-only button - and shows a small dark bubble
+  on hover/focus. Use it instead of the native `title` attribute, whose ~1.5-2s
+  browser-default hover delay makes icon-only controls feel unresponsive; this
+  component fades in instantly (~75ms, no start delay).
+- The bubble renders through a portal into `document.body`, positioned with `fixed`
+  coordinates computed from the trigger's own `getBoundingClientRect()`, rather than
+  being absolutely positioned as a DOM sibling - this keeps it from being clipped by
+  whatever scrollable ancestor (e.g. a panel's own `overflow-y-auto`) the trigger sits
+  inside.
+- `align` (`'center'` default, `'start'`, `'end'`) sets the bubble's preferred
+  horizontal anchor relative to the trigger, but it's always clamped back on-screen if
+  that preference would otherwise overflow the viewport.
+- The trigger keeps its own `aria-label` for its accessible name; the tooltip's label
+  is presentational only (`aria-hidden`), not read twice by screen readers.
+
+## Virtualized lists & grids
+
+- Any list/grid long enough to need windowing (e.g. the unplaced-cards panel, the
+  unplaced-art panel, the card-catalog search results list) uses TanStack Virtual
+  (`@tanstack/react-virtual`)'s `useVirtualizer` - the only virtualization approach
+  used in the app; don't reach for a different windowing library.
+- Convention: a `ref`-tracked scrollable container passed as `getScrollElement`, a
+  fixed `estimateSize` per row (a grid groups multiple items into one virtualized
+  "row"), and `overscan: 5` so a handful of off-screen rows stay rendered to reduce
+  scroll-triggered pop-in.
+- Rows render absolutely positioned inside a container sized to the virtualizer's
+  total height, each translated into place via a `transform:
+translateY(${virtualRow.start}px)` inline style.
+- When an item needs to be revealed programmatically (e.g. after undo/redo, or a
+  newly-created/newly-unplaced item), call the virtualizer's own `scrollToIndex`,
+  rather than scrolling the container manually.
+
 ## Toast notifications
 
 Per story 3's acceptance criteria, there are exactly 3 toast states — `saving`,
@@ -220,11 +279,20 @@ numeric step for the same layer, low to high:
 - Page content — no explicit `z-*` (default stacking).
 - Sticky headers — `z-10`.
 - Dropdowns (comboboxes, menus, popovers) — `z-20`.
-- Modal backdrop — `z-30`.
-- Modal — `z-40`.
-- Toasts — `z-50` (always on top, above any open modal).
+- Modal — `z-50`. The backdrop and the dialog panel share a single wrapping
+  `fixed inset-0` element (see "Modals" above) rather than being layered as two
+  separate `z-*` steps.
+- Toasts — `z-50`, same step as a modal. `ToastViewport` mounts once at the app
+  root and renders after any open modal in the DOM, so it still paints on top via
+  DOM order; don't rely on `z-*` alone to keep toasts above modals if you move where
+  toasts are rendered from.
+- A confirmation dialog nested above an already-open modal (e.g. a delete
+  confirmation launched from within another modal) — the arbitrary `z-[60]` value,
+  one step above the standard modal/toast layer.
 
 ## Drag and drop (dnd-kit)
+
+### Binder grid slot dragging (`@dnd-kit/core`)
 
 - Dragged card: no extra decoration beyond what story 14 already specifies —
   the drag overlay renders the card image at the slot's rendered dimensions
@@ -234,3 +302,28 @@ numeric step for the same layer, low to high:
   tint, ring, or a new color. This keeps the "you can drop here" signal
   visually consistent with the "this is focused/active" signal used
   elsewhere in the form language.
+
+### Sortable list reordering (`@dnd-kit/sortable`)
+
+A distinct dnd-kit usage from the binder grid above, added for story 52's
+animated (FLIP-style) row reordering (e.g. the watchlist table):
+
+- `SortableContext` (with `verticalListSortingStrategy`) wraps the list, given
+  the full ordered array of item ids — comparing each row's id position across
+  renders is what drives the animation.
+- Each row calls its own `useSortable({ id })` — extracted into its own row
+  component rather than called inside a `.map()` callback, matching this
+  codebase's existing precedent for other per-item hooks.
+- Apply the computed transform via `CSS.Translate.toString(transform)`, not
+  `CSS.Transform` — `Transform` also carries a scale term derived from
+  comparing the dragged row's rect against each other row's rect, which
+  visibly stretches/skews rows whose rect shape differs from the dragged one
+  (e.g. against a full-width divider row).
+- Style: the actively-dragged row lifts above its siblings and dims slightly
+  (`relative z-10 bg-neutral-800 opacity-90`); every other row's move into its
+  new slot is animated purely by the `transform`/`transition` style
+  `useSortable` returns — no extra classes needed there.
+- Drag handle: a dedicated `GripVertical` icon button carries
+  `{...attributes} {...listeners}` (not the whole row), wrapped in the shared
+  `Tooltip` for its label — this keeps the row's other interactive controls
+  (inputs, buttons) from also acting as drag activators.

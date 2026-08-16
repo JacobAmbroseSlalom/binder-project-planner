@@ -4,7 +4,9 @@
 // Rendered with Tailwind utility classes generated from our `@theme` tokens
 // (see globals.css) rather than inline styles.
 
-import { Check, CircleAlert, CircleCheck, Loader2, Star, X } from 'lucide-react';
+import { Check, CircleAlert, CircleCheck, GripVertical, Loader2, Star, X } from 'lucide-react';
+
+import { Tooltip } from '@/shared/feedback/Tooltip';
 
 // A single, reusable class string for the filled-style form control look
 // (text inputs, selects, textareas): a neutral-800 fill with no visible
@@ -281,6 +283,27 @@ export default function StyleGuidePage() {
         </div>
       </section>
 
+      <h1>Style guide — tooltips</h1>
+      <section className="flex flex-col gap-2">
+        <p className="text-caption text-neutral-500">
+          Shows instantly on hover/focus (no native `title` delay), portaled into{' '}
+          <code>document.body</code> so it&apos;s never clipped by a scrollable ancestor. Wrap a
+          single icon-only trigger; the trigger keeps its own `aria-label`.
+        </p>
+        <div className="flex items-center gap-6">
+          <Tooltip label="Reorder">
+            <button
+              type="button"
+              aria-label="Reorder"
+              className="cursor-pointer rounded-standard p-2 hover:brightness-110"
+            >
+              <GripVertical className="size-5" />
+            </button>
+          </Tooltip>
+          <p className="text-caption text-neutral-500">Hover or focus the handle to the left</p>
+        </div>
+      </section>
+
       <h1>Style guide — elevation &amp; surfaces</h1>
       <section className="flex flex-col gap-6">
         <div className="flex flex-wrap gap-8">
@@ -354,6 +377,29 @@ export default function StyleGuidePage() {
         </div>
       </section>
 
+      <h1>Style guide — modals</h1>
+      <section className="flex flex-col gap-2">
+        <p className="text-caption text-neutral-500">
+          One `fixed inset-0` element is both the dimmed backdrop and the dialog&apos;s stacking
+          layer; the panel (`role=&quot;dialog&quot;`) stops click propagation so clicking inside it
+          doesn&apos;t close it. Focus capture/restore and the Tab-trap come from the shared
+          `useModalFocusTrap` hook.
+        </p>
+        <div className="relative flex h-40 w-full items-center justify-center overflow-hidden rounded-standard bg-background">
+          <p className="absolute top-2 left-2 text-caption text-neutral-500">Page content</p>
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+            <div
+              role="dialog"
+              aria-modal="true"
+              className="flex w-64 flex-col gap-2 rounded-standard bg-surface p-4 shadow-modal"
+            >
+              <h3>Modal title</h3>
+              <p className="text-caption text-neutral-500">Modal content goes here.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <h1>Style guide — toast notifications</h1>
       <section className="flex flex-col gap-2">
         <p className="text-caption text-neutral-500">
@@ -408,7 +454,9 @@ export default function StyleGuidePage() {
       <section className="flex flex-col gap-2">
         <p className="text-caption text-neutral-500">
           Fixed numeric convention, low to high: sticky headers (z-10), dropdowns (z-20), modal
-          backdrop (z-30), modal (z-40), toasts (z-50, always on top).
+          (z-50, backdrop + panel share one wrapping element), toasts (z-50, painted above modals
+          via DOM order since `ToastViewport` mounts at the app root), a confirmation dialog nested
+          above another open modal (z-[60]).
         </p>
         <div className="relative h-40 w-full overflow-hidden rounded-standard bg-background">
           <div className="absolute top-2 left-2 z-10 rounded-standard bg-neutral-700 px-3 py-1 text-caption">
@@ -417,9 +465,12 @@ export default function StyleGuidePage() {
           <div className="absolute top-12 left-12 z-20 rounded-standard bg-neutral-700 px-3 py-1 text-caption shadow-panel">
             Dropdown (z-20)
           </div>
-          <div className="absolute inset-0 z-30 bg-black/40" />
-          <div className="absolute top-16 left-1/2 z-40 -translate-x-1/2 rounded-standard bg-surface px-4 py-2 shadow-modal">
-            Modal (z-40)
+          <div className="absolute inset-0 z-50 bg-black/40" />
+          <div className="absolute top-16 left-1/2 z-50 -translate-x-1/2 rounded-standard bg-surface px-4 py-2 shadow-modal">
+            Modal (z-50)
+          </div>
+          <div className="absolute top-24 left-1/2 z-[60] -translate-x-1/2 rounded-standard bg-surface px-4 py-2 text-caption shadow-modal">
+            Nested dialog (z-[60])
           </div>
           <div className="absolute right-4 bottom-4 z-50 rounded-standard bg-success px-3 py-1 text-caption text-neutral-100 shadow-panel">
             Toast (z-50)
@@ -430,9 +481,9 @@ export default function StyleGuidePage() {
       <h1>Style guide — drag and drop</h1>
       <section className="flex flex-col gap-2">
         <p className="text-caption text-neutral-500">
-          Dragged card: no visual change (no opacity/scale/rotation). Source slot: empty
-          placeholder. Valid drop target: border switches to `border-primary`, matching a focused
-          input.
+          Binder grid (`@dnd-kit/core`) — dragged card: no visual change (no
+          opacity/scale/rotation). Source slot: empty placeholder. Valid drop target: border
+          switches to `border-primary`, matching a focused input.
         </p>
         <div className="flex gap-4">
           <div className="flex aspect-[2/3] w-24 items-center justify-center rounded-standard border border-neutral-700 bg-neutral-800 text-caption text-neutral-500">
@@ -444,6 +495,53 @@ export default function StyleGuidePage() {
           <div className="flex aspect-[2/3] w-24 items-center justify-center rounded-standard border border-primary bg-neutral-800 text-caption text-primary">
             Drop target
           </div>
+        </div>
+      </section>
+
+      <h1>Style guide — sortable list reordering</h1>
+      <section className="flex flex-col gap-2">
+        <p className="text-caption text-neutral-500">
+          Animated (FLIP-style) row reordering (`@dnd-kit/sortable`) — a dedicated grip handle (not
+          the whole row) is the drag activator; the actively-dragged row lifts above its siblings
+          and dims slightly while other rows animate into their new slot.
+        </p>
+        <div className="flex w-72 flex-col rounded-standard bg-surface shadow-panel">
+          <div className="flex items-center gap-2 border-b border-neutral-800 px-3 py-2">
+            <GripVertical className="size-4 text-neutral-500" />
+            <span>Row 1</span>
+          </div>
+          <div className="relative z-10 flex items-center gap-2 rounded-standard bg-neutral-800 px-3 py-2 opacity-90">
+            <GripVertical className="size-4 text-neutral-500" />
+            <span>Row 2 (dragging)</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2">
+            <GripVertical className="size-4 text-neutral-500" />
+            <span>Row 3</span>
+          </div>
+        </div>
+      </section>
+
+      <h1>Style guide — virtualized lists &amp; grids</h1>
+      <section className="flex flex-col gap-2">
+        <p className="text-caption text-neutral-500">
+          Long lists/grids (unplaced-cards panel, unplaced-art panel, catalog search results) use
+          `@tanstack/react-virtual`&apos;s `useVirtualizer` — rows are absolutely positioned inside
+          a container sized to the virtualizer&apos;s total height, each translated into place via
+          `translateY`, with only the visible-plus-overscan rows actually rendered.
+        </p>
+        <div className="relative h-32 w-full overflow-hidden rounded-standard bg-neutral-800">
+          <div className="absolute top-0 right-0 left-0 rounded-standard bg-surface px-3 py-2 text-caption shadow-panel">
+            Row (translateY: 0px)
+          </div>
+          <div className="absolute top-11 right-0 left-0 rounded-standard bg-surface px-3 py-2 text-caption shadow-panel">
+            Row (translateY: 44px)
+          </div>
+          <div className="absolute top-[88px] right-0 left-0 rounded-standard bg-surface px-3 py-2 text-caption shadow-panel">
+            Row (translateY: 88px)
+          </div>
+          <p className="absolute right-2 bottom-2 text-caption text-neutral-500">
+            + off-screen rows (not rendered)
+          </p>
         </div>
       </section>
     </main>
