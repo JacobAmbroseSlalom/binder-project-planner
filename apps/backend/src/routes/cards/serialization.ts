@@ -1,5 +1,5 @@
 import { fromCents } from '../../finance/currency.js';
-import type { CardPriceFetchResult } from '../../integrations/pokemontcg.js';
+import type { CardPriceFetchResult } from '../../integrations/pokemontcg/index.js';
 
 import type { CardRow } from './types.js';
 

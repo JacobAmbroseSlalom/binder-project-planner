@@ -8,7 +8,7 @@ import {
   createPriceFetchBatchCache,
   fetchCardPriceData,
   PokemonTcgAbortedError,
-} from '../../integrations/pokemontcg.js';
+} from '../../integrations/pokemontcg/index.js';
 
 import { mapWithConcurrencyLimit } from '../concurrency.js';
 

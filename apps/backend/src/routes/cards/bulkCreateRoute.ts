@@ -15,7 +15,7 @@ import {
   findIdempotentOutcome,
   saveIdempotentOutcome,
 } from '../../idempotency/mutationIdempotency.js';
-import { PokemonTcgProviderError } from '../../integrations/pokemontcg.js';
+import { PokemonTcgProviderError } from '../../integrations/pokemontcg/index.js';
 import { TcgDexProviderError } from '../../integrations/tcgdex.js';
 import { lockedBinderConflictProblem } from '../../lockedBinderProblem.js';
 

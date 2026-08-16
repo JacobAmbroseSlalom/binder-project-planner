@@ -18,7 +18,7 @@ import { detectImageFormat } from '../../images/imageFormat.js';
 import {
   downloadPokemonTcgCardImage,
   PokemonTcgProviderError,
-} from '../../integrations/pokemontcg.js';
+} from '../../integrations/pokemontcg/index.js';
 import { downloadCardImage, TcgDexProviderError } from '../../integrations/tcgdex.js';
 
 // better-sqlite3 surfaces unique-constraint violations as a `SqliteError`

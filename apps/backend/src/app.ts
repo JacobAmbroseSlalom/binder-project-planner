@@ -12,7 +12,7 @@ import { openApiSpecificationPath } from './paths.js';
 import { createArtRouter } from './routes/art/index.js';
 import { createBindersRouter } from './routes/binders/index.js';
 import { createCardsRouter } from './routes/cards/index.js';
-import { createCostEntriesRouter } from './routes/costEntries.js';
+import { createCostEntriesRouter } from './routes/costEntries/index.js';
 import { createDataTransferRouter } from './routes/dataTransfer.js';
 import { createFinanceSettingsRouter } from './routes/financeSettings.js';
 import { createMaintenanceRouter } from './routes/maintenance.js';

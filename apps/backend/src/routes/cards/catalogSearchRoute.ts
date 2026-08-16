@@ -9,7 +9,7 @@ import {
   PokemonTcgAbortedError,
   PokemonTcgProviderError,
   searchPokemonTcgCardCatalog,
-} from '../../integrations/pokemontcg.js';
+} from '../../integrations/pokemontcg/index.js';
 import {
   searchCardCatalog,
   TcgDexAbortedError,
