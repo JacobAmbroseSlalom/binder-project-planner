@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import {
   DEFAULT_BORDER_COLOR,
@@ -20,7 +20,8 @@ import NewBinderPage from '@/app/binders/new/page';
 // form; every test that submits the form or asserts on a created binder's
 // shape spreads this so each test only overrides the field(s) it's
 // actually exercising, using the same canonical shared defaults the form
-// itself falls back to.
+// itself falls back to. Story 51 adds `tags`, required but empty by
+// default until the user adds one through `TagsInput`.
 const dimensionFields = {
   widthPerSlot: DEFAULT_WIDTH_PER_SLOT_CM,
   widthBase: DEFAULT_WIDTH_BASE_CM,
@@ -30,23 +31,32 @@ const dimensionFields = {
   borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
   borderWidth: DEFAULT_BORDER_WIDTH_CM,
   previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  tags: [] as string[],
 };
 
 // The API client is mocked so these tests exercise the page's own submit
 // handling (disabling Create, navigating, showing toasts) without making a
-// real network request.
+// real network request. `listTagSuggestions` is mocked too since
+// `BinderDetailsForm` (rendered by this page) fetches it once for its
+// `TagsInput`'s autocomplete suggestions (story 51).
 jest.mock('@/lib/api', () => ({
   createBinder: jest.fn(),
+  listTagSuggestions: jest.fn().mockResolvedValue([]),
 }));
 
-// next/navigation's useRouter has no real implementation outside the Next.js
-// router context, so it's mocked to capture push() calls.
+// next/navigation's useRouter/useSearchParams have no real implementation
+// outside the Next.js router context. useSearchParams is used by
+// `NewBinderForm` to prefill width/height/pages from the Finances Preview
+// page's "Create binder" button (story 54); these tests use no query
+// params, so an empty `URLSearchParams` is enough.
 jest.mock('next/navigation', () => ({
   useRouter: jest.fn(),
+  useSearchParams: jest.fn(),
 }));
 
 const mockedCreateBinder = jest.mocked(createBinder);
 const mockedUseRouter = jest.mocked(useRouter);
+const mockedUseSearchParams = jest.mocked(useSearchParams);
 
 // useSaveStatusToast requires a ToastProvider ancestor (mounted in the real
 // app by RootLayout), so tests wrap the page the same way.
@@ -64,6 +74,9 @@ describe('NewBinderPage', () => {
   beforeEach(() => {
     push.mockReset();
     mockedUseRouter.mockReturnValue({ push } as unknown as ReturnType<typeof useRouter>);
+    mockedUseSearchParams.mockReturnValue(
+      new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
+    );
   });
 
   it('renders the binder-details form with its default values', () => {

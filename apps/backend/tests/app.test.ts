@@ -178,6 +178,20 @@ describe('GET /binders', () => {
         previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
         createdAt: '2026-01-01T00:00:00.000Z',
         updatedAt: '2026-01-01T00:00:00.000Z',
+        // Story 23/32/34/51's editable-but-unset-by-default fields.
+        locked: false,
+        notes: null,
+        tags: [],
+        selectedBinderCostEntryId: null,
+        selectedPrintingCostEntryId: null,
+        selectedHolographicPaperCostEntryId: null,
+        // Story 22/36's whole-binder slot-completion and card-acquisition
+        // counts, both zero for an empty 3x3x20 binder with no cards placed.
+        totalSlots: 360,
+        occupiedSlots: 0,
+        emptySlots: 360,
+        acquiredCards: 0,
+        totalCards: 0,
         // Story 20's embedded preview spread for `previewPhysicalPage: 2`
         // out of 20 stored pages (40 physical pages): a two-sided spread
         // pairing physical pages 2 and 3, with no cards/art placed yet.
@@ -383,17 +397,27 @@ describe('PATCH /binders/:binderId', () => {
     const response = await request(app).patch(`/binders/${created.body.id}`).send({ width: 4 });
 
     expect(response.status).toBe(200);
+    // Story 27: a successful update returns `{binder, movedCards, movedArt,
+    // affectedCardCount, affectedArtCount}` rather than a bare binder, so a
+    // client can reconcile any relocated layout state without a refetch;
+    // this non-reducing width increase moves/affects nothing.
     expect(response.body).toMatchObject({
-      id: created.body.id,
-      name: 'My Binder',
-      width: 4,
-      height: 3,
-      pages: 20,
+      binder: {
+        id: created.body.id,
+        name: 'My Binder',
+        width: 4,
+        height: 3,
+        pages: 20,
+      },
+      movedCards: [],
+      movedArt: [],
+      affectedCardCount: 0,
+      affectedArtCount: 0,
     });
     // updatedAt must advance so clients can rely on it for cache/sort
     // freshness; createdAt is immutable.
-    expect(response.body.createdAt).toBe(created.body.createdAt);
-    expect(response.body).not.toHaveProperty('normalizedName');
+    expect(response.body.binder.createdAt).toBe(created.body.createdAt);
+    expect(response.body.binder).not.toHaveProperty('normalizedName');
   });
 
   it('applies multiple dirty fields in one request', async () => {
@@ -404,7 +428,11 @@ describe('PATCH /binders/:binderId', () => {
       .send({ name: 'Renamed Binder', pages: 30 });
 
     expect(response.status).toBe(200);
-    expect(response.body).toMatchObject({ name: 'Renamed Binder', pages: 30, width: 3, height: 3 });
+    expect(response.body).toMatchObject({
+      binder: { name: 'Renamed Binder', pages: 30, width: 3, height: 3 },
+      movedCards: [],
+      movedArt: [],
+    });
   });
 
   it('trims a supplied name and re-validates the trimmed length', async () => {
@@ -415,7 +443,7 @@ describe('PATCH /binders/:binderId', () => {
       .send({ name: '  Renamed  ' });
 
     expect(response.status).toBe(200);
-    expect(response.body.name).toBe('Renamed');
+    expect(response.body.binder.name).toBe('Renamed');
   });
 
   it('rejects a name that is empty after trimming with 400 Bad Request', async () => {

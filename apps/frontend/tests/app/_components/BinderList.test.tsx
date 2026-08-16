@@ -42,7 +42,12 @@ beforeEach(() => {
 function renderBinderList() {
   return render(
     <ToastProvider>
-      <BinderList />
+      <BinderList
+        searchQuery=""
+        sortOption="lastActive"
+        selectedTags={[]}
+        onAvailableTagsChange={jest.fn()}
+      />
     </ToastProvider>,
   );
 }
@@ -66,6 +71,8 @@ function makeBinderSummary(overrides: Partial<BinderSummary>): BinderSummary {
     borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
     borderWidth: DEFAULT_BORDER_WIDTH_CM,
     previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+    // Story 51: zero to many tags, added/removed through `TagsInput`.
+    tags: [],
     createdAt: '2026-01-01T00:00:00.000Z',
     updatedAt: '2026-01-01T00:00:00.000Z',
     // Story 20's embedded preview spread; BinderPreview destructures this

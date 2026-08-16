@@ -1,20 +1,31 @@
 import { render, screen } from '@testing-library/react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 import { BinderTabs } from '@/app/binders/[binderId]/BinderTabs';
 
-// next/navigation's usePathname has no real implementation outside the
-// Next.js router context, so it's mocked to control which tab is "active"
-// per test.
+// next/navigation's usePathname/useRouter have no real implementation
+// outside the Next.js router context. usePathname controls which tab is
+// "active" per test; useRouter is mocked too since BinderTabs also calls it
+// (for its unsaved-changes-guarded navigation, story 38) even though these
+// tests don't assert on it directly.
 jest.mock('next/navigation', () => ({
   usePathname: jest.fn(),
+  useRouter: jest.fn(),
 }));
 
 const mockedUsePathname = jest.mocked(usePathname);
+const mockedUseRouter = jest.mocked(useRouter);
 
 const BINDER_ID = '11111111-1111-1111-1111-111111111111';
 
 describe('BinderTabs', () => {
+  beforeEach(() => {
+    mockedUseRouter.mockReturnValue({
+      push: jest.fn(),
+      replace: jest.fn(),
+    } as unknown as ReturnType<typeof useRouter>);
+  });
+
   it('links Edit Details and Edit Layout to their nested routes', () => {
     mockedUsePathname.mockReturnValue(`/binders/${BINDER_ID}/details`);
 
@@ -42,16 +53,16 @@ describe('BinderTabs', () => {
     expect(screen.getByRole('link', { name: 'Edit Layout' })).not.toHaveAttribute('aria-current');
   });
 
-  it('renders the disabled View Financials tab as a non-navigable span rather than a link', () => {
+  it('links View Financials to its nested route now that story 34 has enabled it', () => {
     mockedUsePathname.mockReturnValue(`/binders/${BINDER_ID}/layout`);
 
     render(<BinderTabs binderId={BINDER_ID} />);
 
-    // Per story 7, the Financials tab has no page yet and must not be
-    // focusable/navigable until its story lands.
-    expect(screen.queryByRole('link', { name: 'View Financials' })).not.toBeInTheDocument();
-    const financialsTab = screen.getByText('View Financials');
-    expect(financialsTab.tagName).toBe('SPAN');
-    expect(financialsTab).toHaveAttribute('aria-disabled', 'true');
+    // Story 34 enabled this tab (it was previously a disabled, non-navigable
+    // placeholder per story 7).
+    expect(screen.getByRole('link', { name: 'View Financials' })).toHaveAttribute(
+      'href',
+      `/binders/${BINDER_ID}/financials`,
+    );
   });
 });

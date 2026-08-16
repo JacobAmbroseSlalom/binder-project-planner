@@ -160,6 +160,11 @@ export function UnplacedArtPanel({
       : 0;
   const pxPerCm = oneCardWidthCm > 0 ? referenceCardWidthPx / oneCardWidthCm : 0;
 
+  // Accepted lint warning (story 48): TanStack Virtual's `useVirtualizer()`
+  // returns functions that aren't safely memoizable, so the React Compiler
+  // reports `react-hooks/incompatible-library` and skips optimizing this
+  // component. There's no library-side fix available, and the component
+  // works correctly unoptimized, so this warning is intentionally accepted.
   const rowVirtualizer = useVirtualizer({
     count: filteredUnplacedArt.length,
     getScrollElement: () => scrollContainerRef.current,

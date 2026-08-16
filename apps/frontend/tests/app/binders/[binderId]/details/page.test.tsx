@@ -12,13 +12,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { useBinderRouteContext } from '@/app/binders/[binderId]/BinderRouteContext';
 import BinderDetailsPage from '@/app/binders/[binderId]/details/page';
-import { updateBinder, type Binder } from '@/lib/api';
+import { updateBinderWithRelocations, type Binder, type UpdateBinderResult } from '@/lib/api';
 import { ToastProvider } from '@/shared/feedback';
 
 // The API client is mocked so these tests exercise the page's own
-// save-on-blur handling without a real network request.
+// save-on-blur handling without a real network request. `listTagSuggestions`
+// is mocked too since `BinderDetailsForm` (rendered by this page) fetches it
+// once for its `TagsInput`'s autocomplete suggestions (story 51).
 jest.mock('@/lib/api', () => ({
-  updateBinder: jest.fn(),
+  updateBinderWithRelocations: jest.fn(),
+  listTagSuggestions: jest.fn().mockResolvedValue([]),
 }));
 
 // The shared binder route context is mocked so these tests can control the
@@ -28,8 +31,17 @@ jest.mock('@/app/binders/[binderId]/BinderRouteContext', () => ({
   useBinderRouteContext: jest.fn(),
 }));
 
-const mockedUpdateBinder = jest.mocked(updateBinder);
+const mockedUpdateBinderWithRelocations = jest.mocked(updateBinderWithRelocations);
 const mockedUseBinderRouteContext = jest.mocked(useBinderRouteContext);
+
+// Wraps a patched binder into the `UpdateBinderResult` shape
+// `updateBinderWithRelocations` actually resolves with (story 27: also
+// reports any cards/art moved to unplaced by the same request) - none of
+// these tests exercise a relocating resize, so `movedCards`/`movedArt` are
+// always empty.
+function makeUpdateResult(binder: Binder): UpdateBinderResult {
+  return { binder, movedCards: [], movedArt: [] };
+}
 
 const BINDER: Binder = {
   id: '11111111-1111-1111-1111-111111111111',
@@ -49,6 +61,8 @@ const BINDER: Binder = {
   borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
   borderWidth: DEFAULT_BORDER_WIDTH_CM,
   previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  // Story 51: zero to many tags, added/removed through `TagsInput`.
+  tags: [],
   createdAt: '2026-01-01T00:00:00.000Z',
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
@@ -57,6 +71,7 @@ function renderPage(updateBinderContext: jest.Mock = jest.fn()) {
   mockedUseBinderRouteContext.mockReturnValue({
     binder: BINDER,
     cards: [],
+    setCards: jest.fn(),
     art: [],
     updateBinder: updateBinderContext,
     layoutFocalPage: null,
@@ -77,6 +92,12 @@ function renderPage(updateBinderContext: jest.Mock = jest.fn()) {
     pendingCardDeletionIds: new Set(),
     editCardVariation: jest.fn(),
     pendingCardVariationEditIds: new Set(),
+    editCardDetails: jest.fn(),
+    pendingCardDetailsEditIds: new Set(),
+    toggleCardAcquired: jest.fn(),
+    pendingCardAcquiredToggleIds: new Set(),
+    toggleCardsAcquisition: jest.fn(),
+    isBulkAcquisitionPending: false,
     duplicateCard: jest.fn(),
     pendingCardDuplicateIds: new Set(),
     moveCard: jest.fn(),
@@ -85,6 +106,8 @@ function renderPage(updateBinderContext: jest.Mock = jest.fn()) {
     setCardSearchLanguage: jest.fn(),
     includeTcgPocket: false,
     setIncludeTcgPocket: jest.fn(),
+    cardSearchProvider: 'tcgdex',
+    setCardSearchProvider: jest.fn(),
     createArt: jest.fn(),
     pendingUnplacedArtIds: new Set(),
     artCreateRestore: null,
@@ -122,14 +145,16 @@ describe('BinderDetailsPage (Edit Details tab)', () => {
 
     fireEvent.blur(screen.getByLabelText('Binder name'));
 
-    expect(mockedUpdateBinder).not.toHaveBeenCalled();
+    expect(mockedUpdateBinderWithRelocations).not.toHaveBeenCalled();
   });
 
   it('saves only the changed, valid field on blur and syncs the context and form from the response', async () => {
     // `mockResolvedValueOnce` (rather than `mockResolvedValue`) so this
     // resolved value doesn't leak into later tests - `clearMocks` (jest
     // config) only clears call history between tests, not implementations.
-    mockedUpdateBinder.mockResolvedValueOnce({ ...BINDER, name: 'New Name' });
+    mockedUpdateBinderWithRelocations.mockResolvedValueOnce(
+      makeUpdateResult({ ...BINDER, name: 'New Name' }),
+    );
     const updateBinderContext = jest.fn();
     renderPage(updateBinderContext);
 
@@ -137,7 +162,9 @@ describe('BinderDetailsPage (Edit Details tab)', () => {
     fireEvent.blur(screen.getByLabelText('Binder name'));
 
     await waitFor(() =>
-      expect(mockedUpdateBinder).toHaveBeenCalledWith(BINDER.id, { name: 'New Name' }),
+      expect(mockedUpdateBinderWithRelocations).toHaveBeenCalledWith(BINDER.id, {
+        name: 'New Name',
+      }),
     );
     await waitFor(() => expect(screen.getByText('Saved')).toBeInTheDocument());
     expect(updateBinderContext).toHaveBeenCalledWith({ ...BINDER, name: 'New Name' });
@@ -150,13 +177,13 @@ describe('BinderDetailsPage (Edit Details tab)', () => {
     fireEvent.blur(screen.getByLabelText('Width (slots)'));
 
     await waitFor(() => expect(screen.getByText('Width must be at least 1.')).toBeInTheDocument());
-    expect(mockedUpdateBinder).not.toHaveBeenCalled();
+    expect(mockedUpdateBinderWithRelocations).not.toHaveBeenCalled();
   });
 
   it('shows a failed toast on save failure, leaving the field dirty so the next blur retries it', async () => {
-    mockedUpdateBinder
+    mockedUpdateBinderWithRelocations
       .mockRejectedValueOnce({ detail: 'A binder named "New Name" already exists.' })
-      .mockResolvedValueOnce({ ...BINDER, name: 'New Name' });
+      .mockResolvedValueOnce(makeUpdateResult({ ...BINDER, name: 'New Name' }));
     renderPage();
 
     fireEvent.change(screen.getByLabelText('Binder name'), { target: { value: 'New Name' } });
@@ -170,13 +197,15 @@ describe('BinderDetailsPage (Edit Details tab)', () => {
     // later blur (e.g. the user re-confirming) submits the same patch again.
     fireEvent.blur(screen.getByLabelText('Binder name'));
 
-    await waitFor(() => expect(mockedUpdateBinder).toHaveBeenCalledTimes(2));
-    expect(mockedUpdateBinder).toHaveBeenNthCalledWith(2, BINDER.id, { name: 'New Name' });
+    await waitFor(() => expect(mockedUpdateBinderWithRelocations).toHaveBeenCalledTimes(2));
+    expect(mockedUpdateBinderWithRelocations).toHaveBeenNthCalledWith(2, BINDER.id, {
+      name: 'New Name',
+    });
   });
 
   it('serializes saves: a blur while one is in flight is queued into a single follow-up save', async () => {
-    let resolveFirst!: (value: Binder) => void;
-    mockedUpdateBinder.mockImplementationOnce(
+    let resolveFirst!: (value: UpdateBinderResult) => void;
+    mockedUpdateBinderWithRelocations.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
           resolveFirst = resolve;
@@ -187,7 +216,7 @@ describe('BinderDetailsPage (Edit Details tab)', () => {
     fireEvent.change(screen.getByLabelText('Binder name'), { target: { value: 'First Change' } });
     fireEvent.blur(screen.getByLabelText('Binder name'));
 
-    await waitFor(() => expect(mockedUpdateBinder).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockedUpdateBinderWithRelocations).toHaveBeenCalledTimes(1));
 
     // A second blur happens (a different field) while the first save is
     // still in flight.
@@ -195,14 +224,16 @@ describe('BinderDetailsPage (Edit Details tab)', () => {
     fireEvent.blur(screen.getByLabelText('Height (slots)'));
 
     // The second blur must be queued, not fired as an overlapping request.
-    expect(mockedUpdateBinder).toHaveBeenCalledTimes(1);
+    expect(mockedUpdateBinderWithRelocations).toHaveBeenCalledTimes(1);
 
-    mockedUpdateBinder.mockResolvedValueOnce({ ...BINDER, height: 5 });
-    resolveFirst({ ...BINDER, name: 'First Change' });
+    mockedUpdateBinderWithRelocations.mockResolvedValueOnce(
+      makeUpdateResult({ ...BINDER, height: 5 }),
+    );
+    resolveFirst(makeUpdateResult({ ...BINDER, name: 'First Change' }));
 
     // The name field is clean again after the first save succeeds, so the
     // queued follow-up save only submits the still-dirty height field.
-    await waitFor(() => expect(mockedUpdateBinder).toHaveBeenCalledTimes(2));
-    expect(mockedUpdateBinder).toHaveBeenNthCalledWith(2, BINDER.id, { height: 5 });
+    await waitFor(() => expect(mockedUpdateBinderWithRelocations).toHaveBeenCalledTimes(2));
+    expect(mockedUpdateBinderWithRelocations).toHaveBeenNthCalledWith(2, BINDER.id, { height: 5 });
   });
 });

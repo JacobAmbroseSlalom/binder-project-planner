@@ -175,6 +175,11 @@ export function UnplacedCardsPanel({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
 
+  // Accepted lint warning (story 48): TanStack Virtual's `useVirtualizer()`
+  // returns functions that aren't safely memoizable, so the React Compiler
+  // reports `react-hooks/incompatible-library` and skips optimizing this
+  // component. There's no library-side fix available, and the component
+  // works correctly unoptimized, so this warning is intentionally accepted.
   const rowVirtualizer = useVirtualizer({
     count: unplacedCardRows.length,
     getScrollElement: () => scrollContainerRef.current,

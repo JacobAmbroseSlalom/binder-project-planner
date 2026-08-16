@@ -15,10 +15,11 @@ import {
 
 import { binderDetailsSchema, defaultBinderDetailsFormValues } from '@/shared/forms';
 
-// Story 24's dimension/style fields are required by `binderDetailsSchema`
-// alongside name/width/height/pages; every valid parse below spreads this so
-// each test only overrides the field(s) it's actually exercising, using the
-// same canonical shared defaults the form itself falls back to.
+// Story 24's dimension/style fields (plus story 51's `tags` field) are
+// required by `binderDetailsSchema` alongside name/width/height/pages; every
+// valid parse below spreads this so each test only overrides the field(s)
+// it's actually exercising, using the same canonical shared defaults the
+// form itself falls back to.
 const validDimensionFields = {
   widthPerSlot: DEFAULT_WIDTH_PER_SLOT_CM,
   widthBase: DEFAULT_WIDTH_BASE_CM,
@@ -28,6 +29,7 @@ const validDimensionFields = {
   borderRadius: DEFAULT_BORDER_RADIUS_PERCENT,
   borderWidth: DEFAULT_BORDER_WIDTH_CM,
   previewPhysicalPage: DEFAULT_BINDER_PREVIEW_PHYSICAL_PAGE,
+  tags: [] as string[],
 };
 
 // Verifies story 4's client-side validation rules: the Zod schema trims and

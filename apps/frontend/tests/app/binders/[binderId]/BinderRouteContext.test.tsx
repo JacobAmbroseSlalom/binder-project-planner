@@ -25,6 +25,7 @@ import {
   useBinderRouteContext,
 } from '@/app/binders/[binderId]/BinderRouteContext';
 import { ToastProvider } from '@/shared/feedback';
+import { AppHeader, AppHeaderTitleProvider } from '@/shared/navigation';
 
 // The API client is mocked so these tests exercise the provider's own
 // loading/error/redirect handling without a real network request.
@@ -137,9 +138,16 @@ function Harness() {
 function renderProvider() {
   return render(
     <ToastProvider>
-      <BinderRouteProvider binderId={BINDER_ID}>
-        <Harness />
-      </BinderRouteProvider>
+      {/* `BinderRouteProvider` sets the binder's name into the app header
+          bar (via `useSetAppHeaderTitle`) rather than rendering its own
+          in-page heading, so the provider and header are rendered together
+          here, mirroring the real root layout's composition. */}
+      <AppHeaderTitleProvider>
+        <AppHeader />
+        <BinderRouteProvider binderId={BINDER_ID}>
+          <Harness />
+        </BinderRouteProvider>
+      </AppHeaderTitleProvider>
     </ToastProvider>,
   );
 }
@@ -189,11 +197,16 @@ describe('BinderRouteProvider', () => {
     await waitFor(() =>
       expect(screen.getByText('My Binder / cards:1 / art:2')).toBeInTheDocument(),
     );
-    // The route's heading and tab nav render once loaded, above the tabs'
-    // own content (the Harness stand-in for nested tab children).
-    expect(screen.getByRole('heading', { name: 'My Binder' })).toBeInTheDocument();
+    // The tab nav renders once loaded, above the tabs' own content (the
+    // Harness stand-in for nested tab children). The app header's title is
+    // set via a separate context (`useSetAppHeaderTitle`), which commits in
+    // its own follow-up render after the provider's own state settles, so
+    // it's asserted in its own `waitFor` rather than synchronously here.
     expect(screen.getByRole('link', { name: 'Edit Details' })).toBeInTheDocument();
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: 'My Binder' })).toBeInTheDocument(),
+    );
   });
 
   it('requests all three resources for the given binderId', async () => {
