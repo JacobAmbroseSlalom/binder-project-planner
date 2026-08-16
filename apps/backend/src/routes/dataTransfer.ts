@@ -9,7 +9,7 @@ import {
   unlinkSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import {
   EXPORT_FORMAT_VERSION,
@@ -322,6 +322,73 @@ function planImport(database: DatabaseConnection['database'], data: ExportData):
   };
 }
 
+// Builds the full-data export ZIP (manifest + data dump + every
+// referenced image file) and writes it to `outputPath` - shared by the
+// `GET /exports/data` route below (which writes to a request-scoped temp
+// file, then streams and removes it) and story 53's automatic local
+// backup snapshots (apps/backend/src/sync/backupSnapshots.ts), which write
+// straight to a retained backup file instead of streaming anywhere. Kept
+// as a plain function (rather than inline in the route) so both call
+// sites build byte-for-byte the same archive format instead of drifting
+// into two slightly different implementations.
+export function buildExportArchiveFile(
+  database: DatabaseConnection['database'],
+  imagesDirectory: string,
+  outputPath: string,
+): void {
+  const data: ExportData = {
+    binders: database.select().from(binders).all(),
+    card_image_assets: database.select().from(cardImageAssets).all(),
+    cards: database.select().from(cards).all(),
+    art_image_assets: database.select().from(artImageAssets).all(),
+    art: database.select().from(art).all(),
+  };
+
+  // Every image file referenced by an exported asset, deduplicated by
+  // filename (storage filenames are unique per asset).
+  const imageFilenames = new Set<string>();
+  for (const asset of data.card_image_assets) imageFilenames.add(asset.storageFilename);
+  for (const asset of data.art_image_assets) {
+    imageFilenames.add(asset.storageFilename);
+    if (asset.normalizedStorageFilename) imageFilenames.add(asset.normalizedStorageFilename);
+  }
+
+  const zip = new AdmZip();
+  const images: { filename: string; sha256: string }[] = [];
+  for (const filename of imageFilenames) {
+    const filePath = join(imagesDirectory, filename);
+    if (!existsSync(filePath)) {
+      // A referenced image file is missing on disk - the export can't
+      // produce an archive that would pass its own import validation, so
+      // fail rather than emit a broken archive.
+      throw new Error(`Referenced image file "${filename}" is missing from storage.`);
+    }
+    const bytes = readFileSync(filePath);
+    images.push({ filename, sha256: createHash('sha256').update(bytes).digest('hex') });
+    zip.addFile(`images/${filename}`, bytes);
+  }
+
+  const manifest: ArchiveManifest = {
+    format: ARCHIVE_FORMAT,
+    formatVersion: EXPORT_FORMAT_VERSION,
+    schemaVersion: getCurrentSchemaVersion(),
+    exportedAt: new Date().toISOString(),
+    tableRowCounts: {
+      binders: data.binders.length,
+      card_image_assets: data.card_image_assets.length,
+      cards: data.cards.length,
+      art_image_assets: data.art_image_assets.length,
+      art: data.art.length,
+    },
+    images,
+  };
+  zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)));
+  zip.addFile('data.json', Buffer.from(JSON.stringify(data)));
+
+  mkdirSync(dirname(outputPath), { recursive: true });
+  zip.writeZip(outputPath);
+}
+
 export function createDataTransferRouter(
   database: DatabaseConnection['database'],
   imagesDirectory: string,
@@ -333,58 +400,9 @@ export function createDataTransferRouter(
   // PDF exports). Read-only, so never restricted by binder lock state.
   router.get('/exports/data', (_request, response, next) => {
     try {
-      const data: ExportData = {
-        binders: database.select().from(binders).all(),
-        card_image_assets: database.select().from(cardImageAssets).all(),
-        cards: database.select().from(cards).all(),
-        art_image_assets: database.select().from(artImageAssets).all(),
-        art: database.select().from(art).all(),
-      };
-
-      // Every image file referenced by an exported asset, deduplicated by
-      // filename (storage filenames are unique per asset).
-      const imageFilenames = new Set<string>();
-      for (const asset of data.card_image_assets) imageFilenames.add(asset.storageFilename);
-      for (const asset of data.art_image_assets) {
-        imageFilenames.add(asset.storageFilename);
-        if (asset.normalizedStorageFilename) imageFilenames.add(asset.normalizedStorageFilename);
-      }
-
-      const zip = new AdmZip();
-      const images: { filename: string; sha256: string }[] = [];
-      for (const filename of imageFilenames) {
-        const filePath = join(imagesDirectory, filename);
-        if (!existsSync(filePath)) {
-          // A referenced image file is missing on disk - the export can't
-          // produce an archive that would pass its own import validation,
-          // so fail rather than emit a broken archive.
-          throw new Error(`Referenced image file "${filename}" is missing from storage.`);
-        }
-        const bytes = readFileSync(filePath);
-        images.push({ filename, sha256: createHash('sha256').update(bytes).digest('hex') });
-        zip.addFile(`images/${filename}`, bytes);
-      }
-
-      const manifest: ArchiveManifest = {
-        format: ARCHIVE_FORMAT,
-        formatVersion: EXPORT_FORMAT_VERSION,
-        schemaVersion: getCurrentSchemaVersion(),
-        exportedAt: new Date().toISOString(),
-        tableRowCounts: {
-          binders: data.binders.length,
-          card_image_assets: data.card_image_assets.length,
-          cards: data.cards.length,
-          art_image_assets: data.art_image_assets.length,
-          art: data.art.length,
-        },
-        images,
-      };
-      zip.addFile('manifest.json', Buffer.from(JSON.stringify(manifest, null, 2)));
-      zip.addFile('data.json', Buffer.from(JSON.stringify(data)));
-
       mkdirSync(tmpdir(), { recursive: true });
       const tempFilePath = join(tmpdir(), `binder-project-planner-export-${randomUUID()}.zip`);
-      zip.writeZip(tempFilePath);
+      buildExportArchiveFile(database, imagesDirectory, tempFilePath);
 
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
       response

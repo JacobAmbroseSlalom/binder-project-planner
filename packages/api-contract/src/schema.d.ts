@@ -21,6 +21,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/startup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Check whether launch requires user confirmation before opening the database
+         * @description Story 53: "Sync data across laptops via cloud-sync folder". Polled by the desktop app while it waits for the backend to come up. Before the database is opened, a temporary process may be listening in its place if the configured data directory looks incomplete (present but with no readable database file - possibly still downloading via a cloud-sync client) or another machine's sync marker looks recent; either case is surfaced here instead of opening the database silently. Once the real application is running, this always reports `needsConfirmation: false`, so a caller can poll this single endpoint throughout the whole startup sequence without needing to know which phase is currently listening.
+         */
+        get: operations["getStartupStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/startup/confirm": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resolve a pending startup confirmation
+         * @description Story 53: answers a `needsConfirmation: true` `/startup/status` response - the caller may choose to proceed with the existing (possibly incomplete or still-syncing) data directory as-is, or request starting fresh, which discards any unreadable/partial database file first. A no-op when nothing is actually pending confirmation (e.g. once the real application has taken over).
+         */
+        post: operations["confirmStartup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/binders": {
         parameters: {
             query?: never;
@@ -967,6 +1007,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/maintenance/prepare-shutdown": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Back up, checkpoint, and cleanly stop the running application
+         * @description Story 53: "Sync data across laptops via cloud-sync folder". HTTP-based graceful-shutdown handshake used by the desktop app instead of relying on process signals, since a parent process's `ChildProcess.kill()` doesn't reliably deliver a catchable signal to a child on Windows. Writes a local (never cloud-synced) backup snapshot, runs `PRAGMA wal_checkpoint(TRUNCATE)` so the data directory is left as a single sync-safe file, then closes the database and exits the process after responding.
+         */
+        post: operations["prepareShutdown"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/exports/data": {
         parameters: {
             query?: never;
@@ -1036,6 +1096,35 @@ export interface components {
             status: "ok";
             /** @constant */
             database: "connected";
+        };
+        StartupStatus: {
+            needsConfirmation: boolean;
+            /**
+             * @description Only present when `needsConfirmation` is true. Reflects whether the configured data directory looks incomplete (present but with no readable database file yet), or another machine's sync marker looks recent.
+             * @enum {string}
+             */
+            reason?: "incomplete-directory" | "other-machine-recent";
+            /** @description Only present when `reason` is `other-machine-recent`. */
+            otherMachine?: {
+                machineId: string;
+                /** Format: date-time */
+                updatedAt: string;
+            };
+        };
+        StartupConfirmRequest: {
+            /**
+             * @description When true, discards any unreadable/partial database file before proceeding, rather than trying to open the existing one.
+             * @default false
+             */
+            startFresh: boolean;
+        };
+        StartupConfirmResult: {
+            /** @constant */
+            acknowledged: true;
+        };
+        PrepareShutdownResult: {
+            /** @constant */
+            acknowledged: true;
         };
         ImportArchiveUpload: {
             /**
@@ -1978,6 +2067,50 @@ export interface operations {
                 };
                 content: {
                     "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    getStartupStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The current startup confirmation state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartupStatus"];
+                };
+            };
+        };
+    };
+    confirmStartup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["StartupConfirmRequest"];
+            };
+        };
+        responses: {
+            /** @description The decision was accepted. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StartupConfirmResult"];
                 };
             };
         };
@@ -4305,6 +4438,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OrphanedImagesCleanupResult"];
+                };
+            };
+        };
+    };
+    prepareShutdown: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description The backup and checkpoint completed; the process will exit immediately after this response is sent. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrepareShutdownResult"];
                 };
             };
         };

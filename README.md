@@ -136,13 +136,14 @@ GitHub Actions tab, supplying that tag name.
 
 The backend supports these environment variables:
 
-| Variable             | Default                                              | Purpose                               |
-| -------------------- | ---------------------------------------------------- | ------------------------------------- |
-| `HOST`               | `127.0.0.1`                                          | Address on which the backend listens. |
-| `PORT`               | `3001`                                               | Backend HTTP port.                    |
-| `FRONTEND_ORIGIN`    | `http://localhost:3000`                              | Origin allowed by CORS.               |
-| `APP_DATA_DIRECTORY` | `.data`                                              | Directory for local application data. |
-| `DATABASE_FILE`      | `<APP_DATA_DIRECTORY>/binder-project-planner.sqlite` | SQLite database path.                 |
+| Variable                    | Default                                              | Purpose                                                                                                                        |
+| --------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `HOST`                      | `127.0.0.1`                                          | Address on which the backend listens.                                                                                          |
+| `PORT`                      | `3001`                                               | Backend HTTP port.                                                                                                             |
+| `FRONTEND_ORIGIN`           | `http://localhost:3000`                              | Origin allowed by CORS.                                                                                                        |
+| `APP_DATA_DIRECTORY`        | `.data`                                              | Directory for local application data - can be pointed at a cloud-sync client's folder (story 53) to share data across laptops. |
+| `DATABASE_FILE`             | `<APP_DATA_DIRECTORY>/binder-project-planner.sqlite` | SQLite database path.                                                                                                          |
+| `APP_LOCAL_STATE_DIRECTORY` | `.local-state`                                       | Always-local directory (never the cloud-synced `APP_DATA_DIRECTORY`) for story 53's automatic backup snapshots.                |
 
 The frontend supports this environment variable:
 

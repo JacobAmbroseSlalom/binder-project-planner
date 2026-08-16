@@ -41,6 +41,15 @@ function backupDatabaseFile(databaseFile: string): void {
 
 export interface DatabaseConnection {
   close: () => void;
+  // Story 53: "Sync data across laptops via cloud-sync folder". Folds the
+  // WAL journal's pending contents back into the main `.db` file and
+  // empties the `-wal`/`-shm` side files, leaving a single, self-contained
+  // database file safe for a cloud-sync client to pick up - called before
+  // quitting (see server.ts's shutdown handling) rather than on every
+  // write, so WAL's normal performance benefit during the rest of the
+  // session is unaffected. A no-op for `:memory:` databases, which never
+  // use WAL journal mode in the first place (see below).
+  checkpoint: () => void;
   database: BetterSQLite3Database;
 }
 
@@ -80,6 +89,14 @@ export function createDatabase(databaseFile: string): DatabaseConnection {
 
   return {
     close: () => sqlite.close(),
+    checkpoint: () => {
+      if (databaseFile === ':memory:') return;
+      // TRUNCATE mode checkpoints (folding the WAL into the main file)
+      // *and* truncates the `-wal` file to zero bytes on success, unlike
+      // the default PASSIVE mode's plain checkpoint - see
+      // https://www.sqlite.org/pragma.html#pragma_wal_checkpoint.
+      sqlite.pragma('wal_checkpoint(TRUNCATE)');
+    },
     database,
   };
 }

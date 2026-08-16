@@ -23,6 +23,54 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /startup/status:
+    get:
+      operationId: getStartupStatus
+      summary: Check whether launch requires user confirmation before opening the database
+      description: >-
+        Story 53: "Sync data across laptops via cloud-sync folder". Polled
+        by the desktop app while it waits for the backend to come up.
+        Before the database is opened, a temporary process may be
+        listening in its place if the configured data directory looks
+        incomplete (present but with no readable database file - possibly
+        still downloading via a cloud-sync client) or another machine's
+        sync marker looks recent; either case is surfaced here instead of
+        opening the database silently. Once the real application is
+        running, this always reports `needsConfirmation: false`, so a
+        caller can poll this single endpoint throughout the whole startup
+        sequence without needing to know which phase is currently
+        listening.
+      responses:
+        '200':
+          description: The current startup confirmation state.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartupStatus'
+  /startup/confirm:
+    post:
+      operationId: confirmStartup
+      summary: Resolve a pending startup confirmation
+      description: >-
+        Story 53: answers a `needsConfirmation: true` `/startup/status`
+        response - the caller may choose to proceed with the existing
+        (possibly incomplete or still-syncing) data directory as-is, or
+        request starting fresh, which discards any unreadable/partial
+        database file first. A no-op when nothing is actually pending
+        confirmation (e.g. once the real application has taken over).
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartupConfirmRequest'
+      responses:
+        '200':
+          description: The decision was accepted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartupConfirmResult'
   /binders:
     get:
       operationId: listBinders
@@ -2248,6 +2296,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OrphanedImagesCleanupResult'
+  /maintenance/prepare-shutdown:
+    post:
+      operationId: prepareShutdown
+      summary: Back up, checkpoint, and cleanly stop the running application
+      description: >-
+        Story 53: "Sync data across laptops via cloud-sync folder".
+        HTTP-based graceful-shutdown handshake used by the desktop app
+        instead of relying on process signals, since a parent process's
+        `ChildProcess.kill()` doesn't reliably deliver a catchable signal
+        to a child on Windows. Writes a local (never cloud-synced) backup
+        snapshot, runs `PRAGMA wal_checkpoint(TRUNCATE)` so the data
+        directory is left as a single sync-safe file, then closes the
+        database and exits the process after responding.
+      responses:
+        '200':
+          description: >-
+            The backup and checkpoint completed; the process will exit
+            immediately after this response is sent.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrepareShutdownResult'
   /exports/data:
     get:
       operationId: exportData
@@ -2423,6 +2493,65 @@ components:
         database:
           type: string
           const: connected
+    StartupStatus:
+      type: object
+      additionalProperties: false
+      required:
+        - needsConfirmation
+      properties:
+        needsConfirmation:
+          type: boolean
+        reason:
+          type: string
+          description: >-
+            Only present when `needsConfirmation` is true. Reflects whether
+            the configured data directory looks incomplete (present but
+            with no readable database file yet), or another machine's sync
+            marker looks recent.
+          enum:
+            - incomplete-directory
+            - other-machine-recent
+        otherMachine:
+          type: object
+          description: Only present when `reason` is `other-machine-recent`.
+          additionalProperties: false
+          required:
+            - machineId
+            - updatedAt
+          properties:
+            machineId:
+              type: string
+            updatedAt:
+              type: string
+              format: date-time
+    StartupConfirmRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        startFresh:
+          type: boolean
+          description: >-
+            When true, discards any unreadable/partial database file before
+            proceeding, rather than trying to open the existing one.
+          default: false
+    StartupConfirmResult:
+      type: object
+      additionalProperties: false
+      required:
+        - acknowledged
+      properties:
+        acknowledged:
+          type: boolean
+          const: true
+    PrepareShutdownResult:
+      type: object
+      additionalProperties: false
+      required:
+        - acknowledged
+      properties:
+        acknowledged:
+          type: boolean
+          const: true
     ImportArchiveUpload:
       type: object
       additionalProperties: false

@@ -1,6 +1,6 @@
 # 53. Sync data across laptops via cloud-sync folder
 
-**Status:** Not started
+**Status:** Done (2026-08-16 01:38 EDT)
 
 #### Acceptance criteria
 

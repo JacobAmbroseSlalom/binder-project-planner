@@ -59,6 +59,38 @@ file to match what was actually built.
   `build.mac.artifactName`/`build.nsis.artifactName` fix each installer's filename (no
   embedded version number) so the root [README.md](../README.md)'s
   `releases/latest/download/<filename>` links keep resolving to the newest build.
+- **Multi-laptop data sync (story 53):** the backend owns all of it — a new
+  `APP_LOCAL_STATE_DIRECTORY` env var (`config.localStateDirectory`) names a
+  fixed, always-local directory (Electron passes `app.getPath('userData')`, kept
+  separate from the user-configurable, possibly cloud-synced
+  `APP_DATA_DIRECTORY`) for rotating backup snapshots
+  ([apps/backend/src/sync/backupSnapshots.ts](../apps/backend/src/sync/backupSnapshots.ts),
+  reusing story 33's export archive format via `buildExportArchiveFile` in
+  [dataTransfer.ts](../apps/backend/src/routes/dataTransfer.ts)) and the
+  `.sync-lock.json` machine/timestamp marker
+  ([apps/backend/src/sync/syncMarker.ts](../apps/backend/src/sync/syncMarker.ts),
+  [directoryState.ts](../apps/backend/src/sync/directoryState.ts)). Before opening
+  the database, [server.ts](../apps/backend/src/server.ts)'s async `main()`
+  evaluates directory/marker state and, if launch-time confirmation is needed, runs
+  a temporary pre-database Express app exposing `GET /startup/status`/
+  `POST /startup/confirm` ([routes/startup.ts](../apps/backend/src/routes/startup.ts))
+  — the real app mounts the same two routes (always reporting no confirmation
+  pending) so a caller can poll one consistent endpoint pair throughout startup.
+  Quitting calls `POST /maintenance/prepare-shutdown`
+  ([routes/shutdown.ts](../apps/backend/src/routes/shutdown.ts): backup, WAL
+  `checkpoint()`, close, `process.exit(0)`) rather than relying on
+  `ChildProcess.kill()` alone, since that's not a reliably catchable signal on
+  Windows; [apps/desktop/src/main.ts](../apps/desktop/src/main.ts) awaits it before
+  falling back to killing the child process directly, and
+  [backendProcess.ts](../apps/desktop/src/processes/backendProcess.ts)'s launch
+  polling handles the `/startup/status` confirmation handshake via a native
+  `dialog.showMessageBox` prompt. The user's chosen data-directory override is
+  set via the frontend's `/settings` page (Electron-only —
+  [apps/frontend/src/app/settings/page.tsx](../apps/frontend/src/app/settings/page.tsx))
+  through an IPC bridge (`window.__DESKTOP_SETTINGS__`,
+  [preload.cts](../apps/desktop/src/preload.cts)) and persisted to
+  [apps/desktop/src/desktopSettings.ts](../apps/desktop/src/desktopSettings.ts)'s
+  `desktop-settings.json`, applying on the next relaunch.
 - If you introduce a new dependency or architectural decision, record it in
   [docs/planning.md](../docs/planning.md) and keep this file in sync.
 

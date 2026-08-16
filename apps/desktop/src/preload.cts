@@ -1,4 +1,4 @@
-import { contextBridge } from 'electron';
+import { contextBridge, ipcRenderer } from 'electron';
 
 // Story 47: "Package and export the application as an executable". The
 // frontend currently reads `NEXT_PUBLIC_BACKEND_URL` at build time
@@ -19,3 +19,14 @@ if (backendUrl) {
   // `NEXT_PUBLIC_BACKEND_URL` value outside Electron.
   contextBridge.exposeInMainWorld('__BACKEND_URL__', backendUrl);
 }
+
+// Story 53: "Sync data across laptops via cloud-sync folder". Exposed
+// unconditionally (unlike `__BACKEND_URL__` above) so the frontend's
+// Settings page can detect it's running inside the desktop app at all -
+// each method forwards to an `ipcMain.handle` registered in main.ts.
+contextBridge.exposeInMainWorld('__DESKTOP_SETTINGS__', {
+  get: () => ipcRenderer.invoke('desktop-settings:get'),
+  chooseFolder: () => ipcRenderer.invoke('desktop-settings:choose-folder'),
+  setOverride: (directory: string | null) =>
+    ipcRenderer.invoke('desktop-settings:set-override', directory),
+});

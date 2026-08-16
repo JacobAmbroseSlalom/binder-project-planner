@@ -1,7 +1,7 @@
 'use client';
 
 import { DEFAULT_BINDER_COMPLETION_METRICS_VISIBLE } from '@binder-project-planner/shared';
-import { ArrowUpDown, Calculator, Check, Download, Upload } from 'lucide-react';
+import { ArrowUpDown, Calculator, Check, Download, Settings, Upload } from 'lucide-react';
 import Link from 'next/link';
 import { useRef, useState } from 'react';
 
@@ -14,6 +14,7 @@ import {
   useToastContext,
 } from '@/shared/feedback';
 import { useLocalStorageBoolean } from '@/shared/hooks/useLocalStorageBoolean';
+import { useIsDesktopApp } from '@/shared/hooks/useIsDesktopApp';
 
 import { COMPLETION_METRICS_VISIBLE_STORAGE_KEY, type BinderSortOption } from './BinderList';
 import { ImportConfirmDialog } from './ImportConfirmDialog';
@@ -55,6 +56,11 @@ export function HomeToolbar({
 }) {
   const { start } = useSaveStatusToast();
   const { markFailed } = useToastContext();
+
+  // Story 53: the Settings button (data folder picker) is only useful
+  // inside the Electron desktop app, so it's hidden entirely on a plain
+  // browser tab rather than showing a "desktop app only" message here.
+  const isDesktopApp = useIsDesktopApp();
 
   // Story 22's completion-metrics toggle. Its value is localStorage-backed
   // and shared with `BinderList` (via the same key), so toggling it here
@@ -253,6 +259,24 @@ export function HomeToolbar({
             className="hidden"
           />
         </div>
+
+        {/* Story 53: a link to the desktop app's Settings page (currently
+            just the cloud-sync data-folder picker), moved here from the
+            persistent header - placed last so it sits at the far right of
+            the row, icon-only with a tooltip matching the other icon
+            actions in this toolbar. Hidden outside the desktop app, since
+            it has nothing useful to show there. */}
+        {isDesktopApp && (
+          <Tooltip label="Settings">
+            <Link
+              href="/settings"
+              aria-label="Settings"
+              className="flex h-10 w-10 items-center justify-center rounded-standard bg-neutral-800 hover:brightness-110"
+            >
+              <Settings className="size-5" aria-hidden="true" />
+            </Link>
+          </Tooltip>
+        )}
       </div>
 
       {/* Import's loading feedback stays below the row (its confirmation

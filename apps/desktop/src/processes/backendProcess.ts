@@ -7,6 +7,22 @@ export interface BackendProcessHandle {
   stop: () => void;
 }
 
+// Story 53: "Sync data across laptops via cloud-sync folder". Mirrors the
+// backend's `StartupStatus`/`StartupConfirmationReason` shape
+// (apps/backend/src/routes/startup.ts) - duplicated here rather than
+// imported since the desktop app has no dependency on the backend's
+// source, only its bundled `dist` output at runtime.
+export type StartupConfirmationReason = 'incomplete-directory' | 'other-machine-recent';
+
+export interface StartupConfirmationPrompt {
+  reason: StartupConfirmationReason;
+  otherMachine?: { machineId: string; updatedAt: string };
+}
+
+export interface StartupConfirmationDecision {
+  startFresh: boolean;
+}
+
 interface StartBackendProcessOptions {
   // The bundled backend's own directory (see appPaths.ts) - its
   // `dist/server.js` is spawned as a plain Node child process, exactly like
@@ -16,16 +32,37 @@ interface StartBackendProcessOptions {
   // passed through as `APP_DATA_DIRECTORY` so the backend stores its SQLite
   // database and images there instead of its `cwd`-relative dev default -
   // see apps/backend/src/config.ts, which already resolves this env var as
-  // an absolute path unchanged.
+  // an absolute path unchanged. Story 53 lets the user override this to a
+  // cloud-sync client's folder via the Settings page instead.
   applicationDataDirectory: string;
+  // Story 53: always Electron's fixed `app.getPath('userData')`, regardless
+  // of any `applicationDataDirectory` override above - passed through as
+  // `APP_LOCAL_STATE_DIRECTORY` so backup snapshots always land somewhere a
+  // cloud-sync client can't touch, even when `applicationDataDirectory`
+  // itself is pointed at one.
+  localStateDirectory: string;
   port: number;
   frontendOrigin: string;
+  // Story 53: called if the backend reports a pending launch-time
+  // confirmation (an incomplete-looking data directory, or another
+  // machine's sync marker still looking recent) - main.ts implements this
+  // with a native `dialog.showMessageBox` prompt.
+  confirmStartup: (prompt: StartupConfirmationPrompt) => Promise<StartupConfirmationDecision>;
 }
 
-// How long to keep polling the backend's `/health` endpoint before giving up
-// and surfacing a startup failure, and how often to poll while waiting.
+// How long to keep polling the backend before giving up and surfacing a
+// startup failure, and how often to poll while waiting. Story 53's
+// launch-time confirmation prompt (which pauses polling while awaiting the
+// user's answer) is exempt from this deadline - only the underlying HTTP
+// polling loop is bounded by it.
 const HEALTH_CHECK_TIMEOUT_MS = 15_000;
 const HEALTH_CHECK_INTERVAL_MS = 200;
+
+interface StartupStatusResponse {
+  needsConfirmation: boolean;
+  reason?: StartupConfirmationReason;
+  otherMachine?: { machineId: string; updatedAt: string };
+}
 
 // Spawns the bundled Express backend as a local child process (story 47)
 // and resolves once it reports itself healthy, so the main process doesn't
@@ -33,8 +70,10 @@ const HEALTH_CHECK_INTERVAL_MS = 200;
 export async function startBackendProcess({
   backendDirectory,
   applicationDataDirectory,
+  localStateDirectory,
   port,
   frontendOrigin,
+  confirmStartup,
 }: StartBackendProcessOptions): Promise<BackendProcessHandle> {
   const serverEntryPoint = join(backendDirectory, 'dist', 'server.js');
 
@@ -51,6 +90,7 @@ export async function startBackendProcess({
       // single-instance lock (see main.ts) and quits with exit code 0.
       ELECTRON_RUN_AS_NODE: '1',
       APP_DATA_DIRECTORY: applicationDataDirectory,
+      APP_LOCAL_STATE_DIRECTORY: localStateDirectory,
       HOST: DEFAULT_BACKEND_HOST,
       PORT: String(port),
       FRONTEND_ORIGIN: frontendOrigin,
@@ -58,15 +98,28 @@ export async function startBackendProcess({
     stdio: 'inherit',
   });
 
-  await waitForHealthCheck(child, `http://${DEFAULT_BACKEND_HOST}:${port}/health`);
+  await waitForBackendReady(child, `http://${DEFAULT_BACKEND_HOST}:${port}`, confirmStartup);
 
   return {
     stop: () => stopChildProcess(child),
   };
 }
 
-async function waitForHealthCheck(child: ChildProcess, url: string): Promise<void> {
+// Story 53: polls `/startup/status` first (reachable both while a
+// temporary pre-database "gate" process is up, per an incomplete-looking
+// directory or a recent other-machine marker, and once the real
+// application has taken over - see server.ts) and only checks `/health`
+// once it reports no confirmation pending. A confirmation prompt is only
+// ever shown once per launch (`hasPromptedForConfirmation`), even if the
+// gate process's response is briefly seen again during its handoff to the
+// real application.
+async function waitForBackendReady(
+  child: ChildProcess,
+  backendUrl: string,
+  confirmStartup: (prompt: StartupConfirmationPrompt) => Promise<StartupConfirmationDecision>,
+): Promise<void> {
   const deadline = Date.now() + HEALTH_CHECK_TIMEOUT_MS;
+  let hasPromptedForConfirmation = false;
 
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
@@ -74,13 +127,39 @@ async function waitForHealthCheck(child: ChildProcess, url: string): Promise<voi
     }
 
     try {
-      const response = await fetch(url);
-      if (response.ok) {
-        return;
+      const statusResponse = await fetch(`${backendUrl}/startup/status`);
+      if (statusResponse.ok) {
+        const status = (await statusResponse.json()) as StartupStatusResponse;
+
+        if (status.needsConfirmation) {
+          if (!hasPromptedForConfirmation) {
+            hasPromptedForConfirmation = true;
+            const decision = await confirmStartup({
+              reason: status.reason ?? 'incomplete-directory',
+              otherMachine: status.otherMachine,
+            });
+            await fetch(`${backendUrl}/startup/confirm`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(decision),
+            });
+          }
+          // Skip the health check below until a subsequent poll reports
+          // `needsConfirmation: false` (the real application has taken
+          // over the port).
+          await delay(HEALTH_CHECK_INTERVAL_MS);
+          continue;
+        }
+
+        const healthResponse = await fetch(`${backendUrl}/health`);
+        if (healthResponse.ok) {
+          return;
+        }
       }
     } catch {
-      // The backend isn't accepting connections yet; keep polling until the
-      // deadline above.
+      // The backend isn't accepting connections yet (or is mid-handoff
+      // between the temporary gate process and the real application);
+      // keep polling until the deadline above.
     }
 
     await delay(HEALTH_CHECK_INTERVAL_MS);
@@ -92,7 +171,12 @@ async function waitForHealthCheck(child: ChildProcess, url: string): Promise<voi
 // Closing the app's window fully quits it (story 47's "no system tray/
 // background-running mode" requirement) - `kill()` here is what actually
 // terminates this child process as part of that shutdown, leaving nothing
-// orphaned in the background.
+// orphaned in the background. Story 53's quit sequence (main.ts) calls the
+// backend's `/maintenance/prepare-shutdown` endpoint first and awaits it,
+// so this normally only ever kills an already-exited process; it remains a
+// defensive fallback in case that HTTP request never got a response (e.g.
+// on Windows, where `kill()` alone can't guarantee a catchable shutdown
+// signal - see that endpoint's own comment for why it exists at all).
 function stopChildProcess(child: ChildProcess): void {
   if (child.exitCode === null && child.signalCode === null) {
     child.kill();
