@@ -43,7 +43,16 @@ const targetArch = readCliFlag('arch');
 // packaging run with a half-built staging directory.
 function run(command, args, options) {
   console.log(`$ ${command} ${args.join(' ')}`);
-  const result = spawnSync(command, args, { stdio: 'inherit', ...options });
+  // On Windows, commands installed via corepack/npm (like `pnpm`) are shell
+  // shims (`pnpm.cmd`), which `spawnSync` can only resolve through a shell -
+  // without `shell: true` here, spawning fails outright (`result.status` is
+  // `null`, not a nonzero exit code) rather than actually running the
+  // command and failing on its own merits.
+  const result = spawnSync(command, args, {
+    stdio: 'inherit',
+    shell: process.platform === 'win32',
+    ...options,
+  });
   if (result.status !== 0) {
     throw new Error(`Command failed (${result.status}): ${command} ${args.join(' ')}`);
   }
