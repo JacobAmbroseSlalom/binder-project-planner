@@ -1,6 +1,6 @@
 {
   "name": "@binder-project-planner/desktop",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
@@ -85,7 +85,7 @@
       "category": "public.app-category.utilities",
       "icon": "build/icon.png",
       "identity": null,
-      "artifactName": "${productName}-mac-${arch}.${ext}"
+      "artifactName": "binder-project-planner-mac-${arch}.${ext}"
     },
     "win": {
       "target": [
@@ -101,7 +101,7 @@
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "artifactName": "${productName}-win-setup.${ext}"
+      "artifactName": "binder-project-planner-win-setup.${ext}"
     }
   }
 }

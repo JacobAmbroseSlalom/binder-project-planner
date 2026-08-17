@@ -12,17 +12,19 @@ This is a capstone project for learning and utilizing AI (GitHub Copilot).
 Download the latest desktop build from the
 [GitHub Releases page](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest):
 
-- [Download for macOS (.dmg)](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest/download/Binder%20Project%20Planner-mac-arm64.dmg)
-- [Download for Windows (.exe)](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest/download/Binder%20Project%20Planner-win-setup.exe)
+- [Download for macOS (.dmg)](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest/download/binder-project-planner-mac-arm64.dmg)
+- [Download for Windows (.exe)](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest/download/binder-project-planner-win-setup.exe)
 
 These links point at fixed asset filenames produced by `pnpm package:mac`/
 `pnpm package:win` (see [apps/desktop/package.json](apps/desktop/package.json)'s
 `build.mac.artifactName`/`build.nsis.artifactName`), so they keep working across
-version bumps as long as a GitHub Release with matching-named assets exists.
-Pushing a version tag (e.g. `v0.1.0`) triggers
+version bumps as long as a GitHub Release with matching-named assets exists. The
+artifact names deliberately avoid spaces - GitHub sanitizes uploaded release asset
+filenames by converting spaces to dots, so a space-containing `artifactName` no
+longer matches the space-encoded (`%20`) link the README expects.
+Pushing a version tag (e.g. `v0.1.1`) triggers
 [.github/workflows/release.yml](.github/workflows/release.yml), which builds both
-installers in CI and attaches them to that tag's release automatically. No release has
-been published yet — see "Desktop app" below to build one locally in the meantime.
+installers in CI and attaches them to that tag's release automatically.
 
 ## Architecture
 
