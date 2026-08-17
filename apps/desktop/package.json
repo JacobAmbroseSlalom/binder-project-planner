@@ -10,8 +10,8 @@
     "start": "electron .",
     "dev": "pnpm build && electron .",
     "package:prepare": "node scripts/prepare-package.mjs",
-    "package:mac": "pnpm package:prepare && electron-builder --mac",
-    "package:win": "pnpm package:prepare && electron-builder --win"
+    "package:mac": "pnpm package:prepare --platform=darwin --arch=arm64 && electron-builder --mac",
+    "package:win": "pnpm package:prepare --platform=win32 --arch=x64 && electron-builder --win"
   },
   "devDependencies": {
     "@binder-project-planner/shared": "workspace:*",
@@ -88,7 +88,14 @@
       "artifactName": "${productName}-mac-${arch}.${ext}"
     },
     "win": {
-      "target": "nsis",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "icon": "build/icon.png"
     },
     "nsis": {

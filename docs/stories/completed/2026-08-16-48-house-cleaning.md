@@ -1,6 +1,6 @@
 # 48. House cleaning
 
-**Status:** Not started
+**Status:** Done (2026-08-16 23:03 EDT)
 
 #### Acceptance criteria
 
