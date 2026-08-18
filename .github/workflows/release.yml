@@ -57,6 +57,12 @@ jobs:
   build-win:
     name: Build Windows installer
     runs-on: windows-latest
+    # Temporarily disabled: the Windows installer currently fails to launch for
+    # users (backend child process exits early on startup - still being
+    # diagnosed). Flip this back to `true` (or delete the line) once that's
+    # fixed, and restore the matching Windows download link commented out in
+    # the README's "Download" section.
+    if: false
     steps:
       - name: Check out the repository
         uses: actions/checkout@v4

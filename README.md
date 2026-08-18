@@ -13,7 +13,13 @@ Download the latest desktop build from the
 [GitHub Releases page](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest):
 
 - [Download for macOS (.dmg)](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest/download/binder-project-planner-mac-arm64.dmg)
+
+<!-- Windows link temporarily disabled (see "Windows: nothing happens when launching
+     the app" below, and .github/workflows/release.yml's build-win job, which is
+     disabled to match) - restore both together once the underlying startup crash
+     is fixed:
 - [Download for Windows (.exe)](https://github.com/JacobAmbroseSlalom/binder-project-planner/releases/latest/download/binder-project-planner-win-setup.exe)
+-->
 
 These links point at fixed asset filenames produced by `pnpm package:mac`/
 `pnpm package:win` (see [apps/desktop/package.json](apps/desktop/package.json)'s
@@ -23,8 +29,9 @@ artifact names deliberately avoid spaces - GitHub sanitizes uploaded release ass
 filenames by converting spaces to dots, so a space-containing `artifactName` no
 longer matches the space-encoded (`%20`) link the README expects.
 Pushing a version tag (e.g. `v0.1.1`) triggers
-[.github/workflows/release.yml](.github/workflows/release.yml), which builds both
-installers in CI and attaches them to that tag's release automatically.
+[.github/workflows/release.yml](.github/workflows/release.yml), which builds the
+macOS installer in CI and attaches it to that tag's release automatically (the
+Windows build job is currently disabled - see below).
 
 ### macOS: "is damaged and can't be opened"
 
@@ -45,6 +52,10 @@ either:
   "damaged" instead of showing that prompt, use the `xattr` command above instead.
 
 ### Windows: nothing happens when launching the app
+
+The Windows download/build is currently disabled (see `if: false` on the `build-win`
+job in [.github/workflows/release.yml](.github/workflows/release.yml)) while this is
+being tracked down - the underlying app still exhibits the issue below.
 
 If the app icon doesn't do anything when opened, it's likely failing during startup.
 A startup failure shows a native error dialog and writes details to
