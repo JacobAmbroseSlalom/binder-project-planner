@@ -3,7 +3,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { appendCrashLog } from '../crashLog.js';
+import { appendCrashLog, captureChildOutput } from '../crashLog.js';
 
 export interface BackendProcessHandle {
   stop: () => void;
@@ -97,8 +97,14 @@ export async function startBackendProcess({
       PORT: String(port),
       FRONTEND_ORIGIN: frontendOrigin,
     },
-    stdio: 'inherit',
+    // 'pipe' (rather than the previous 'inherit') lets captureChildOutput
+    // below capture the backend's stdout/stderr - a packaged app has no
+    // attached console for 'inherit' to usefully point at, so a startup
+    // crash's actual error message was previously never seen anywhere.
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+
+  const getRecentOutput = captureChildOutput(child, 'backend');
 
   // Without this listener, a failed spawn (e.g. the entry point path doesn't
   // exist, or the OS refuses to launch it) emits an unhandled 'error' event -
@@ -117,6 +123,7 @@ export async function startBackendProcess({
     `http://${DEFAULT_BACKEND_HOST}:${port}`,
     confirmStartup,
     () => spawnError,
+    getRecentOutput,
   );
 
   return {
@@ -137,13 +144,16 @@ async function waitForBackendReady(
   backendUrl: string,
   confirmStartup: (prompt: StartupConfirmationPrompt) => Promise<StartupConfirmationDecision>,
   getSpawnError: () => Error | undefined,
+  getRecentOutput: () => string,
 ): Promise<void> {
   const deadline = Date.now() + HEALTH_CHECK_TIMEOUT_MS;
   let hasPromptedForConfirmation = false;
 
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
-      throw new Error(`Backend process exited early with code ${child.exitCode}.`);
+      const recentOutput = getRecentOutput().trim();
+      const outputSuffix = recentOutput ? `\n\nRecent backend output:\n${recentOutput}` : '';
+      throw new Error(`Backend process exited early with code ${child.exitCode}.${outputSuffix}`);
     }
 
     const spawnError = getSpawnError();

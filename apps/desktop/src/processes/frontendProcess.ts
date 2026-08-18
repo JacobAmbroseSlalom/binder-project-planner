@@ -3,7 +3,7 @@ import { connect } from 'node:net';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { appendCrashLog } from '../crashLog.js';
+import { appendCrashLog, captureChildOutput } from '../crashLog.js';
 
 export interface FrontendProcessHandle {
   stop: () => void;
@@ -44,9 +44,14 @@ export async function startFrontendProcess({
         ELECTRON_RUN_AS_NODE: '1',
         PORT: String(port),
       },
-      stdio: 'inherit',
+      // 'pipe' (rather than the previous 'inherit') lets captureChildOutput
+      // below capture the frontend's stdout/stderr - a packaged app has no
+      // attached console for 'inherit' to usefully point at.
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
+
+  const getRecentOutput = captureChildOutput(child, 'frontend');
 
   // See the matching comment in backendProcess.ts: without this listener, a
   // failed spawn crashes the whole main process silently via an unhandled
@@ -57,7 +62,7 @@ export async function startFrontendProcess({
     appendCrashLog(`Frontend process error: ${error.stack ?? error.message}`);
   });
 
-  await waitForPortOpen(child, '127.0.0.1', port, () => spawnError);
+  await waitForPortOpen(child, '127.0.0.1', port, () => spawnError, getRecentOutput);
 
   return {
     stop: () => stopChildProcess(child),
@@ -69,13 +74,18 @@ function waitForPortOpen(
   host: string,
   port: number,
   getSpawnError: () => Error | undefined,
+  getRecentOutput: () => string,
 ): Promise<void> {
   const deadline = Date.now() + READY_CHECK_TIMEOUT_MS;
 
   return new Promise((resolvePromise, reject) => {
     const attempt = () => {
       if (child.exitCode !== null) {
-        reject(new Error(`Frontend process exited early with code ${child.exitCode}.`));
+        const recentOutput = getRecentOutput().trim();
+        const outputSuffix = recentOutput ? `\n\nRecent frontend output:\n${recentOutput}` : '';
+        reject(
+          new Error(`Frontend process exited early with code ${child.exitCode}.${outputSuffix}`),
+        );
         return;
       }
 

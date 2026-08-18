@@ -1,4 +1,5 @@
 import { app, dialog } from 'electron';
+import type { ChildProcess } from 'node:child_process';
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -54,4 +55,33 @@ export function reportFatalError(context: string, error: unknown): void {
     'Binder Project Planner failed to start',
     `${context}\n\n${details}\n\nDetails were also written to:\n${logPath}`,
   );
+}
+
+// How much of a spawned child process's recent combined stdout/stderr to
+// keep in memory, so it can be included directly in an "exited early" error
+// message - a packaged app's child process otherwise has nowhere visible to
+// send that output (see `captureChildOutput` below).
+const OUTPUT_TAIL_MAX_CHARS = 4000;
+
+// Pipes a spawned child process's stdout/stderr into the crash log (and
+// mirrors it to this process's own stdio, matching the previous
+// `stdio: 'inherit'` behavior for a dev run's terminal) and returns a getter
+// for the most recently seen output. Callers pass this into their "did the
+// process exit early" error so an actual uncaught exception thrown by the
+// child (e.g. the backend failing to start) is surfaced directly in the
+// startup failure dialog, instead of only a bare exit code - a packaged
+// app's child process stdout/stderr otherwise goes nowhere anyone can see.
+export function captureChildOutput(child: ChildProcess, label: string): () => string {
+  let tail = '';
+
+  const handleChunk = (stream: 'stdout' | 'stderr', chunk: Buffer): void => {
+    (stream === 'stdout' ? process.stdout : process.stderr).write(chunk);
+    appendCrashLog(`[${label} ${stream}] ${chunk.toString().trimEnd()}`);
+    tail = (tail + chunk.toString()).slice(-OUTPUT_TAIL_MAX_CHARS);
+  };
+
+  child.stdout?.on('data', (chunk: Buffer) => handleChunk('stdout', chunk));
+  child.stderr?.on('data', (chunk: Buffer) => handleChunk('stderr', chunk));
+
+  return () => tail;
 }
