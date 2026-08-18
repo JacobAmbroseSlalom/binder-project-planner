@@ -80,6 +80,47 @@ The frontend calls the backend using a typed client generated from the OpenAPI
 contract. The backend currently exposes `GET /health`, which verifies that both the API
 and database are available, and the frontend's home page displays that status.
 
+```mermaid
+graph TD
+    subgraph Desktop["apps/desktop (Electron shell)"]
+        Main["Main process<br/>(main.ts)"]
+        Main -->|spawns| FEProc["frontendProcess.ts"]
+        Main -->|spawns| BEProc["backendProcess.ts"]
+    end
+
+    FEProc --> Frontend
+    BEProc --> Backend
+
+    subgraph Frontend["apps/frontend (Next.js)"]
+        UI["React UI"]
+        APIClient["openapi-fetch client"]
+        UI --> APIClient
+    end
+
+    subgraph Backend["apps/backend (Express)"]
+        Routes["Routes"]
+        Drizzle["Drizzle ORM"]
+        DB[("SQLite<br/>.data/binder-project-planner.sqlite")]
+        Routes --> Drizzle --> DB
+    end
+
+    APIClient -->|"HTTP, typed via<br/>packages/api-contract"| Routes
+
+    Contract["packages/api-contract<br/>(openapi.yaml + generated types)"] -.->|generates types for| APIClient
+    Contract -.->|validates requests against| Routes
+
+    Shared["packages/shared<br/>(defaults + shared code)"] -.-> Frontend
+    Shared -.-> Backend
+```
+
+- In development, the frontend and backend run as separate processes (`pnpm dev`)
+  and talk over HTTP on `localhost`.
+- In the packaged desktop app, Electron's main process spawns the frontend and
+  backend as managed local child processes instead.
+- `packages/api-contract`'s `openapi.yaml` is the source of truth for the API shape:
+  it generates the frontend's typed client and validates every backend request/
+  response at runtime (`express-openapi-validator`).
+
 ## Getting started
 
 ### Prerequisites
