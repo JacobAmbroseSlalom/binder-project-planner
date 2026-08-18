@@ -52,6 +52,14 @@ file to match what was actually built.
     since a packaged/branded Electron executable always relaunches itself as the
     full app rather than running as plain Node when given a script path via argv —
     unlike the unpacked dev Electron binary, where that heuristic works implicitly.
+  - [apps/desktop/src/crashLog.ts](../apps/desktop/src/crashLog.ts) reports main-process
+    startup failures (spawn errors, uncaught exceptions) via a native error dialog plus
+    a `main-process.log` file under the app's per-user data folder, rather than only
+    `console.error` — a packaged app (especially a Windows GUI-subsystem executable)
+    has no attached console, so an unreported failure previously looked like the app
+    doing nothing at all when launched. See the README's "Windows: nothing happens
+    when launching the app" and "macOS: is damaged and can't be opened" sections for
+    the two known unsigned/unnotarized-build launch issues this surfaces/relates to.
 - **Release automation:** [.github/workflows/release.yml](workflows/release.yml)
   builds the macOS `.dmg` and Windows NSIS installer in CI and uploads them as assets
   on the matching GitHub Release, triggered by pushing a `v*.*.*` tag or via manual

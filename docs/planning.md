@@ -38,7 +38,12 @@ been placed vs. still needs a home.
   processes are spawned with `ELECTRON_RUN_AS_NODE: '1'` in their `env`, since a
   packaged/branded Electron executable (unlike the unpacked dev binary) always
   relaunches itself as the full app rather than running as plain Node when given a
-  script path via argv.
+  script path via argv. Main-process startup failures (a spawn error, an uncaught
+  exception, etc.) are reported through `apps/desktop/src/crashLog.ts` - a native error
+  dialog plus a `main-process.log` file under the app's per-user data folder - instead
+  of only `console.error`, which is invisible in a packaged app with no attached
+  console (notably Windows GUI-subsystem executables); without this a startup failure
+  looked like the app doing nothing at all when launched.
 - Release automation: [.github/workflows/release.yml](../.github/workflows/release.yml)
   builds the macOS `.dmg` and Windows NSIS installer in CI (on `macos-latest`/
   `windows-latest` GitHub-hosted runners) and uploads them as assets on the matching

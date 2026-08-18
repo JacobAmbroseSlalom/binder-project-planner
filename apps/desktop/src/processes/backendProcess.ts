@@ -3,6 +3,8 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { appendCrashLog } from '../crashLog.js';
+
 export interface BackendProcessHandle {
   stop: () => void;
 }
@@ -98,7 +100,24 @@ export async function startBackendProcess({
     stdio: 'inherit',
   });
 
-  await waitForBackendReady(child, `http://${DEFAULT_BACKEND_HOST}:${port}`, confirmStartup);
+  // Without this listener, a failed spawn (e.g. the entry point path doesn't
+  // exist, or the OS refuses to launch it) emits an unhandled 'error' event -
+  // Node re-throws that as an uncaught exception in this (Electron main)
+  // process, which previously crashed the whole app silently. Recording it
+  // here instead lets waitForBackendReady below surface it as a clear,
+  // specific startup failure through the normal handleStartupFailure path.
+  let spawnError: Error | undefined;
+  child.on('error', (error) => {
+    spawnError = error;
+    appendCrashLog(`Backend process error: ${error.stack ?? error.message}`);
+  });
+
+  await waitForBackendReady(
+    child,
+    `http://${DEFAULT_BACKEND_HOST}:${port}`,
+    confirmStartup,
+    () => spawnError,
+  );
 
   return {
     stop: () => stopChildProcess(child),
@@ -117,6 +136,7 @@ async function waitForBackendReady(
   child: ChildProcess,
   backendUrl: string,
   confirmStartup: (prompt: StartupConfirmationPrompt) => Promise<StartupConfirmationDecision>,
+  getSpawnError: () => Error | undefined,
 ): Promise<void> {
   const deadline = Date.now() + HEALTH_CHECK_TIMEOUT_MS;
   let hasPromptedForConfirmation = false;
@@ -124,6 +144,11 @@ async function waitForBackendReady(
   while (Date.now() < deadline) {
     if (child.exitCode !== null) {
       throw new Error(`Backend process exited early with code ${child.exitCode}.`);
+    }
+
+    const spawnError = getSpawnError();
+    if (spawnError) {
+      throw new Error(`Backend process failed to start: ${spawnError.message}`);
     }
 
     try {

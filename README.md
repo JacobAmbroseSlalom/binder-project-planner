@@ -26,6 +26,32 @@ Pushing a version tag (e.g. `v0.1.1`) triggers
 [.github/workflows/release.yml](.github/workflows/release.yml), which builds both
 installers in CI and attaches them to that tag's release automatically.
 
+### macOS: "is damaged and can't be opened"
+
+Both installers are unsigned and unnotarized (no Apple Developer account or Windows
+code-signing certificate - see story 47). On macOS, a `.dmg` downloaded through a
+browser gets a `com.apple.quarantine` flag; when Gatekeeper evaluates a quarantined
+app with no trusted signature (an ad hoc signature doesn't count) on Apple Silicon, it
+shows **"'Binder Project Planner' is damaged and can't be opened. You should eject the
+disk image."** instead of the usual "unidentified developer" prompt - this isn't
+actual file corruption, and the same build runs fine when built and launched locally
+(no quarantine flag is ever applied to locally-created files). To open it anyway,
+either:
+
+- Run `xattr -cr "/Applications/Binder Project Planner.app"` in Terminal after
+  installing it (removes the quarantine flag), or
+- Right-click (or Control-click) the app in Finder, choose "Open", then confirm the
+  "unidentified developer" prompt that follows - if macOS still reports it as
+  "damaged" instead of showing that prompt, use the `xattr` command above instead.
+
+### Windows: nothing happens when launching the app
+
+If the app icon doesn't do anything when opened, it's likely failing during startup.
+A startup failure shows a native error dialog and writes details to
+`main-process.log` inside the app's per-user data folder (`%APPDATA%\Binder Project
+Planner\` on Windows) - check for that dialog/file and include its contents when
+reporting the issue.
+
 ## Architecture
 
 This repository is a pnpm workspace organized into applications and shared packages:

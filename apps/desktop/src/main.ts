@@ -8,6 +8,7 @@ import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { resolveAppPaths } from './appPaths.js';
+import { appendCrashLog, reportFatalError } from './crashLog.js';
 import { readDesktopSettings, writeDesktopSettings } from './desktopSettings.js';
 import { findAvailablePort } from './ports.js';
 import {
@@ -40,6 +41,25 @@ let isQuitting = false;
 // registers the 'second-instance' handler below; every later launch attempt
 // fails to acquire it and quits immediately instead of starting a second copy.
 const gotSingleInstanceLock = app.requestSingleInstanceLock();
+
+// Without these, an error thrown anywhere in the main process outside an
+// existing try/catch (e.g. a spawn failure's unhandled 'error' event, or
+// any other bug) crashes the whole app instantly and silently - there's no
+// attached console to print a stack trace to in a packaged build (notably
+// on Windows, where a GUI-subsystem executable has none at all), so this
+// previously looked exactly like "nothing happens" when launching the app.
+// Reporting it via a dialog + log file (see crashLog.ts) instead makes every
+// such failure visible and diagnosable. An uncaught exception means the
+// process is in an unknown state, so it quits afterward rather than trying
+// to keep running; an unhandled rejection is logged but treated as
+// non-fatal, since those are more often recoverable.
+process.on('uncaughtException', (error) => {
+  reportFatalError('Uncaught exception in main process', error);
+  void stopChildProcesses().finally(() => app.exit(1));
+});
+process.on('unhandledRejection', (reason) => {
+  appendCrashLog(`Unhandled promise rejection in main process: ${String(reason)}`);
+});
 
 if (!gotSingleInstanceLock) {
   app.quit();
@@ -249,6 +269,6 @@ async function stopChildProcesses(): Promise<void> {
 }
 
 function handleStartupFailure(error: unknown): void {
-  console.error('Failed to start Binder Project Planner:', error);
+  reportFatalError('Failed to start Binder Project Planner', error);
   void stopChildProcesses().finally(() => app.quit());
 }

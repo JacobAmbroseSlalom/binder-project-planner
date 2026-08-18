@@ -3,6 +3,8 @@ import { connect } from 'node:net';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { appendCrashLog } from '../crashLog.js';
+
 export interface FrontendProcessHandle {
   stop: () => void;
 }
@@ -46,20 +48,40 @@ export async function startFrontendProcess({
     },
   );
 
-  await waitForPortOpen(child, '127.0.0.1', port);
+  // See the matching comment in backendProcess.ts: without this listener, a
+  // failed spawn crashes the whole main process silently via an unhandled
+  // 'error' event instead of surfacing as a clear startup failure below.
+  let spawnError: Error | undefined;
+  child.on('error', (error) => {
+    spawnError = error;
+    appendCrashLog(`Frontend process error: ${error.stack ?? error.message}`);
+  });
+
+  await waitForPortOpen(child, '127.0.0.1', port, () => spawnError);
 
   return {
     stop: () => stopChildProcess(child),
   };
 }
 
-function waitForPortOpen(child: ChildProcess, host: string, port: number): Promise<void> {
+function waitForPortOpen(
+  child: ChildProcess,
+  host: string,
+  port: number,
+  getSpawnError: () => Error | undefined,
+): Promise<void> {
   const deadline = Date.now() + READY_CHECK_TIMEOUT_MS;
 
   return new Promise((resolvePromise, reject) => {
     const attempt = () => {
       if (child.exitCode !== null) {
         reject(new Error(`Frontend process exited early with code ${child.exitCode}.`));
+        return;
+      }
+
+      const spawnError = getSpawnError();
+      if (spawnError) {
+        reject(new Error(`Frontend process failed to start: ${spawnError.message}`));
         return;
       }
 
