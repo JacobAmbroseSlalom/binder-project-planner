@@ -100,7 +100,9 @@ file to match what was actually built.
   [apps/desktop/src/desktopSettings.ts](../apps/desktop/src/desktopSettings.ts)'s
   `desktop-settings.json`, applying on the next relaunch.
 - If you introduce a new dependency or architectural decision, record it in
-  [docs/planning.md](../docs/planning.md) and keep this file in sync.
+  [docs/planning.md](../docs/planning.md), keep this file in sync, and update the
+  architecture diagram in [README.md](../README.md) if it changes the apps/packages
+  involved or how they connect.
 
 ## Working conventions
 

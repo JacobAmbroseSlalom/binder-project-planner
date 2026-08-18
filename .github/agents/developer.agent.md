@@ -51,7 +51,9 @@ previously implemented contracts), `docs/api-endpoints.md`, and `docs/data-types
    Owner role if you're unsure the story is complete. Then `git commit` everything for
    the story (implementation + the script's doc updates) with a helpful message.
 8. If a new dependency or architectural decision is introduced, record it in
-   `docs/planning.md` and keep `.github/copilot-instructions.md` in sync.
+   `docs/planning.md` and keep `.github/copilot-instructions.md` in sync. If it
+   changes the apps/packages involved or how they connect, update the architecture
+   diagram in `README.md` too.
 
 ## Output Format
 
